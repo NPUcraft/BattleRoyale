@@ -1,0 +1,18 @@
+# Templates are validated when a match prepares; missing/invalid maps cancel only that match.
+maps:
+  city:
+    display-name: "City"
+    directory: "maps/city"
+    playable-area:
+      min-x: -3000
+      max-x: 3000
+      min-z: -3000
+      max-z: 3000
+  desert:
+    display-name: "Desert"
+    directory: "maps/desert"
+    playable-area:
+      min-x: -2500
+      max-x: 2500
+      min-z: -2500
+      max-z: 2500

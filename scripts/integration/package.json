@@ -1,0 +1,7 @@
+{
+  "name": "lastsector-paper-integration",
+  "private": true,
+  "description": "Only real Paper verification clients; not a plugin dependency.",
+  "dependencies": { "mineflayer": "4.33.0" }
+}
+

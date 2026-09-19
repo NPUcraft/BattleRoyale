@@ -1,0 +1,24 @@
+name: LastSector
+version: '${version}'
+main: com.lastsector.LastSectorPlugin
+api-version: '1.21.8'
+description: Multiplayer battle royale safe spawns and zone lifecycle - Milestone 3
+load: POSTWORLD
+commands:
+  lastsector:
+    description: LastSector administration
+    aliases: [ls]
+    usage: /lastsector help
+permissions:
+  lastsector.command:
+    description: Access help and version
+    default: true
+  lastsector.admin:
+    description: Access reload and debug
+    default: op
+    children:
+      lastsector.command: true
+      lastsector.play: true
+  lastsector.play:
+    description: List, join and leave waiting rooms
+    default: true

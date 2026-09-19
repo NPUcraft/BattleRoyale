@@ -1,0 +1,36 @@
+# Square halfSize is half the side length. Every target is below every initial bucket.
+profiles:
+  default:
+    initial-size-by-players:
+      - max-players: 8
+        half-size: 500
+      - max-players: 16
+        half-size: 750
+      - max-players: 32
+        half-size: 1000
+    stages:
+      - wait-seconds: 300
+        shrink-seconds: 120
+        target-half-size: 400
+        base-damage-per-second: 1.0
+        extra-damage-per-block: 0.01
+        max-damage-per-second: 6.0
+      - wait-seconds: 240
+        shrink-seconds: 90
+        target-half-size: 250
+        base-damage-per-second: 2.0
+        extra-damage-per-block: 0.015
+        max-damage-per-second: 10.0
+
+      - wait-seconds: 180
+        shrink-seconds: 60
+        target-half-size: 125
+        base-damage-per-second: 3.0
+        extra-damage-per-block: 0.02
+        max-damage-per-second: 14.0
+      - wait-seconds: 120
+        shrink-seconds: 45
+        target-half-size: 50
+        base-damage-per-second: 4.0
+        extra-damage-per-block: 0.03
+        max-damage-per-second: 20.0

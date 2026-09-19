@@ -1,0 +1,26 @@
+# Storage/economy remain settings only; no database or economy adapter is started.
+debug: false
+storage:
+  type: sqlite
+economy:
+  provider: auto
+# Relative to plugins/LastSector. Must also be inside Paper's world container.
+runtime-worlds:
+  directory: runtime
+lobby:
+  world: world
+  use-world-spawn: true
+zone-ui:
+  bossbar:
+    enabled: true
+    update-interval-ticks: 5
+  particle-wall:
+    enabled: true
+    particle: END_ROD
+    interval-ticks: 5
+    view-distance: 64
+    spacing: 2.5
+    vertical-spacing: 1.5
+    height-below-player: 3
+    height-above-player: 6
+    max-particles-per-player: 300

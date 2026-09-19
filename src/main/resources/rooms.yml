@@ -1,0 +1,30 @@
+rooms:
+  solo:
+    display-name: "Solo"
+    min-players: 2
+    max-players: 24
+    team-size: 1
+    countdown-seconds: 30
+    pvp-protection-seconds: 60
+    spawn:
+      min-distance: 64
+      max-attempts-per-player: 200
+    allow-external-spectators: true
+    maps: [city, desert]
+    loadout: default
+    zone-profile: default
+  squad:
+    display-name: "Squad"
+    min-players: 4
+    max-players: 32
+    team-size: 4
+    countdown-seconds: 30
+    pvp-protection-seconds: 60
+    spawn:
+      min-distance: 64
+      max-attempts-per-player: 200
+    allow-external-spectators: true
+    maps: [city]
+    loadout: default
+    zone-profile: default
+

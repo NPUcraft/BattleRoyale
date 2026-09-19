@@ -1,0 +1,174 @@
+package com.lastsector.config;
+
+import com.lastsector.service.FoundationService;
+import com.lastsector.session.*;
+import java.nio.file.*;
+import java.time.Instant;
+import java.util.UUID;
+import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import static org.junit.jupiter.api.Assertions.*;
+
+class ConfigurationLoaderTest {
+    @TempDir Path directory;
+    @BeforeEach void copyDefaults() throws Exception {
+        for (String file : new String[]{"config.yml", "rooms.yml", "maps.yml", "zones.yml"})
+            try (var stream = getClass().getResourceAsStream("/" + file)) { Files.copy(stream, directory.resolve(file)); }
+    }
+    private ConfigurationSnapshot load() { return new ConfigurationLoader(directory).load(); }
+    private void replace(String file, String from, String to) throws Exception {
+        Path path = directory.resolve(file);
+        Files.writeString(path, Files.readString(path).replace(from, to));
+    }
+    @Test void loadsEveryDefault() {
+        var result = load();
+        assertEquals(2, result.rooms().size()); assertEquals(2, result.maps().size());
+        assertEquals(1, result.zoneProfiles().size()); assertEquals(4, result.zoneProfiles().getFirst().stages().size());
+        assertEquals(directory.resolve("runtime"), result.settings().runtimeDirectory());
+        assertEquals(4, result.rooms().get(1).teamSize());
+        assertFalse(Files.exists(directory.resolve("runtime")));
+        assertFalse(Files.exists(directory.resolve("maps")));
+        assertEquals("world", result.settings().lobbyWorld());
+        assertEquals(30, result.rooms().getFirst().countdownDuration().getSeconds());
+    }
+    @ParameterizedTest @CsvSource(delimiter='|',value={
+        "zones.yml|target-half-size: 400|target-half-size: 500|profiles.default.stages[0]",
+        "zones.yml|target-half-size: 400|target-half-size: 700|profiles.default.stages[0]",
+        "zones.yml|target-half-size: 50|target-half-size: 0|profiles.default.stages[3]",
+        "zones.yml|wait-seconds: 300|wait-seconds: -1|profiles.default.stages[0]",
+        "zones.yml|shrink-seconds: 120|shrink-seconds: 0|profiles.default.stages[0]",
+        "zones.yml|half-size: 500|half-size: 499|initial-size-by-players[0]",
+        "zones.yml|max-players: 16|max-players: 8|initial-size-by-players[1]",
+        "zones.yml|max-players: 32|max-players: 31|rooms.squad.max-players",
+        "zones.yml|extra-damage-per-block: 0.01|extra-damage-per-block: -.1|stages[0]",
+        "zones.yml|base-damage-per-second: 1.0|base-damage-per-second: .NaN|stages[0]",
+        "zones.yml|max-damage-per-second: 6.0|max-damage-per-second: 0|stages[0]",
+        "rooms.yml|min-distance: 64|min-distance: -1|rooms.solo.spawn",
+        "rooms.yml|max-attempts-per-player: 200|max-attempts-per-player: 0|rooms.solo.spawn",
+        "config.yml|particle: END_ROD|particle: UNKNOWN|zone-ui.particle-wall.particle",
+        "config.yml|particle: END_ROD|particle: BLOCK|zone-ui.particle-wall.particle",
+        "config.yml|spacing: 2.5|spacing: 0|zone-ui",
+        "config.yml|max-particles-per-player: 300|max-particles-per-player: 1001|zone-ui",
+        "config.yml|view-distance: 64|view-distance: .inf|zone-ui"
+    })
+    void m3ValidationHasContext(String file,String from,String to,String context) throws Exception {
+        replace(file,from,to);
+        assertTrue(assertThrows(ConfigurationException.class,this::load).getMessage().contains(context));
+    }
+    @Test void crossValidationNamesRoomMapProfileAndRequiredArea() throws Exception {
+        replace("maps.yml","min-x: -3000","min-x: 1500");
+        var error=assertThrows(ConfigurationException.class,this::load).getMessage();
+        for(String value:new String[]{"room=solo","map=city","profile=default","2000","1500"}) assertTrue(error.contains(value),error);
+    }
+    @Test void unreachableLargerBucketsDoNotRejectSmallRoomMaps() throws Exception {
+        replace("rooms.yml","max-players: 24","max-players: 8"); replace("rooms.yml","max-players: 32","max-players: 8");
+        replace("maps.yml","min-x: -3000","min-x: 2000");
+        assertEquals(2,load().rooms().size());
+    }
+    @Test void firstTargetMustFitEveryBucketEvenIfHalfSizesNotMonotonic() throws Exception {
+        replace("zones.yml","half-size: 500","half-size: 900");
+        replace("zones.yml","half-size: 750","half-size: 500");
+        replace("zones.yml","target-half-size: 400","target-half-size: 600");
+        assertTrue(assertThrows(ConfigurationException.class,this::load).getMessage().contains("stages[0]"));
+    }
+    @Test void emptyStagesRejectedBeforePublishing() throws Exception {
+        Path path=directory.resolve("zones.yml");
+        String yaml=Files.readString(path);
+        Files.writeString(path,yaml.substring(0,yaml.indexOf("    stages:"))+"    stages: []\n");
+        assertTrue(assertThrows(ConfigurationException.class,this::load).getMessage().contains("profiles.default.stages"));
+    }
+    @Test void missingM2FieldsRetainM1Compatibility() throws Exception {
+        replace("rooms.yml", "    countdown-seconds: 30", "");
+        replace("config.yml", "lobby:\n  world: world\n  use-world-spawn: true", "");
+        var result = load();
+        assertEquals(30, result.rooms().getFirst().countdownDuration().getSeconds());
+        assertEquals("world", result.settings().lobbyWorld());
+    }
+    @Test void rejectsZeroCountdown() throws Exception {
+        replace("rooms.yml", "countdown-seconds: 30", "countdown-seconds: 0");
+        assertTrue(assertThrows(ConfigurationException.class, this::load).getMessage().contains("rooms.solo.countdown-seconds"));
+    }
+    @Test void rejectsUnsupportedLobbyMode() throws Exception {
+        replace("config.yml", "use-world-spawn: true", "use-world-spawn: false");
+        assertTrue(assertThrows(ConfigurationException.class, this::load).getMessage().contains("lobby.use-world-spawn"));
+    }
+    @Test void adapterValidationFailurePreservesOldSnapshot() {
+        var service = new FoundationService(this::load, new SessionManager()); service.reload();
+        var old = service.state();
+        assertThrows(IllegalStateException.class, () -> service.reload(candidate -> { throw new IllegalStateException("Lobby missing"); }));
+        assertSame(old, service.state());
+    }
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', value = {
+        "rooms.yml|min-players: 2|min-players: 0|rooms.solo.min-players",
+        "rooms.yml|max-players: 24|max-players: 1|rooms.solo.max-players",
+        "rooms.yml|team-size: 1|team-size: 0|rooms.solo.team-size",
+        "rooms.yml|maps: [city, desert]|maps: []|rooms.solo.maps",
+        "rooms.yml|maps: [city, desert]|maps: [unknown]|rooms.solo.maps",
+        "rooms.yml|zone-profile: default|zone-profile: unknown|rooms.solo.zone-profile",
+        "rooms.yml|min-players: 2|min-players: 2.5|rooms.solo.min-players",
+        "rooms.yml|allow-external-spectators: true|allow-external-spectators: yesplease|rooms.solo.allow-external-spectators",
+        "rooms.yml|pvp-protection-seconds: 60|pvp-protection-seconds: -1|rooms.solo.pvp-protection-seconds",
+        "maps.yml|max-x: 3000|max-x: -4000|maps.city.playable-area.max-x",
+        "maps.yml|maps/city|../outside|maps.city.directory",
+        "config.yml|type: sqlite|type: invalid|storage.type",
+        "config.yml|provider: auto|provider: missing|economy.provider",
+        "config.yml|directory: runtime|directory: .|runtime-worlds.directory",
+        "zones.yml|half-size: 500|half-size: 499|profiles.default.initial-size-by-players[0].half-size",
+        "zones.yml|max-players: 16|max-players: 8|profiles.default.initial-size-by-players[1].max-players",
+        "zones.yml|shrink-seconds: 120|shrink-seconds: 0|profiles.default.stages[0].shrink-seconds",
+        "zones.yml|target-half-size: 250|target-half-size: 800|profiles.default.stages[1].target-half-size",
+        "zones.yml|max-damage-per-second: 6.0|max-damage-per-second: 0.5|profiles.default.stages[0].max-damage-per-second",
+        "zones.yml|extra-damage-per-block: 0.01|extra-damage-per-block: .nan|profiles.default.stages[0].extra-damage-per-block",
+        "rooms.yml|max-players: 24|max-players: 33|rooms.solo.max-players"
+    })
+    void rejectsInvalidValuesWithContext(String file, String from, String to, String path) throws Exception {
+        replace(file, from, to);
+        var exception = assertThrows(ConfigurationException.class, this::load);
+        assertTrue(exception.getMessage().contains(file), exception.getMessage());
+        assertTrue(exception.getMessage().contains(path), exception.getMessage());
+        assertTrue(exception.getMessage().contains("value="));
+    }
+    @Test void rejectsMalformedYaml() throws Exception {
+        Files.writeString(directory.resolve("rooms.yml"), "rooms: [unterminated");
+        assertTrue(assertThrows(ConfigurationException.class, this::load).getMessage().contains("rooms.yml"));
+    }
+    @Test void rejectsMissingFileAndField() throws Exception {
+        replace("config.yml", "debug: false", "");
+        assertTrue(assertThrows(ConfigurationException.class, this::load).getMessage().contains("debug"));
+        Files.delete(directory.resolve("rooms.yml"));
+        // Restore the first file so the missing rooms file is reached.
+        replace("config.yml", "storage:", "debug: false\nstorage:");
+        assertTrue(assertThrows(ConfigurationException.class, this::load).getMessage().contains("rooms.yml"));
+    }
+    @Test void failedReloadRetainsEntirePreviousState() throws Exception {
+        var service = new FoundationService(this::load, new SessionManager());
+        service.reload(); var before = service.state();
+        replace("maps.yml", "City", "Changed City");
+        replace("rooms.yml", "max-players: 24", "max-players: 1");
+        assertThrows(ConfigurationException.class, service::reload);
+        assertSame(before, service.state());
+        assertEquals("City", service.state().maps().find("city").orElseThrow().displayName());
+        replace("rooms.yml", "max-players: 1", "max-players: 24");
+        service.reload();
+        assertNotSame(before, service.state());
+        assertEquals("Changed City", service.state().maps().find("city").orElseThrow().displayName());
+    }
+    @Test void initialFailurePublishesNothing() throws Exception {
+        replace("rooms.yml", "team-size: 1", "team-size: 0");
+        var service = new FoundationService(this::load, new SessionManager());
+        assertThrows(ConfigurationException.class, service::reload);
+        assertThrows(IllegalStateException.class, service::state);
+    }
+    @Test void reloadBlockedWhenSessionExists() {
+        var sessions = new SessionManager();
+        var service = new FoundationService(this::load, sessions); service.reload();
+        var before = service.state();
+        sessions.register(GameSession.waiting(UUID.randomUUID(), before.configuration().rooms().getFirst(), Instant.now()));
+        assertThrows(IllegalStateException.class, service::reload);
+        assertSame(before, service.state());
+    }
+}
+

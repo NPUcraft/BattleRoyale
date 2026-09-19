@@ -1,0 +1,12 @@
+name: LastSectorTestProbe
+version: '1'
+main: com.lastsector.probe.TestProbe
+api-version: '1.21.8'
+depend: [LastSector]
+commands:
+  lsprobe:
+    permission: lsprobe.admin
+permissions:
+  lsprobe.admin:
+    default: op
+
