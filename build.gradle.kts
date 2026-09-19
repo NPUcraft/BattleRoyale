@@ -25,6 +25,7 @@ tasks.processResources {
 
 // Opt-in public-API probe for real Paper tests. Never included in the installable plugin.
 val paperProbe by sourceSets.creating
+paperProbe.compileClasspath += sourceSets.main.get().output
 configurations[paperProbe.compileOnlyConfigurationName].extendsFrom(configurations.compileOnly.get())
 tasks.register<Jar>("paperProbeJar") {
     archiveFileName.set("lastsector-test-probe.jar")

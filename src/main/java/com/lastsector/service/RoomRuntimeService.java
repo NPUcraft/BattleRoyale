@@ -41,6 +41,7 @@ public final class RoomRuntimeService implements AutoCloseable {
     public void join(UUID player, String roomId) {
         checkOpen();
         Objects.requireNonNull(player, "player");
+        matches.checkJoin(player);
         if (memberships.containsKey(player)) throw new IllegalStateException("Already in room");
         RoomDefinition room = rooms().stream().filter(r -> r.id().equals(roomId)).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Room does not exist: " + roomId));
@@ -145,7 +146,7 @@ public final class RoomRuntimeService implements AutoCloseable {
                             matches.running(session, failure -> abort(session, failure));
                             players.notify(session.players().keySet(), "started", world.worldName());
                         } catch (Exception failure) { abort(session, failure); }
-                    }, failure -> { if (!closed && session.state() == GameState.STARTING) abort(session, failure); });
+                    }, failure -> { if (!closed && (session.state() == GameState.STARTING || session.state() == GameState.RUNNING)) abort(session, failure); });
                 } catch (Exception failure) { abort(session, failure); }
             });
         } catch (Exception error) { abort(session, error); }
@@ -174,6 +175,7 @@ public final class RoomRuntimeService implements AutoCloseable {
         if (session.state() == GameState.RUNNING) session.transition(GameState.ENDING);
         if (session.state() != GameState.CLEANUP) session.transition(GameState.CLEANUP);
         players.notify(session.players().keySet(), "ended");
+        matches.restore(session);
         try {
             if (!players.toLobby(session.players().keySet()))
                 players.error("Some players could not return to lobby; unload must refuse occupied worlds", new IllegalStateException("Teleport failed"));

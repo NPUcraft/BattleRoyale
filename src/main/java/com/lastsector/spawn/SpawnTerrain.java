@@ -7,6 +7,7 @@ public interface SpawnTerrain {
     CompletableFuture<?> prepare(SpawnPlanner.Column column);
     Double safeFeet(SpawnPlanner.Column column);
     void resolved(SpawnPlanner.Column column,boolean accepted);
+    default CompletableFuture<?> beforeLanding() { return CompletableFuture.completedFuture(null); }
     void teleport(List<UUID> starters,List<SpawnPlanner.Position> plan,BooleanSupplier current);
     void release();
 }

@@ -23,7 +23,7 @@ public final class LastSectorPlugin extends JavaPlugin {
     @Override public void onEnable() {
         messages = new MessageService(getLogger());
         try {
-            for (String file : new String[]{"config.yml", "rooms.yml", "maps.yml", "zones.yml"}) {
+            for (String file : new String[]{"config.yml", "rooms.yml", "maps.yml", "zones.yml", "loadouts.yml", "loot-tables.yml", "map-data/city/loot.yml", "map-data/desert/loot.yml"}) {
                 if (!Files.exists(getDataFolder().toPath().resolve(file))) saveResource(file, false);
             }
             var loader = new ConfigurationLoader(getDataFolder().toPath());

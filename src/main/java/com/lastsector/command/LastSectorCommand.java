@@ -17,13 +17,21 @@ public final class LastSectorCommand implements CommandExecutor, TabCompleter {
     @Override public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!sender.hasPermission("lastsector.command")) { messages.denied(sender); return true; }
         String action = args.length == 0 ? "help" : args[0].toLowerCase(Locale.ROOT);
-        if (Set.of("reload", "debug").contains(action) && !sender.hasPermission("lastsector.admin")
+        if (Set.of("reload", "debug", "admin").contains(action) && !sender.hasPermission("lastsector.admin")
                 || Set.of("rooms", "join", "autojoin", "leave").contains(action) && !sender.hasPermission("lastsector.play")) {
             messages.denied(sender); return true;
         }
         try {
             var rooms = runtime.rooms();
             switch (action) {
+                case "admin" -> {
+                    if(args.length!=4 || !args[1].equalsIgnoreCase("loadout") || !args[2].equalsIgnoreCase("edit")) { messages.send(sender,"Usage: /ls admin loadout edit <room>"); break; }
+                    if(!(sender instanceof Player player)) throw new IllegalArgumentException("This command requires a player");
+                    if(rooms.rooms().stream().map(r->rooms.session(r.id())).flatMap(Optional::stream).anyMatch(s->s.players().containsKey(player.getUniqueId())))
+                        throw new IllegalStateException("Leave your room before editing a loadout");
+                    var room=rooms.rooms().stream().filter(r->r.id().equals(args[3])).findFirst().orElseThrow(()->new IllegalArgumentException("Unknown room: " + args[3]));
+                    runtime.loadouts().open(player,room,rooms.rooms());
+                }
                 case "help" -> { if (args.length <= 1) messages.help(sender); else messages.unknown(sender); }
                 case "version" -> { if (args.length == 1) messages.version(sender, version); else messages.unknown(sender); }
                 case "reload" -> {
@@ -54,6 +62,10 @@ public final class LastSectorCommand implements CommandExecutor, TabCompleter {
                         messages.count(sender, "Map templates", maps.size()); maps.forEach(map -> messages.map(sender, map));
                     } else if (args.length == 3) {
                         switch (args[1].toLowerCase(Locale.ROOT)) {
+                            case "loot" -> {
+                                var session=rooms.session(args[2]);
+                                messages.send(sender,session.map(s->runtime.matches().loot(s.sessionId())).orElse("loot=N/A"));
+                            }
                             case "zone", "protection" -> {
                                 if (rooms.rooms().stream().noneMatch(r -> r.id().equals(args[2]))) throw new IllegalArgumentException("Room does not exist: " + args[2]);
                                 var session = rooms.session(args[2]);
@@ -87,12 +99,17 @@ public final class LastSectorCommand implements CommandExecutor, TabCompleter {
         if (args.length == 1) {
             choices.addAll(List.of("help", "version"));
             if (sender.hasPermission("lastsector.play")) choices.addAll(List.of("rooms", "join", "autojoin", "leave"));
-            if (sender.hasPermission("lastsector.admin")) choices.addAll(List.of("reload", "debug"));
+            if (sender.hasPermission("lastsector.admin")) choices.addAll(List.of("reload", "debug", "admin"));
         } else if (args.length == 2 && args[0].equalsIgnoreCase("debug") && sender.hasPermission("lastsector.admin"))
-            choices.addAll(List.of("rooms", "maps", "session", "zone", "protection", "start", "end"));
+            choices.addAll(List.of("rooms", "maps", "session", "zone", "protection", "loot", "start", "end"));
+        else if(args[0].equalsIgnoreCase("admin") && sender.hasPermission("lastsector.admin")) {
+            if(args.length==2) choices.add("loadout");
+            else if(args.length==3 && args[1].equalsIgnoreCase("loadout")) choices.add("edit");
+            else if(args.length==4 && args[1].equalsIgnoreCase("loadout") && args[2].equalsIgnoreCase("edit")) runtime.rooms().rooms().forEach(room->choices.add(room.id()));
+        }
         else if (args.length == 2 && args[0].equalsIgnoreCase("join") && sender.hasPermission("lastsector.play")
                 || args.length == 3 && args[0].equalsIgnoreCase("debug") && sender.hasPermission("lastsector.admin")
-                && Set.of("session", "zone", "protection", "start", "end").contains(args[1].toLowerCase(Locale.ROOT)))
+                && Set.of("session", "zone", "protection", "loot", "start", "end").contains(args[1].toLowerCase(Locale.ROOT)))
             runtime.rooms().rooms().forEach(room -> choices.add(room.id()));
         String prefix = args.length == 0 ? "" : args[args.length - 1].toLowerCase(Locale.ROOT);
         return choices.stream().filter(choice -> choice.toLowerCase(Locale.ROOT).startsWith(prefix)).toList();

@@ -9,6 +9,8 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 class SpawnPreparationTest {
     static class Terrain implements SpawnTerrain {
+        CompletableFuture<Void> loot=CompletableFuture.completedFuture(null);
+        public CompletableFuture<?> beforeLanding() { return loot; }
         CompletableFuture<Void> pending;
         int requests,teleports,releases,inspections;
         boolean unsafe,teleportFailure;
@@ -35,6 +37,16 @@ class SpawnPreparationTest {
         terrain.pending.complete(null); scheduler.ticks(1); assertEquals(0,terrain.teleports);
         scheduler.ticks(1); terrain.pending.complete(null); scheduler.ticks(1);
         assertEquals(2,terrain.teleports); assertEquals(1,ready); assertEquals(1,terrain.releases); assertEquals(0,scheduler.active());
+    }
+    @Test void lootMustFinishBeforeAnyPlayerLands() {
+        terrain.loot=new CompletableFuture<>(); start(1,10); scheduler.ticks(1); terrain.pending.complete(null); scheduler.ticks(3);
+        assertEquals(0,terrain.teleports); assertEquals(0,terrain.releases);
+        terrain.loot.complete(null); scheduler.ticks(1); assertEquals(1,terrain.teleports); assertEquals(1,ready);
+    }
+    @Test void lootFailureAbortsBeforeLandingAndDrains() {
+        terrain.loot=new CompletableFuture<>(); start(1,10); scheduler.ticks(1); terrain.pending.complete(null); scheduler.ticks(1);
+        terrain.loot.completeExceptionally(new IllegalStateException("loot")); scheduler.ticks(1);
+        assertEquals(0,terrain.teleports); assertEquals(1,failed); assertEquals(1,drained);
     }
     @Test void cancellationDrainsBeforeWorldReleaseAndNeverTeleports() {
         start(1,10); scheduler.ticks(1); preparation.stop(()->drained++);

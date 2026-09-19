@@ -29,6 +29,9 @@ public final class PaperPlayers implements PlayerGateway {
         for (UUID id : ids) {
             var player = server.getPlayer(id);
             if (player != null && player.isOnline()) {
+                // Isolation may already have returned this player and restored a held cursor item.
+                // Re-teleporting would close that cursor again (and can drop it from a full inventory).
+                if(player.getWorld().getUID().equals(world.getUID()) && player.getLocation().distanceSquared(world.getSpawnLocation())<.0001) continue;
                 try { if (!player.teleport(world.getSpawnLocation())) success = false; }
                 catch (Exception failure) { error("Teleport failed for " + id, failure); success = false; }
             }

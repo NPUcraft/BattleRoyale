@@ -12,7 +12,14 @@ public final class PaperSpawnTerrain implements SpawnTerrain {
     private final JavaPlugin plugin;
     private final GameSession session;
     private final Set<Long> acceptedChunks=new HashSet<>(),tickets=new HashSet<>();
-    public PaperSpawnTerrain(JavaPlugin plugin,GameSession session) { this.plugin=plugin; this.session=session; }
+    private final WorldSanitizer sanitizer;
+    private final java.util.function.Supplier<CompletableFuture<?>> beforeLanding;
+    private final Runnable applyLoadout;
+    public PaperSpawnTerrain(JavaPlugin plugin,GameSession session,WorldSanitizer sanitizer,
+            java.util.function.Supplier<CompletableFuture<?>> beforeLanding,Runnable applyLoadout) {
+        this.plugin=plugin; this.session=session; this.sanitizer=sanitizer; this.beforeLanding=beforeLanding; this.applyLoadout=applyLoadout;
+    }
+    @Override public CompletableFuture<?> beforeLanding() { return beforeLanding.get(); }
     private World world() { return Objects.requireNonNull(plugin.getServer().getWorld(session.gameWorld().orElseThrow().worldName()),"Runtime world missing"); }
     private static long key(int x,int z) { return ((long)x<<32) ^ (z&0xffffffffL); }
     @Override public CompletableFuture<?> prepare(SpawnPlanner.Column column) {
@@ -22,6 +29,7 @@ public final class PaperSpawnTerrain implements SpawnTerrain {
         World world=world(); int cx=column.x()>>4,cz=column.z()>>4;
         if(!world.isChunkLoaded(cx,cz)) throw new IllegalStateException("Prepared chunk unloaded");
         if(tickets.add(key(cx,cz))) world.addPluginChunkTicket(cx,cz,plugin);
+        sanitizer.ensure(world.getChunkAt(cx,cz));
         int y=world.getHighestBlockYAt(column.x(),column.z(),HeightMap.MOTION_BLOCKING_NO_LEAVES);
         if(y<world.getMinHeight() || y+2>=world.getMaxHeight()) return null;
         return SafeSpawnPolicy.safe(cell(world.getBlockAt(column.x(),y,column.z())),
@@ -32,6 +40,11 @@ public final class PaperSpawnTerrain implements SpawnTerrain {
         var box=block.getBoundingBox();
         boolean full=type.isOccluding() && box.getWidthX()==1 && box.getWidthZ()==1 && box.getHeight()==1;
         return new SafeSpawnPolicy.Cell(full,block.isPassable(),block.isLiquid(),hazard(type),Tag.LEAVES.isTagged(type));
+    }
+    static boolean safeItemGround(Block floor,Block space) {
+        var support=cell(floor); var air=cell(space);
+        return support.fullSupport() && !support.liquid() && !support.hazardous() && !support.leaves()
+                && air.passable() && !air.liquid() && !air.hazardous();
     }
     public static boolean hazard(Material type) {
         return switch(type) {
@@ -53,6 +66,7 @@ public final class PaperSpawnTerrain implements SpawnTerrain {
             if(player==null || !player.isOnline() || session.players().get(id).state()==com.lastsector.player.PlayerState.DISCONNECTED)
                 throw new IllegalStateException("Starter disconnected before landing");
         }
+        applyLoadout.run();
         for(int i=0;i<starters.size();i++) {
             if(!current.getAsBoolean()) return;
             var position=plan.get(i);

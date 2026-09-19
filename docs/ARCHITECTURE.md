@@ -1,4 +1,20 @@
-# Architecture — M3
+# Architecture — M4
+
+## M4 composition and transaction boundaries
+
+PluginRuntime 持有跨空闲 reload 的 LoadoutEditor、WorldSanitizer、PlayerIsolation；每次候选配置发布前，MatchContentLoader 校验 loadouts.yml、loot-tables.yml 及每张地图的 map-data/<id>/loot.yml。物品使用 StoredItem 的不可变字符串；Bukkit ItemStack 永不进入共享配置或长期快照。NativeItemSerializer 只调用服务器主线程的 serializeAsBytes/deserializeBytes，没有反射或 NMS。LootItemResolver 是额外物品 Provider 的扩展点。
+
+LoadoutEditor 的 View 以 InventoryHolder 身份识别，UUID 定位管理员。EditorDraft 只有复制画笔和虚拟槽位；InventoryClick/Creative/Drag/Drop/Swap 路径均阻止真实转移。每个 ID 有编辑锁，文件层只有一个在途保存，避免两个不同 Loadout 的全文件覆盖丢更新。主线程校验、序列化整个候选配置；专用线程只写已捕获路径和 YAML 文本，临时文件 force/close 后 ATOMIC_MOVE 替换，没有非原子 fallback；主线程 pump 仅在成功后替换注册表。保存期间关闭 GUI/断线仍保留锁，完成后释放。完整 reload 拒绝活动编辑器或保存。
+
+PaperMatches 在 STARTING 捕获 LoadoutDefinition 引用，生成不可变 InitialZone，按实际 World UUID 注册 sanitizer 并同步清理已加载 chunks。SpawnPreparation 保留 M3 出生区块 ticket 与取消 drain 语义，新 beforeLanding future 等待 PaperLootRuntime。Loot 完成后验证所有玩家仍可用，PlayerIsolation 先捕获全部原状态，再 journal 全部快照，最后应用装备并在同一 tick 传送。任何部分失败沿原有 abort/end 路径恢复原状态。纯事务 Gateway 允许注入 capture/apply/restore 故障测试。
+
+PaperPlayerIsolation 保存原生 item payload、经验、模式、健康/饥饿/药水等，同时隔离末影箱和光标。结束时 PlayerIsolation 把 session 快照转入 UUID pending map，在线恢复并回大厅，成功才删除；离线/死亡/恢复异常保留。PlayerJoin 和原版 respawn 后重试，pending 阻止新 join。该服务不随普通 reload 重建；插件关闭/进程终止的离线恢复未持久化（M7）。不监听 PlayerDeathEvent 修改掉落和经验；M5 接续统一死亡语义。
+
+WorldSanitizer 使用每个 World UUID 的 SanitationLedger，分别记录 blocks/entities 首次完成，失败不标记；ChunkLoad 与 EntitiesLoad 独立处理。准备物资前 ensure 强制获得该候选 chunk 的实体集合，防止先放物资再执行迟到的首次实体清理。方块只枚举 tile entities，Chest.getBlockInventory 清理物理半箱；Lootable 表先置空，随后清 inventory。村民在 Mob 分类删除之前保留；仅当前 session 的 PDC ground marker 可豁免迟到实体检查。没有全图扫描、定期清扫或自然生物事件禁令。
+
+PaperLootRuntime 每个 Session 一次 NOT_STARTED→GENERATING→COMPLETE/FAILED；generate 再次调用返回已有结果。InitialZone 容器筛选、Area 交集/概率/点数在首次调用冻结。Loot 随机源从注入 Random 派生每局实例，避免两个正在运行的生成任务互相改变随机序列。每 tick 最多发出一组必要 chunk 请求或处理一个候选，异步 Future 完成后才在主线程 pin/sanitize/inspect。容器边缘预备相邻 chunk，避免读取双箱时隐式访问未清理半箱；物理双箱以两侧位置去重。Area 只请求被抽中的列所在 chunk，最高安全支撑面使用 M3 Cell 原语而不要求两格净空。所有 Item 标记 session PDC 并调用公开 setUnlimitedLifetime(true)，保持原生拾取/合并行为。
+
+结束先恢复玩家状态，再停止任务；spawn 与 loot 都 drain 后才撤销 sanitizer/world-rules 注册和卸载世界。运行期间首加载清理失败也会中止对应 Session；所有匹配基于注册表真实 UUID，不匹配世界名前缀。WorldRules 独立监听 portal/create，普通 terrain/pearl/chorus/mob/time/weather 保持原版。测试探针的世界名前缀选择只在独立 integration JAR，生产路由不使用该方式。
 
 ## 身份和依赖方向
 
@@ -169,8 +185,6 @@ disable 先关闭 MatchLifecycle，停止所有运行/出生任务、移除 UI�
 
 Session、membership、timer、token、loaded-world registry 仅由 server thread 修改。Player/World、传送、WorldCreator、load/unload 只在 Paper 适配器内且有主线程断言。复制/删除/源树遍历/NBT 校验位于专用 worker；只传递不可变 GameWorld、原子计数和受锁队列。Future 在运行期间由 server-thread pump 完成；关闭后的完成回调不会修改 Session。
 
-经济、Party、ItemSerializer、RatingCalculator 继续保持 M1 的接口设计。Loot/Loadout/World Rules（M4）、完整 Combat/淘汰（M5）、组队/观战/OfflineBody（M6）、数据库/恢复（M7）及排名仍未实现。
+经济、Party、RatingCalculator 继续保持接口边界。ItemSerializer 已有 NativeItemSerializer 实现，LootItemResolver 提供原生 minecraft 命名空间。完整 Combat/淘汰（M5）、组队/观战/OfflineBody（M6）、数据库/恢复（M7）及第三方物品 Provider 尚未实现。
 
 公共 API 参考：[异步区块](https://jd.papermc.io/paper/1.21.8/org/bukkit/World.html)、[DamageSource](https://jd.papermc.io/paper/1.21.8/org/bukkit/damage/DamageSource.html)、[喷溅药水](https://jd.papermc.io/paper/1.21.8/org/bukkit/event/entity/PotionSplashEvent.html)、[滞留云](https://jd.papermc.io/paper/1.21.8/org/bukkit/event/entity/AreaEffectCloudApplyEvent.html)。
-
-

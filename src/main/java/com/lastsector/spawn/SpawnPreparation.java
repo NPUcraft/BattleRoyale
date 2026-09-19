@@ -18,7 +18,7 @@ public final class SpawnPreparation {
     private CompletableFuture<?> pending;
     private SpawnPlanner.Column column;
     private Runnable drained;
-    private boolean cancelled,finished,failureReported;
+    private boolean cancelled,finished,failureReported,landing;
     public SpawnPreparation(SpawnTerrain terrain,SpawnPlanner planner,List<UUID> starters,BooleanSupplier current,
             GameScheduler scheduler,GameClock clock,Runnable ready,Consumer<Throwable> failed) {
         this.terrain=terrain; this.planner=planner; this.starters=List.copyOf(starters); this.current=current;
@@ -34,13 +34,13 @@ public final class SpawnPreparation {
             if(pending!=null) {
                 if(!pending.isDone()) return;
                 pending.join(); pending=null;
+                if(landing) { land(); return; }
                 Double feet=terrain.safeFeet(column);
                 planner.resolve(feet);
                 terrain.resolved(column,feet!=null && Double.isFinite(feet));
                 if(planner.done()) {
-                    terrain.teleport(starters,planner.plan(),()-> !cancelled && current.getAsBoolean());
-                    if(cancelled || !current.getAsBoolean()) return;
-                    finish(); ready.run();
+                    landing=true; pending=terrain.beforeLanding();
+                    if(pending.isDone()) { pending.join(); pending=null; land(); }
                 }
                 return;
             }
@@ -50,6 +50,11 @@ public final class SpawnPreparation {
         } catch(Throwable error) {
             if(!failureReported) { failureReported=true; failed.accept(error); }
         }
+    }
+    private void land() {
+        terrain.teleport(starters,planner.plan(),()-> !cancelled && current.getAsBoolean());
+        if(cancelled || !current.getAsBoolean()) return;
+        finish(); ready.run();
     }
     private void finish() {
         if(finished) return;

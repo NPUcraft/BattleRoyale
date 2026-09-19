@@ -1,6 +1,6 @@
 # LastSector
 
-LastSector 是 **Java 21 / Paper 1.21.8** 的多人 Battle Royale 插件项目。M1 Foundation、M2 Room & World 已完成；当前完成 **M3 — Game Start & Zone**：安全随机出生、连续移动的正方形安全区、圈外真实伤害、PvP 保护、BossBar 和局部粒子墙。完整淘汰、胜负和物品流程尚待后续里程碑。
+LastSector 是 **Java 21 / Paper 1.21.8** 的多人 Battle Royale 插件项目。M1–M3 已完成；当前为 **M4 — Loadout, Player Isolation, World Sanitization & Loot**：共享装备编辑器、原生物品序列化、玩家状态隔离、首次区块清理、容器/地面一次性物资和传送门规则。安全出生、连续缩圈与 PvP 保护保持原有行为；M5 接续死亡、淘汰与胜负。
 
 ## 构建
 
@@ -15,13 +15,13 @@ Gradle 8.14 Wrapper 已附带，首次构建需要网络。Linux/macOS 使用 `.
 
 ## 安装与开局
 
-1. 将 JAR 放入 Paper 1.21.8 的 plugins。首次启动生成四个配置文件，已有配置不会覆盖。
+1. 将 JAR 放入 Paper 1.21.8 的 plugins。首次启动生成 config/rooms/maps/zones/loadouts/loot-tables.yml 和默认两张地图的 map-data/<id>/loot.yml，已有配置不会覆盖。
 2. config.yml 的 lobby.world 必须是已加载世界，默认 world；大厅返回点使用世界 spawn。
 3. 将**已经关闭且不再被编辑**的 Overworld 模板放入 plugins/LastSector/maps/city、maps/desert，或修改 maps.yml。保留有效 level.dat、WorldGenSettings、region/entities/poi/data/datapacks。
 4. 在 playable-area 内提供足够安全地面。模板目录缺失会在准备该局时失败；区域尺寸与圈配置冲突会在启动/reload 时直接拒绝。
 5. 玩家 /ls join solo，人数达标自动倒计时。管理员 /ls debug start solo 可绕过 minPlayers，但必须有在线参与者。
-6. 副本准备完成后进入 STARTING，按实际在线参与人数选初始 halfSize，规划所有出生点、准备必要区块。全部成功后同一 tick 传送，进入 RUNNING 并开始保护计时。
-7. /ls debug end solo 结束比赛，取消任务、移除 UI/临时来源记录、返回大厅、卸载并删除副本。M3 不自动判断胜者。
+6. 副本准备完成后进入 STARTING，按实际在线参与人数选初始 halfSize，注册世界清理、处理已加载区块，规划出生点、完成一次性 Loot、捕获所有原状态并应用 Loadout。全部成功后同一 tick 传送，进入 RUNNING 并开始保护计时。
+7. /ls debug end solo 结束比赛，恢复原始背包/经验/状态、取消任务、移除 UI/临时来源记录、返回大厅、卸载并删除副本。M4 不自动判断胜者。
 
 源模板只读，不能使用大厅、运行中的世界、链接目录或被外部进程修改的模板。复制保留 seed / WorldGenSettings；必要的新区块由模板设置生成，不预生成整个地图。
 
@@ -29,7 +29,7 @@ Gradle 8.14 Wrapper 已附带，首次构建需要网络。Linux/macOS 使用 `.
 
 - lastsector.command（默认所有人）：/ls、/ls help、/ls version。
 - lastsector.play（默认所有人）：/ls rooms、/ls join <room>、/ls autojoin、/ls leave。
-- lastsector.admin（默认 OP）：/ls reload、/ls debug rooms、/ls debug maps、/ls debug session <room>、/ls debug zone <room>、/ls debug protection <room>、/ls debug start <room>、/ls debug end <room>。
+- lastsector.admin（默认 OP）：/ls reload、/ls debug rooms、/ls debug maps、/ls debug session <room>、/ls debug zone <room>、/ls debug protection <room>、/ls debug start <room>、/ls debug end <room>、/ls debug loot <room>、/ls admin loadout edit <room>。
 
 完整命令名 /lastsector；补全按权限提供。join/leave 只允许 WAITING/COUNTDOWN；autojoin 选择人数最多的可加入房间，同人数保持配置顺序。人数不足取消并重置倒计时。活动 Session 或未完成资源清理存在时禁止 reload；失败 reload 保留旧配置。
 
@@ -44,7 +44,7 @@ Gradle 8.14 Wrapper 已附带，首次构建需要网络。Linux/macOS 使用 `.
 
 **升级已有 M1/M2 配置时，必须修正旧的 500 → 700 冲突。** 插件不会覆盖 zones.yml；旧的首目标 700 会明确拒绝加载。可按随 JAR 附带的新四阶段配置迁移。
 
-halfSize 始终表示正方形边长的一半。初始中心在 playable-area 内随机选取，后续中心在上一圈允许的偏移范围内选取，整个下一圈始终包含于上一圈。InitialZone 在整局内不可变，为以后 Loot 保留。
+halfSize 始终表示正方形边长的一半。初始中心在 playable-area 内随机选取，后续中心在上一圈允许的偏移范围内选取，整个下一圈始终包含于上一圈。InitialZone 在整局内不可变，用于本局 Loot 范围筛选，后续缩圈不会重新生成物资。
 
 ## 实时规则
 
@@ -74,14 +74,54 @@ node scripts/paper-m3.mjs "/path/to/stopped-paper-server"
 
 M3 集成测试在独立配置中使用 wait=5 秒、shrink=10 秒、protection=20 秒；生产默认值没有缩短。探针在隔离副本中禁止自然刷怪/回血，并包含可操纵生命值、伤害、位置的测试命令，**仅限测试服**，绝不包含在安装 JAR。日志、消息、数据包、results.json 保存在各运行目录。
 
+## M4 装备与物资配置
+
+`rooms.yml` 的 `loadout` 引用 `loadouts.yml` 中共享 ID。默认 default 是空装备，solo/squad 共用。管理员在大厅执行 `/ls admin loadout edit solo`，点击自己背包选择复制画笔，左键填目标槽、右键清空；GUI 0–35 为普通槽，36–40 依次为头盔/胸甲/护腿/靴子/副手，45 循环选择初始快捷栏，49 保存，53 取消。真实背包不移动；关闭窗口丢弃草稿。每个 Loadout 同时只允许一个编辑者，保存完成前锁不释放。GUI 保存可以用于活动比赛，但仅影响以后进入 STARTING 的 Session。完整 reload 还要求没有编辑窗口和未完成保存。
+
+`loadouts.yml` 槽位使用 Paper 原生物品字节的 Base64、format=`paper-native`、version=1。通过 GUI 编辑，不要手工拼接 NBT。名称、Lore、附魔、耐久、药水、模型数据、原生组件及 PDC 由 Paper 原生序列化保存。只支持原生 `minecraft:` Loot key；ItemsAdder/Oraxen 等没有实现集成。
+
+`loot-tables.yml` 的每张表有 min-rolls/max-rolls 和 entries（item、weight、min-amount、max-amount）。按权重有放回抽取，数量闭区间随机并按物品最大堆叠拆分。表内权重必须为正、总和不溢出；每批最多 128 rolls、4096 个物品。
+
+每张 maps.yml 地图必须提供 `map-data/<map-id>/loot.yml`。文件必需，默认示例为空；插件不覆盖已有数据。配置示例（请按实际模板修改坐标）：
+
+```yaml
+containers:
+  - id: courtyard-chest
+    x: 12
+    y: 64
+    z: -8
+    loot-table: basic
+areas:
+  - id: courtyard-ground
+    min-x: -20
+    max-x: 20
+    min-y: 60
+    max-y: 80
+    min-z: -20
+    max-z: 20
+    loot-table: basic
+    activation-chance: 0.75
+    min-spawns: 2
+    max-spawns: 6
+    max-attempts: 30
+```
+
+坐标必须位于 playable-area，ID 不重复，引用表必须存在。Container 点仅在 InitialZone 内激活；边界包含。无效容器记录警告并跳过，不创建箱子。跨区块双箱先清理两个物理半箱，再填共享库存；重复指向同一箱体不会再填。空槽随机分配，溢出丢弃并告警，不丢地面。
+
+Area 每局判定一次激活概率与点数，仅采样其与 InitialZone 的交集。Y 是物品脚部高度范围，采用可安全支撑的最高地表，允许单格净空；不会向地下洞穴全面扫描。每点有限尝试，不预加载整个区域。地图最多 1024 容器/128 Areas，每 Area 最多 256 点、每点 256 尝试；单局最多 10000 地面物品实体。与出生规划共用 120 秒 STARTING 上限，过大的配置可能安全中止，应按地图负载调整。`/ls debug loot <room>` 显示生成状态、点/Area 计数、物品数与清理区块数。
+
+比赛装备应用前保存 storage/armor/offhand、快捷栏、XP、模式、生命/饥饿/饱和、药水、火焰/跌落状态；另隔离末影箱、光标、吸收生命、疲劳和飞行状态。结束丢弃局内所得并恢复原状态；离线/死亡者在结束后进入待恢复队列，上线/原版重生后重试，成功才清除。未恢复不能加入新局。
+
+比赛世界首次加载的区块清除原版容器物品/战利品表、物品实体、经验球与普通生物；保留村民、盔甲架、展示/悬挂实体及矿车（清空带库存实体）。后续自然生物、物品和 XP 正常存在，清理不会重复。昼夜、天气、自然刷怪与方块破坏/放置/爆炸保持原版；仅比赛世界禁止 Nether/End 门、End gateway 传送及门生成，珍珠/紫颂果保留。
+
+M4 实服验证脚本：`node scripts/paper-m4.mjs <stopped-paper-directory> [mineflayer-package-directory]`。测试探针开关 `-Dlastsector.probe.m4=true`，不会关闭自然刷怪/昼夜/天气；站立测试客户端使用探针免伤。正式 JAR 不包含探针。
+
 ## 当前边界
 
-- M3 死亡仍走原版 Minecraft；没有淘汰、胜者、DeathBox、复活/观战管理。死亡时跳过伤害并移除 UI；原版复活后若仍在比赛世界且 UUID 状态仍 ALIVE，会再次受到圈规则影响。
+- M4 死亡仍走原版 Minecraft；没有淘汰、胜者、DeathBox、复活/观战管理。死亡时跳过伤害并移除 UI；原版复活后若仍在比赛世界且 UUID 状态仍 ALIVE，会再次受到圈规则影响。
 - 活动断线保留 UUID 为 DISCONNECTED，移除 UI、跳过扣血；没有 OfflineBody、重连恢复或自动淘汰（M6）。
-- Loot、Loadout、物品隔离与 World Rules 在 M4；不要把 M3 当成完整竞技服。
+- 离线待恢复快照只存在本插件实例内存中，跨正常空闲 reload 保留；插件禁用、崩溃和进程重启后的持久恢复属于 M7。第三方物品、完整比赛胜负仍未实现。
 - 崩溃/强杀、异常生成器停滞、文件锁可能保留带 marker 的目录；不自动扫描删除（M7）。
 - 匿名红石/发射器、无来源的 TNT 矿车、第三方直接修改方块或制造 source-less 伤害，以及多来源混合火/岩浆，不能可靠还原玩家来源。见架构文档的具体限制。
 
 [架构](docs/ARCHITECTURE.md) · [路线图](docs/ROADMAP.md) · [验证记录](docs/VERIFICATION.md)
-
-

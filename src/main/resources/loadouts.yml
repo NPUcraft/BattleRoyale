@@ -1,0 +1,6 @@
+# Native item bytes are written by /ls admin loadout edit <room>.
+# Shared by both default rooms; an empty loadout intentionally starts empty.
+loadouts:
+  default:
+    selected-hotbar-slot: 0
+    slots: {}

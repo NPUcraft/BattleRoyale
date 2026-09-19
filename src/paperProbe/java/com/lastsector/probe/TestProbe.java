@@ -14,9 +14,11 @@ import java.util.*;
 /** Opt-in integration harness using public Paper APIs. Never shipped in LastSector.jar. */
 public final class TestProbe extends JavaPlugin implements Listener {
     private String rejectTeleport;
+    private final M4Probe m4=new M4Probe(this);
     @EventHandler
     public void isolatedWorld(org.bukkit.event.world.WorldLoadEvent event) {
         if(!event.getWorld().getName().startsWith("plugins/LastSector/runtime/")) return;
+        if(Boolean.getBoolean("lastsector.probe.m4")) { m4.fixture(event.getWorld()); return; }
         // Test fixture only: template-persisted difficulty/mobs must not randomly kill protocol test clients.
         event.getWorld().setDifficulty(Difficulty.PEACEFUL);
         event.getWorld().setGameRule(GameRule.DO_MOB_SPAWNING,false);
@@ -27,6 +29,7 @@ public final class TestProbe extends JavaPlugin implements Listener {
         getServer().getPluginManager().registerEvents(this,this);
         getCommand("lsprobe").setExecutor((sender,command,label,args)-> {
             try {
+                if(args[0].startsWith("m4")) { m4.command(sender,args); return true; }
                 if(args[0].equals("player")) {
                     var player=Objects.requireNonNull(getServer().getPlayerExact(args[1]));
                     var world=player.getWorld(); var loc=player.getLocation();

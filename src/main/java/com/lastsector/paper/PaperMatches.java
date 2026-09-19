@@ -21,12 +21,20 @@ public final class PaperMatches implements MatchLifecycle {
     private final GameClock clock;
     private final RandomGenerator random;
     private final PlayerGateway players;
+    private final com.lastsector.player.PlayerIsolation<com.lastsector.player.MatchPlayerSnapshot,com.lastsector.loadout.LoadoutDefinition> isolation;
+    private final LoadoutEditor loadouts;
+    private final WorldSanitizer sanitizer;
+    private final MatchContent content;
+    private final org.bukkit.NamespacedKey groundMarker;
     private final Map<UUID,Entry> entries=new HashMap<>();
     private final Set<Entry> draining=new HashSet<>();
+    private boolean closed;
     public PaperMatches(JavaPlugin plugin,ConfigurationSnapshot configuration,GameScheduler scheduler,GameClock clock,
-            RandomGenerator random,PlayerGateway players) {
+            RandomGenerator random,PlayerGateway players,LoadoutEditor loadouts,WorldSanitizer sanitizer,MatchContent content,
+            com.lastsector.player.PlayerIsolation<com.lastsector.player.MatchPlayerSnapshot,com.lastsector.loadout.LoadoutDefinition> isolation,org.bukkit.NamespacedKey groundMarker) {
         this.plugin=plugin; this.configuration=configuration; this.scheduler=scheduler; this.clock=clock;
         this.random=random; this.players=players;
+        this.loadouts=loadouts; this.sanitizer=sanitizer; this.content=content; this.isolation=isolation; this.groundMarker=groundMarker;
     }
     @Override public void start(GameSession session,Runnable ready,Consumer<Throwable> failed) {
         var starters=session.players().values().stream().filter(p -> p.state()!=PlayerState.DISCONNECTED)
@@ -39,7 +47,15 @@ public final class PaperMatches implements MatchLifecycle {
         session.initialZone(initial);
         Entry entry=new Entry(session,profile,new PaperZoneUi(plugin.getServer(),configuration.settings().zoneUi()));
         entries.put(session.sessionId(),entry);
-        entry.preparation=new SpawnPreparation(new PaperSpawnTerrain(plugin,session),new SpawnPlanner(initial,session.room().spawn(),starters.size(),random),
+        var loadout=loadouts.definition(session.room().loadoutId()); // Immutable STARTING snapshot.
+        var world=Objects.requireNonNull(plugin.getServer().getWorld(session.gameWorld().orElseThrow().worldName()));
+        entry.worldId=world.getUID();
+        sanitizer.register(world,session.sessionId(),failed);
+        if(closed || entries.get(session.sessionId())!=entry || session.state()!=GameState.STARTING)
+            throw new IllegalStateException("Match cancelled during initial sanitation");
+        entry.loot=new PaperLootRuntime(plugin,session,sanitizer,content,new NativeLootItems(),new java.util.Random(random.nextLong()),groundMarker,scheduler);
+        entry.preparation=new SpawnPreparation(new PaperSpawnTerrain(plugin,session,sanitizer,entry.loot::generate,
+                ()->isolation.apply(session.sessionId(),starters,loadout)),new SpawnPlanner(initial,session.room().spawn(),starters.size(),random),
                 starters,()-> session.state()==GameState.STARTING && entries.get(session.sessionId())==entry,scheduler,clock,ready,failed);
     }
     @Override public void running(GameSession session,Consumer<Throwable> failed) {
@@ -95,20 +111,37 @@ public final class PaperMatches implements MatchLifecycle {
                 && e.session.protection().orElseThrow().active(clock.nanoTime())).toList();
     }
     @Override public void disconnected(UUID id) { entries.values().forEach(e -> e.ui.detach(id)); }
+    @Override public void checkJoin(UUID player) {
+        if(isolation.blocked(player)) throw new IllegalStateException("Your previous match state must be restored before joining");
+    }
+    @Override public void restore(GameSession session) { isolation.end(session.sessionId()); }
+    public String loot(UUID session) { Entry entry=entries.get(session); return entry==null || entry.loot==null ? "loot=N/A" : entry.loot.diagnostics(); }
     @Override public void stop(GameSession session,Runnable drained) {
         Entry entry=entries.remove(session.sessionId());
         if(entry==null) { drained.run(); return; }
         entry.stopLoop();
         draining.add(entry);
-        Runnable completed=()-> { draining.remove(entry); drained.run(); };
+        if(entry.loot!=null) entry.loot.stop();
+        Runnable completed=()-> {
+            java.util.concurrent.CompletableFuture<Void> loot=entry.loot==null?java.util.concurrent.CompletableFuture.completedFuture(null):entry.loot.stop();
+            loot.thenRun(()-> { if(!closed) { sanitizer.remove(entry.worldId); draining.remove(entry); drained.run(); } });
+        };
         if(entry.preparation!=null) entry.preparation.stop(completed); else completed.run();
     }
     @Override public void close() {
+        closed=true;
         for(Entry entry:List.copyOf(entries.values())) {
+            isolation.end(entry.session.sessionId());
+            if(entry.loot!=null) entry.loot.close();
+            if(entry.worldId!=null) sanitizer.remove(entry.worldId);
             entry.stopLoop(); if(entry.preparation!=null) entry.preparation.close();
         }
         entries.clear();
-        for(Entry entry:List.copyOf(draining)) if(entry.preparation!=null) entry.preparation.close();
+        for(Entry entry:List.copyOf(draining)) {
+            if(entry.loot!=null) entry.loot.close();
+            if(entry.worldId!=null) sanitizer.remove(entry.worldId);
+            if(entry.preparation!=null) entry.preparation.close();
+        }
         draining.clear();
     }
     public static final class Entry {
@@ -117,6 +150,8 @@ public final class PaperMatches implements MatchLifecycle {
         final ZoneProfile profile;
         final PaperZoneUi ui;
         SpawnPreparation preparation;
+        PaperLootRuntime loot;
+        UUID worldId;
         SessionLoop task;
         DamagePulse damagePulse;
         long tick;

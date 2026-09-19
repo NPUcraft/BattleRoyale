@@ -18,6 +18,8 @@ class MatchLifecycleTest {
         Consumer<Throwable> failed,runtimeFailed;
         boolean failInitial,closed;
         int running;
+        Runnable restoring=()->{};
+        public void restore(GameSession s) { restoring.run(); }
         public void start(GameSession s,Runnable ready,Consumer<Throwable> failed) {
             if(failInitial) throw new IllegalArgumentException("initial zone");
             this.ready=ready; this.failed=failed;
@@ -46,6 +48,12 @@ class MatchLifecycleTest {
     @Test void initialZoneFailureUsesSameRollback() {
         matches.failInitial=true; var session=start(); assertEquals(GameState.CLEANUP,session.state());
         matches.drained.run(); assertTrue(runtime.session("a").isEmpty()); assertTrue(players.errors>0);
+    }
+    @Test void originalStateIsRestoredBeforeLobbyReturnOrWorldRelease() {
+        start(); matches.ready.run();
+        matches.restoring=()-> { assertEquals(0,players.returned); assertTrue(worlds.released.isEmpty()); };
+        runtime.debugEnd("a"); assertEquals(1,players.returned); assertTrue(worlds.released.isEmpty());
+        matches.drained.run(); assertEquals(1,worlds.released.size());
     }
     @Test void asynchronousSpawnFailureUsesSameRollback() {
         var session=start(); matches.failed.accept(new IllegalStateException("spawn/chunk"));

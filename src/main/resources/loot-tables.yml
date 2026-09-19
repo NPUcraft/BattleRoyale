@@ -1,0 +1,13 @@
+loot-tables:
+  basic:
+    min-rolls: 1
+    max-rolls: 3
+    entries:
+      - item: minecraft:bread
+        weight: 5
+        min-amount: 1
+        max-amount: 4
+      - item: minecraft:arrow
+        weight: 3
+        min-amount: 4
+        max-amount: 16
