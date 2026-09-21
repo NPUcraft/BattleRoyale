@@ -67,7 +67,7 @@ public final class PaperLootRuntime {
                 if(!pending.isDone()) return;
                 pending.join(); pending=null;
                 for(var future:requested) {
-                    Chunk chunk=future.join(); chunk.addPluginChunkTicket(plugin); tickets.add(chunk.getChunkKey()); sanitizer.ensure(chunk);
+                    Chunk chunk=future.join(); if(tickets.add(chunk.getChunkKey())) PaperChunkTickets.acquire(plugin,chunk.getWorld(),chunk.getX(),chunk.getZ()); sanitizer.ensure(chunk);
                     if(cancelled) return;
                 }
                 inspect.run(); releaseTickets(); return;
@@ -147,7 +147,7 @@ public final class PaperLootRuntime {
     private static long key(int x,int z) { return ((long)z<<32)|(x&0xffffffffL); }
     private void releaseTickets() {
         World world=plugin.getServer().getWorld(worldId);
-        if(world!=null) for(long key:tickets) world.removePluginChunkTicket((int)key,(int)(key>>32),plugin);
+        if(world!=null) for(long key:tickets) PaperChunkTickets.release(plugin,world,(int)key,(int)(key>>32));
         tickets.clear();
     }
     private void finish(Throwable error) {

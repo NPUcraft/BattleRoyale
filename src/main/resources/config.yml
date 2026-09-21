@@ -1,5 +1,11 @@
 # Storage/economy remain settings only; no database or economy adapter is started.
 debug: false
+disconnect:
+  reconnect-seconds: 120
+  mob-aggro:
+    enabled: true
+    radius: 24
+    interval-ticks: 20
 combat:
   attribution-seconds: 15
   assist:

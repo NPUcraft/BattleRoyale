@@ -7,6 +7,7 @@ public interface MatchLifecycle extends AutoCloseable {
     default void onFinished(Consumer<GameSession> finished) {}
     default void checkJoin(UUID player) {}
     default void restore(GameSession session) {}
+    default void preparing(GameSession session) {}
     void start(GameSession session, Runnable ready, Consumer<Throwable> failed);
     void running(GameSession session, Consumer<Throwable> failed);
     void stop(GameSession session, Runnable drained);

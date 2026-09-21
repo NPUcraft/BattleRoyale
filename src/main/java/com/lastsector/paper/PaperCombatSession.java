@@ -17,15 +17,16 @@ public final class PaperCombatSession implements AutoCloseable {
     private final CombatTracker tracker;
     private final EliminationService eliminations;
     private final PaperDeathBoxes boxes;
-    private final MatchOutcomeResolver outcomes=new SoloOutcomeResolver();
+    private final MatchOutcomeResolver outcomes=new TeamOutcomeResolver();
     private final Map<UUID,String> names=new HashMap<>();
     private final Set<UUID> zoneDamage=new HashSet<>();
     private final Consumer<Throwable> failed;
     private long dirtyTick=Long.MIN_VALUE;
+    private boolean initialOutcomeCheck=true;
     public PaperCombatSession(JavaPlugin plugin,GameSession session,CombatSettings settings,GameClock clock,
             NativeItemSerializer serializer,StoredExperienceBottles bottles,Consumer<UUID> eliminated,Consumer<Throwable> failed) {
         this.plugin=plugin;this.session=session;this.clock=clock;this.failed=failed;
-        session.players().keySet().forEach(id->{var p=plugin.getServer().getPlayer(id);names.put(id,p==null?id.toString():p.getName());});
+        session.players().keySet().forEach(id->{var p=plugin.getServer().getPlayer(id);String name=p==null?plugin.getServer().getOfflinePlayer(id).getName():p.getName();names.put(id,name==null?id.toString():name);});
         tracker=new CombatTracker(session.players().keySet(),settings,clock);
         boxes=new PaperDeathBoxes(plugin,session,settings.boxReach(),serializer,bottles);
         eliminations=new EliminationService(session,tracker,clock.nanoTime(),box->{
@@ -44,8 +45,10 @@ public final class PaperCombatSession implements AutoCloseable {
     public void zone(UUID victim,Runnable damage) { zoneDamage.add(victim);try {damage.run();} finally {zoneDamage.remove(victim);} }
     public boolean isZone(UUID victim) { return zoneDamage.contains(victim); }
     public Optional<MatchOutcome> endTick(long tick) {
-        if(dirtyTick==Long.MIN_VALUE || dirtyTick>tick) return Optional.empty();
-        long batch=dirtyTick;dirtyTick=Long.MIN_VALUE;
+        if(dirtyTick>tick) return Optional.empty();
+        if(dirtyTick==Long.MIN_VALUE && !initialOutcomeCheck)return Optional.empty();
+        initialOutcomeCheck=false;
+        long batch=dirtyTick==Long.MIN_VALUE?tick:dirtyTick;dirtyTick=Long.MIN_VALUE;
         // The recorded batch identity, not callback wall time, defines ties.
         return outcomes.resolve(session,eliminations.eliminationTicks(),batch,clock.nanoTime());
     }

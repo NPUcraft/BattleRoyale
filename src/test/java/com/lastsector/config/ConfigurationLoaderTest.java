@@ -35,6 +35,12 @@ class ConfigurationLoaderTest {
         assertEquals(CombatSettings.DEFAULT,result.settings().combat());
     }
     @ParameterizedTest @CsvSource(delimiter='|',value={
+        "config.yml|reconnect-seconds: 120|reconnect-seconds: -1|disconnect.reconnect-seconds",
+        "config.yml|radius: 24|radius: -1|disconnect.mob-aggro.radius",
+        "config.yml|interval-ticks: 20|interval-ticks: 0|disconnect.mob-aggro.interval-ticks",
+        "config.yml|interval-ticks: 20|interval-ticks: 1201|disconnect",
+        "config.yml|reconnect-seconds: 120|reconnect-seconds: 3601|disconnect",
+        "config.yml|radius: 24|radius: 65|disconnect",
         "config.yml|attribution-seconds: 15|attribution-seconds: 0|combat.attribution-seconds",
         "config.yml|min-damage: 4.0|min-damage: -1|combat.assist.min-damage",
         "config.yml|min-damage-share: 0.20|min-damage-share: 1.1|combat/match/deathbox",
@@ -181,6 +187,14 @@ class ConfigurationLoaderTest {
         sessions.register(GameSession.waiting(UUID.randomUUID(), before.configuration().rooms().getFirst(), Instant.now()));
         assertThrows(IllegalStateException.class, service::reload);
         assertSame(before, service.state());
+    }
+    @Test void oldConfigurationWithoutDisconnectUsesM6Defaults() throws Exception {
+        var file=directory.resolve("config.yml");var yaml=Files.readString(file);int start=yaml.indexOf("disconnect:"),end=yaml.indexOf("combat:",start);
+        Files.writeString(file,yaml.substring(0,start)+yaml.substring(end));assertEquals(DisconnectSettings.DEFAULT,load().settings().disconnect());
+    }
+    @Test void zeroReconnectAndDisabledZeroRadiusMobAssistAreAccepted() throws Exception {
+        replace("config.yml","reconnect-seconds: 120","reconnect-seconds: 0");replace("config.yml","radius: 24","radius: 0");
+        assertTrue(load().settings().disconnect().reconnectWindow().isZero());assertEquals(0,load().settings().disconnect().mobRadius());
     }
 }
 

@@ -36,7 +36,7 @@ public final class PaperDamageProvenance {
         if(entity instanceof AreaEffectCloud cloud && cloud.getSource() instanceof Player player) return player.getUniqueId();
         return entry.hazards.entityOwner(entity.getUniqueId());
     }
-    public UUID contactOwner(Player player,PaperMatches.Entry entry) {
+    public UUID contactOwner(LivingEntity player,PaperMatches.Entry entry) {
         var box=player.getBoundingBox();
         for(int x=(int)Math.floor(box.getMinX());x<=Math.floor(box.getMaxX());x++)
             for(int y=(int)Math.floor(box.getMinY());y<=Math.floor(box.getMaxY());y++)
@@ -49,7 +49,7 @@ public final class PaperDamageProvenance {
         return null;
     }
     public UUID attacker(EntityDamageEvent event,PaperMatches.Entry entry) {
-        Player victim=(Player)event.getEntity();
+        LivingEntity victim=(LivingEntity)event.getEntity();
             UUID attacker=owner(event.getDamageSource().getCausingEntity(),entry);
             if(attacker==null) attacker=owner(event.getDamageSource().getDirectEntity(),entry);
             if(attacker==null && event instanceof EntityDamageByEntityEvent byEntity) attacker=owner(byEntity.getDamager(),entry);
@@ -61,7 +61,7 @@ public final class PaperDamageProvenance {
             if(attacker==null && Set.of(EntityDamageEvent.DamageCause.LAVA,EntityDamageEvent.DamageCause.FIRE).contains(event.getCause()))
                 attacker=contactOwner(victim,entry);
             if(attacker==null && event.getCause()==EntityDamageEvent.DamageCause.FIRE_TICK)
-                attacker=entry.hazards.burningOwner(victim.getUniqueId());
+                attacker=entry.hazards.burningOwner(entry.offline!=null && entry.offline.entity(victim)!=null?entry.offline.entity(victim).player():victim.getUniqueId());
         return attacker;
     }
 }

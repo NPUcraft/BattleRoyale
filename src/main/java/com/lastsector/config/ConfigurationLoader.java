@@ -57,7 +57,14 @@ public final class ConfigurationLoader {
         if(config.values().containsKey("deathbox")) reach=config.section("deathbox").number("interaction-distance",.1);
         try { combat=new CombatSettings(window,minDamage,share,showcase,reach); }
         catch(IllegalArgumentException error) { throw config.error("combat/match/deathbox",error.getMessage()); }
-        PluginSettings settings = new PluginSettings(config.bool("debug"), storage, economy, runtime, lobbyWorld, ui,combat);
+        DisconnectSettings disconnect=DisconnectSettings.DEFAULT;
+        if(config.values().containsKey("disconnect")) {
+            Node node=config.section("disconnect");boolean aggro=disconnect.mobAggro();double radius=disconnect.mobRadius();int interval=disconnect.mobInterval();
+            if(node.values().containsKey("mob-aggro")){Node mob=node.section("mob-aggro");aggro=mob.bool("enabled");radius=mob.number("radius",0);interval=mob.integer("interval-ticks",1);}
+            try {disconnect=new DisconnectSettings(Duration.ofSeconds(node.integer("reconnect-seconds",0)),aggro,radius,interval);}
+            catch(IllegalArgumentException error){throw node.error("",error.getMessage());}
+        }
+        PluginSettings settings = new PluginSettings(config.bool("debug"), storage, economy, runtime, lobbyWorld, ui,combat,disconnect);
 
         Node mapsNode = read("maps.yml").section("maps");
         List<MapTemplate> maps = new ArrayList<>();

@@ -33,36 +33,36 @@ public final class PaperMatches implements MatchLifecycle {
     private final NativeItemSerializer itemSerializer;
     private final StoredExperienceBottles bottles;
     private final CelebrationEffects celebrations;
+    private final PaperSpectators spectators;private final MessageService messages;private final PaperBodySnapshots bodySnapshots;
     @Override public void onFinished(Consumer<GameSession> finished) {this.finished=finished;}
     public PaperMatches(JavaPlugin plugin,ConfigurationSnapshot configuration,GameScheduler scheduler,GameClock clock,
             RandomGenerator random,PlayerGateway players,LoadoutEditor loadouts,WorldSanitizer sanitizer,MatchContent content,
             com.lastsector.player.PlayerIsolation<com.lastsector.player.MatchPlayerSnapshot,com.lastsector.loadout.LoadoutDefinition> isolation,org.bukkit.NamespacedKey groundMarker,
-            NativeItemSerializer itemSerializer,StoredExperienceBottles bottles,CelebrationEffects celebrations) {
+            NativeItemSerializer itemSerializer,StoredExperienceBottles bottles,CelebrationEffects celebrations,PaperSpectators spectators,MessageService messages) {
         this.plugin=plugin; this.configuration=configuration; this.scheduler=scheduler; this.clock=clock;
         this.random=random; this.players=players;
         this.loadouts=loadouts; this.sanitizer=sanitizer; this.content=content; this.isolation=isolation; this.groundMarker=groundMarker;
-        this.itemSerializer=itemSerializer;this.bottles=bottles;this.celebrations=celebrations;
+        this.itemSerializer=itemSerializer;this.bottles=bottles;this.celebrations=celebrations;this.spectators=spectators;this.messages=messages;bodySnapshots=new PaperBodySnapshots(itemSerializer);
+    }
+    @Override public void preparing(GameSession session) {
+        var profile=configuration.zoneProfiles().stream().filter(p->p.id().equals(session.room().zoneProfileId())).findFirst().orElseThrow();
+        Entry entry=new Entry(session,profile,new PaperZoneUi(plugin.getServer(),configuration.settings().zoneUi()));entries.put(session.sessionId(),entry);
+        entry.offline=new PaperOfflineBodies(plugin,entry,configuration.settings().disconnect(),clock,bodySnapshots,messages,id->{isolation.defer(session.sessionId(),id);isolation.retry(id);});
+        isolation.apply(session.sessionId(),List.copyOf(session.players().keySet()),loadouts.definition(session.room().loadoutId()));
+        players.notify(session.players().keySet(),"teams-assigned",session.teams().size());
     }
     @Override public void start(GameSession session,Runnable ready,Consumer<Throwable> failed) {
-        var starters=session.players().values().stream().filter(p -> p.state()!=PlayerState.DISCONNECTED)
-                .map(com.lastsector.player.GamePlayer::playerId).filter(id -> {
-                    Player p=plugin.getServer().getPlayer(id); return p!=null && p.isOnline();
-                }).toList();
-        if (starters.isEmpty()) throw new IllegalStateException("No online starters");
-        var profile=configuration.zoneProfiles().stream().filter(p -> p.id().equals(session.room().zoneProfileId())).findFirst().orElseThrow();
-        var initial=ZoneGeometry.initial(session.selectedMap().orElseThrow().playableArea(),profile.initialHalfSize(starters.size()),random);
+        var starters=List.copyOf(session.players().keySet());
+        Entry entry=Objects.requireNonNull(entries.get(session.sessionId()));
+        var initial=ZoneGeometry.initial(session.selectedMap().orElseThrow().playableArea(),entry.profile.initialHalfSize(starters.size()),random);
         session.initialZone(initial);
-        Entry entry=new Entry(session,profile,new PaperZoneUi(plugin.getServer(),configuration.settings().zoneUi()));
-        entries.put(session.sessionId(),entry);
-        var loadout=loadouts.definition(session.room().loadoutId()); // Immutable STARTING snapshot.
-        var world=Objects.requireNonNull(plugin.getServer().getWorld(session.gameWorld().orElseThrow().worldName()));
-        entry.worldId=world.getUID();
+        var world=Objects.requireNonNull(plugin.getServer().getWorld(session.gameWorld().orElseThrow().worldName()));entry.worldId=world.getUID();
         sanitizer.register(world,session.sessionId(),failed);
         if(closed || entries.get(session.sessionId())!=entry || session.state()!=GameState.STARTING)
             throw new IllegalStateException("Match cancelled during initial sanitation");
         entry.loot=new PaperLootRuntime(plugin,session,sanitizer,content,new NativeLootItems(),new java.util.Random(random.nextLong()),groundMarker,scheduler);
         entry.preparation=new SpawnPreparation(new PaperSpawnTerrain(plugin,session,sanitizer,entry.loot::generate,
-                ()->isolation.apply(session.sessionId(),starters,loadout)),new SpawnPlanner(initial,session.room().spawn(),starters.size(),random),
+                ()->{},(id,location)->entry.offline.planned(id,location)),new SpawnPlanner(initial,session.room().spawn(),starters.size(),random),
                 starters,()-> session.state()==GameState.STARTING && entries.get(session.sessionId())==entry,scheduler,clock,ready,failed);
     }
     @Override public void running(GameSession session,Consumer<Throwable> failed) {
@@ -74,8 +74,9 @@ public final class PaperMatches implements MatchLifecycle {
         players.notify(session.players().keySet(),"protection-started",session.room().pvpProtectionDuration().getSeconds());
         entry.protectionExpired=session.room().pvpProtectionDuration().isZero();
         entry.combat=new PaperCombatSession(plugin,session,configuration.settings().combat(),clock,itemSerializer,bottles,id->{
-            isolation.defer(session.sessionId(),id);entry.ui.detach(id);entry.hazards.burning(id,null);
+            if(entry.offline.find(id)!=null)isolation.defer(session.sessionId(),id);else spectators.eliminated(session,id);entry.ui.detach(id);entry.hazards.burning(id,null);
         },failed);
+        entry.offline.started();
         entry.task=new SessionLoop(scheduler,()->tick(entry),failed);
     }
     private void tick(Entry entry) {
@@ -88,6 +89,7 @@ public final class PaperMatches implements MatchLifecycle {
             players.notify(session.players().keySet(),"protection-ended");
         }
         entry.tick++;
+        entry.offline.tick(entry.tick,pulse);
         for (var gamePlayer:session.players().values()) {
             UUID id=gamePlayer.playerId(); Player player=plugin.getServer().getPlayer(id);
             if (gamePlayer.state()!=PlayerState.ALIVE || player==null || !player.isOnline() || player.isDead()
@@ -101,8 +103,9 @@ public final class PaperMatches implements MatchLifecycle {
                 if (amount>0) entry.combat.zone(id,()->applyZoneDamage(player,new ZoneDamage.Context(session.sessionId(),zone.stageIndex(),
                         zone.current().distanceOutside(location.getX(),location.getZ()),amount)));
             }
-            if (!player.isDead()) entry.ui.render(player,zone,entry.tick);
+            if (!player.isDead()) entry.ui.render(player,zone,entry.tick,session.activeCount(),gamePlayer.kills(),session.activeTeamCount(),false);
         }
+        for(var presence:spectators.registry().session(session.sessionId())){var viewer=plugin.getServer().getPlayer(presence.player());if(viewer!=null)entry.ui.render(viewer,zone,entry.tick,session.activeCount(),0,session.activeTeamCount(),true);}
     }
     private void applyZoneDamage(Player player,ZoneDamage.Context context) {
         double max=Objects.requireNonNull(player.getAttribute(Attribute.MAX_HEALTH)).getValue();
@@ -127,7 +130,9 @@ public final class PaperMatches implements MatchLifecycle {
         if(closed) return;
         for(Entry entry:List.copyOf(entries.values())) if(entry.combat!=null && entry.session.state()==GameState.RUNNING) {
             try {entry.combat.endTick(tick).ifPresent(outcome->{
-                entry.session.outcome(outcome);entry.stopLoop();entry.combat.ending();
+                entry.session.outcome(outcome);
+                for(UUID winner:outcome.winnerIds())if(plugin.getServer().getPlayer(winner)==null)messages.offlineWinner(winner,outcome.tie());
+                entry.stopLoop();entry.combat.ending();entry.offline.ending();
                 entry.showcase=new WinnerShowcase(scheduler,clock,configuration.settings().combat().showcaseDuration(),
                         ()->celebrations.title(entry.session,entry.combat::name),()->celebrations.fire(entry.session),
                         ()->finished.accept(entry.session),entry.combat::fail);
@@ -136,17 +141,40 @@ public final class PaperMatches implements MatchLifecycle {
     }
     public String deathboxes(UUID session) {Entry entry=entries.get(session);return entry==null || entry.combat==null?"deathboxes=0":entry.combat.boxes().diagnostics();}
     public boolean blocks(Entry entry,UUID attacker,UUID victim) {
-        return ProtectionPolicy.blocks(entry.session.protection().orElseThrow(),clock.nanoTime(),entry.session.players().keySet(),attacker,victim);
+        return CombatPolicy.blocks(entry.session,clock.nanoTime(),attacker,victim);
     }
     public Collection<Entry> protectedEntries() {
         return entries.values().stream().filter(e -> e.session.state()==GameState.RUNNING
                 && e.session.protection().orElseThrow().active(clock.nanoTime())).toList();
     }
-    @Override public void disconnected(UUID id) { entries.values().forEach(e -> e.ui.detach(id)); }
+    @Override public void disconnected(UUID id) {
+        if(spectators.leave(id,true))return;
+        Entry entry=participant(id);if(entry==null)return;entry.ui.detach(id);
+        Player player=plugin.getServer().getPlayer(id);if(player==null)return;
+        if(entry.session.state()==GameState.ENDING){isolation.defer(entry.session.sessionId(),id);return;}
+        entry.offline.disconnect(player);
+    }
+    public Entry entry(UUID session){return entries.get(session);}
+    public Entry participant(UUID id){return entries.values().stream().filter(e->e.session.players().containsKey(id)).findFirst().orElse(null);}
+    public boolean joined(Player player){Entry entry=participant(player.getUniqueId());return entry!=null && entry.offline!=null && entry.offline.reconnect(player);}
+    public org.bukkit.entity.Entity combatEntity(Entry entry,UUID id){
+        if(!entry.session.combatActive(id))return null;var body=entry.offline.carrier(id);return body!=null?body:plugin.getServer().getPlayer(id);
+    }
+    public UUID combatIdentity(Entry entry,org.bukkit.entity.Entity entity){
+        if(entity instanceof Player && entry.inWorld(entity.getWorld().getUID()) && entry.session.combatActive(entity.getUniqueId()))return entity.getUniqueId();
+        var body=entry.offline==null?null:entry.offline.entity(entity);return body!=null && body.active() && entity.getUniqueId().equals(body.representation())?body.player():null;
+    }
+    public record Victim(Entry entry,UUID player) {}
+    public Victim victim(org.bukkit.entity.Entity entity){
+        for(Entry entry:entries.values())if(entry.session.state()==GameState.RUNNING && entry.inWorld(entity.getWorld().getUID())){UUID id=combatIdentity(entry,entity);if(id!=null)return new Victim(entry,id);}return null;
+    }
+    public boolean frozen(UUID player){if(isolation.blocked(player))return true;var entry=participant(player);return entry!=null && (entry.session.state()==GameState.PREPARING || entry.session.state()==GameState.STARTING || entry.session.players().get(player).state()==PlayerState.DISCONNECTED && entry.offline.find(player)!=null);}
+    public String offline(UUID session){var entry=entries.get(session);return entry==null?"offline=none":entry.offline.diagnostics();}
     @Override public void checkJoin(UUID player) {
+        if(spectators.registry().find(player).isPresent())throw new IllegalStateException("Leave spectating first");
         if(isolation.blocked(player)) throw new IllegalStateException("Your previous match state must be restored before joining");
     }
-    @Override public void restore(GameSession session) { isolation.end(session.sessionId()); }
+    @Override public void restore(GameSession session) { spectators.cleanup(session);var entry=entries.get(session.sessionId());if(entry!=null && entry.offline!=null)entry.offline.close();isolation.end(session.sessionId()); }
     public String loot(UUID session) { Entry entry=entries.get(session); return entry==null || entry.loot==null ? "loot=N/A" : entry.loot.diagnostics(); }
     @Override public void stop(GameSession session,Runnable drained) {
         Entry entry=entries.remove(session.sessionId());
@@ -164,6 +192,7 @@ public final class PaperMatches implements MatchLifecycle {
     @Override public void close() {
         closed=true;
         for(Entry entry:List.copyOf(entries.values())) {
+            spectators.cleanup(entry.session);if(entry.offline!=null)entry.offline.close();
             entry.closeCombat();celebrations.close(entry.session.sessionId());
             isolation.end(entry.session.sessionId());
             if(entry.loot!=null) entry.loot.close();
@@ -182,6 +211,7 @@ public final class PaperMatches implements MatchLifecycle {
         public final GameSession session;
         public final PvPHazardTracker hazards=new PvPHazardTracker();
         public PaperCombatSession combat;
+        public PaperOfflineBodies offline;
         WinnerShowcase showcase;
         public boolean inWorld(UUID world) {return world.equals(worldId);}
         final ZoneProfile profile;

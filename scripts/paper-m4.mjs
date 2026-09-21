@@ -21,7 +21,7 @@ await fs.copyFile('build/libs/lastsector-0.1.0-SNAPSHOT.jar', path.join(root, 'p
 await fs.copyFile('build/integration/lastsector-test-probe.jar', path.join(root, 'plugins/probe.jar'));
 for (const file of ['config.yml', 'rooms.yml', 'maps.yml', 'zones.yml']) {
   let text = await fs.readFile(path.join('src/main/resources', file), 'utf8');
-  if (file === 'rooms.yml') text = text.replaceAll('countdown-seconds: 30', 'countdown-seconds: 4').replace('min-players: 4', 'min-players: 2').replaceAll('pvp-protection-seconds: 60', 'pvp-protection-seconds: 20').replaceAll('max-players: 24', 'max-players: 8').replaceAll('max-players: 32', 'max-players: 8');
+  if (file === 'rooms.yml') text = text.replace('team-size: 4','team-size: 1').replaceAll('countdown-seconds: 30', 'countdown-seconds: 4').replace('min-players: 4', 'min-players: 2').replaceAll('pvp-protection-seconds: 60', 'pvp-protection-seconds: 20').replaceAll('max-players: 24', 'max-players: 8').replaceAll('max-players: 32', 'max-players: 8');
   if (file === 'zones.yml') text = text.replace(/wait-seconds: \d+/g, 'wait-seconds: 300').replace(/shrink-seconds: \d+/g, 'shrink-seconds: 10');
   if (file === 'maps.yml') text = text.replace(/3000|2500/g, '600');
   await fs.writeFile(path.join(data, file), text);
@@ -172,12 +172,12 @@ async function probe(command, expected) {
 }
 try {
   await until(() => output.includes('Done ('), 'Paper startup', 120000);
-  assert.match(output, /Milestone 5 initialized/); assert.doesNotMatch(output, /ERROR|Exception/);
+  assert.match(output, /Milestone 6 initialized/); assert.doesNotMatch(output, /ERROR|Exception/);
   await probe('lsprobe m4roundtrip','M4 roundtrip=true');
-  const a=await connect('LSAlice',port), b=await connect('LSBob',port), c=await connect('LSCarol',port);
+  const a=await connect('LSAlice',port), b=await connect('LSBob',port), c=await connect('LSCarol',port), d=await connect('LSDan',port);
   await consoleCommand('op LSAlice','Made LSAlice');
   await consoleCommand('op LSCarol','Made LSCarol');
-  for (const name of ['LSAlice','LSBob','LSCarol']) await probe('lsprobe m4seed '+name,'M4 seeded=true');
+  for (const name of ['LSAlice','LSBob','LSCarol','LSDan']) await probe('lsprobe m4seed '+name,'M4 seeded=true');
   await probe('lsprobe m4portal LSAlice','active=false');
   await chat(b,'/ls admin loadout edit solo','permission');
   await chat(a,'/ls admin loadout edit solo','Shared loadout');
@@ -193,9 +193,9 @@ try {
   assert.match(await fs.readFile(path.join(data,'loadouts.yml'),'utf8'), /paper-native/);
   results.push('Native sword and potion roundtrip with name, lore, enchantment, damage, model data, PDC; corrupt bytes rejected. Real GUI brush/save, shift cancellation, shared lock, permissions, unchanged original inventory/XP.');
   await chat(a,'/ls join solo','Joined room solo'); await chat(b,'/ls join solo','Countdown started');
-  await chat(c,'/ls join squad','Joined room squad'); await consoleCommand('ls debug start squad','Start requested');
+  await chat(c,'/ls join squad','Joined room squad');await chat(d,'/ls join squad','Joined room squad'); await consoleCommand('ls debug start squad','Start requested');
   const solo=await state('solo','RUNNING'); await state('squad','RUNNING');
-  for (const name of ['LSAlice','LSBob','LSCarol']) await probe('lsprobe m4match '+name,'M4 match=true');
+  for (const name of ['LSAlice','LSBob','LSCarol','LSDan']) await probe('lsprobe m4match '+name,'M4 match=true');
   for (const name of ['LSAlice','LSCarol']) {
     await probe('lsprobe m4sanitize '+name,'M4 sanitized=true');
     await probe('lsprobe m4loot '+name,'M4 loot=true');
@@ -227,7 +227,7 @@ try {
   await until(()=>output.includes('PROBE rejected landing'),'Rejected landing rollback'); await state('solo','WAITING');
   await probe('lsprobe m4original LSAlice','M4 original=true world=world');
   results.push('Rejected landing rolls back applied equipment and restores original player state.');
-  await chat(a,'/ls join solo','Joined room solo'); await consoleCommand('ls debug start solo','Start requested'); await state('solo','RUNNING');
+  await chat(a,'/ls join solo','Joined room solo');await chat(rejoined,'/ls join solo','Joined room solo'); await consoleCommand('ls debug start solo','Start requested'); await state('solo','RUNNING');
   await probe('lsprobe m4empty LSAlice','M4 empty=true');
   await consoleCommand('lsprobe disable','PROBE disabled'); await probe('lsprobe m4original LSAlice','M4 original=true world=world');
   await until(async()=> (await dirs()).length===0,'Disable world cleanup');

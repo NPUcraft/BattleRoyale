@@ -10,6 +10,7 @@ public final class DeathReasonRenderer {
             case PLAYER_MELEE -> "Combat"; case PROJECTILE -> "Projectile"; case EXPLOSION -> "Explosion";
             case FIRE -> "Fire"; case LAVA -> "Lava"; case FALL -> "Fall"; case ZONE -> "Zone"; case DROWNING -> "Drowning";
             case VOID -> "Void"; case MOB -> "Mob"; case MAGIC -> "Magic"; case OTHER -> "Other";
+            case DISCONNECT_TIMEOUT -> "Disconnect timeout";case DISCONNECT_BODY_FAILURE -> "Offline body failure";
         };
         return Component.text(reason.killer().map(id->"Killed by "+names.apply(id)+" ("+cause+")").orElse("Died to "+cause));
     }

@@ -21,7 +21,7 @@ await fs.copyFile('build/libs/lastsector-0.1.0-SNAPSHOT.jar', path.join(root, 'p
 await fs.copyFile('build/integration/lastsector-test-probe.jar', path.join(root, 'plugins/probe.jar'));
 for (const file of ['config.yml', 'rooms.yml', 'maps.yml', 'zones.yml']) {
   let text = await fs.readFile(path.join('src/main/resources', file), 'utf8');
-  if (file === 'rooms.yml') text = text.replaceAll('countdown-seconds: 30', 'countdown-seconds: 4').replace('min-players: 4', 'min-players: 2').replaceAll('pvp-protection-seconds: 60', 'pvp-protection-seconds: 20').replaceAll('max-players: 24', 'max-players: 8').replaceAll('max-players: 32', 'max-players: 8');
+  if (file === 'rooms.yml') text = text.replace('team-size: 4','team-size: 1').replaceAll('countdown-seconds: 30', 'countdown-seconds: 4').replace('min-players: 4', 'min-players: 2').replaceAll('pvp-protection-seconds: 60', 'pvp-protection-seconds: 20').replaceAll('max-players: 24', 'max-players: 8').replaceAll('max-players: 32', 'max-players: 8');
   if (file === 'zones.yml') text = text.replace(/wait-seconds: \d+/g, 'wait-seconds: 5').replace(/shrink-seconds: \d+/g, 'shrink-seconds: 10');
   if (file === 'maps.yml') text = text.replace(/3000|2500/g, '600');
   await fs.writeFile(path.join(data, file), text);
@@ -129,10 +129,10 @@ try {
   await until(() => output.includes('Done ('), 'Paper startup', 120000);
   assert.match(output, /Paper version 1\.21\.8/); assert.doesNotMatch(output, /ERROR|Exception/);
   await consoleCommand('gamerule naturalRegeneration false', 'naturalRegeneration');
-  const a = await connect('LSAlice', port), b = await connect('LSBob', port), c = await connect('LSCarol', port);
+  const a = await connect('LSAlice', port), b = await connect('LSBob', port), c = await connect('LSCarol', port), d = await connect('LSDan', port);
   await chat(a, '/ls join solo', 'Joined room solo');
   await chat(b, '/ls join solo', 'Countdown started');
-  await chat(c, '/ls join squad', 'Joined room squad');
+  await chat(c, '/ls join squad', 'Joined room squad');await chat(d, '/ls join squad', 'Joined room squad');
   await consoleCommand('ls debug start squad', 'Start requested');
   const solo = await state('solo', 'RUNNING'), squad = await state('squad', 'RUNNING');
   const initial = await zone('solo');
@@ -175,7 +175,7 @@ try {
   await position('LSAlice', moving.next.x, -60, moving.next.z);
   await position('LSBob', moving.next.x, -60, moving.next.z);
   const otherZone = await zone('squad');
-  await position('LSCarol', otherZone.next.x, -60, otherZone.next.z);
+  await position('LSCarol', otherZone.next.x, -60, otherZone.next.z);await position('LSDan', otherZone.next.x, -60, otherZone.next.z);
   await until(() => a.lines.some(line => line.includes('PvP protection expired')), 'Protection expires', 35000);
   await hit('melee', 16);
   await hit('splash', 20, 1); await hit('cloud', 20, 1);
@@ -187,7 +187,7 @@ try {
     await position('LSAlice', final.current.x, -60, final.current.z);
     await position('LSBob', final.current.x, -60, final.current.z);
     const other = await zone('squad');
-    await position('LSCarol', other.current.x, -60, other.current.z);
+    await position('LSCarol', other.current.x, -60, other.current.z);await position('LSDan', other.current.x, -60, other.current.z);
     return final.phase === 'FINAL';
   }, 'FINAL zone', 70000);
   assert.equal(final.current.h, 50); assert.equal(final.next, null);

@@ -13,6 +13,23 @@ public final class GameSession {
     private final Instant createdAt;
     private GameState state = GameState.WAITING;
     private MatchOutcome outcome;
+    private final Map<UUID,GameTeam> teams=new LinkedHashMap<>();
+    private final Set<UUID> offlineCombatants=new HashSet<>();
+    public boolean combatActive(UUID id) {
+        var p=players.get(id);return p!=null && (p.state()==PlayerState.ALIVE || p.state()==PlayerState.DISCONNECTED && offlineCombatants.contains(id));
+    }
+    public long activeCount() {return players.keySet().stream().filter(this::combatActive).count();}
+    public long activeTeamCount() {return teams.values().stream().filter(t->t.playerIds().stream().anyMatch(this::combatActive)).count();}
+    public boolean sameTeam(UUID a,UUID b) {
+        var first=players.get(a);var second=players.get(b);return first!=null && second!=null && first.teamId().isPresent() && first.teamId().equals(second.teamId());
+    }
+    public void offlineCombatant(UUID id,boolean live) {if(!players.containsKey(id))throw new IllegalArgumentException("Unknown player");if(live)offlineCombatants.add(id);else offlineCombatants.remove(id);}
+    public boolean reconnect(UUID id) {if(state!=GameState.RUNNING || !combatActive(id) || players.get(id).state()!=PlayerState.DISCONNECTED)return false;replaceState(id,PlayerState.ALIVE);offlineCombatants.remove(id);return true;}
+    public void spectating(UUID id,boolean watching) {
+        var p=players.get(id);if(p==null || (p.state()!=PlayerState.ELIMINATED && p.state()!=PlayerState.SPECTATING))throw new IllegalStateException("Not eliminated");
+        replaceState(id,watching?PlayerState.SPECTATING:PlayerState.ELIMINATED);
+    }
+    private void replaceState(UUID id,PlayerState state) {var p=players.get(id);players.put(id,new GamePlayer(id,state,p.teamId(),p.kills(),p.assists()));}
     public Optional<MatchOutcome> outcome() { return Optional.ofNullable(outcome); }
     public void outcome(MatchOutcome value) {
         if(state!=GameState.RUNNING || outcome!=null) throw new IllegalStateException("Outcome already decided or session not running");
@@ -21,7 +38,8 @@ public final class GameSession {
     }
     public boolean eliminate(UUID id) {
         GamePlayer player=players.get(id);
-        if(state!=GameState.RUNNING || player==null || player.state()!=PlayerState.ALIVE) return false;
+        if(state!=GameState.RUNNING || player==null || !combatActive(id)) return false;
+        offlineCombatants.remove(id);
         players.put(id,new GamePlayer(id,PlayerState.ELIMINATED,player.teamId(),player.kills(),player.assists())); return true;
     }
     public void credit(UUID id,boolean kill) {
@@ -57,8 +75,9 @@ public final class GameSession {
     public Optional<MapTemplate> selectedMap() { return Optional.ofNullable(selectedMap); }
     public Optional<GameWorld> gameWorld() { return Optional.ofNullable(gameWorld); }
     public Map<UUID, GamePlayer> players() { return Collections.unmodifiableMap(new LinkedHashMap<>(players)); }
-    public Map<UUID, GameTeam> teams() { return Map.of(); }
-    public Set<UUID> spectators() { return Set.of(); }
+    public Map<UUID, GameTeam> teams() { return Collections.unmodifiableMap(new LinkedHashMap<>(teams)); }
+    /** Participant spectators only; external presences belong to SpectatorRegistry. */
+    public Set<UUID> spectators() { return players.values().stream().filter(p->p.state()==PlayerState.SPECTATING).map(GamePlayer::playerId).collect(java.util.stream.Collectors.toUnmodifiableSet()); }
     public boolean joinable() { return state == GameState.WAITING || state == GameState.COUNTDOWN; }
     /** Adds a waiting UUID; cross-room uniqueness is enforced by RoomRuntimeService. */
     public void join(UUID id) {
@@ -71,16 +90,23 @@ public final class GameSession {
         if (!joinable()) throw new IllegalStateException("Leaving is only allowed while waiting or counting down");
         if (players.remove(id) == null) throw new IllegalStateException("Player is not in this room");
     }
-    /** M2 TEMPORARY BEHAVIOR: retains active disconnected UUIDs without reconnect recovery. */
+    /** Preserves frozen team membership; the session body registry owns reconnect eligibility. */
     public void disconnected(UUID id) {
         GamePlayer old = players.get(id);
-        if (old != null && old.state()!=PlayerState.ELIMINATED) players.put(id, new GamePlayer(id, PlayerState.DISCONNECTED, old.teamId(), old.kills(), old.assists()));
+        if (old != null && old.state()!=PlayerState.ELIMINATED && old.state()!=PlayerState.SPECTATING) players.put(id, new GamePlayer(id, PlayerState.DISCONNECTED, old.teamId(), old.kills(), old.assists()));
     }
     /** Selects exactly once and enters PREPARING; selection must belong to the room pool. */
     public void prepare(MapTemplate map) {
+        prepare(map,new java.util.Random());
+    }
+    public void prepare(MapTemplate map,java.util.random.RandomGenerator random) {
         if (!joinable() || players.isEmpty() || selectedMap != null) throw new IllegalStateException("Cannot prepare this session");
         if (!room.mapPool().contains(map.id())) throw new IllegalArgumentException("Selected map is outside room pool");
         selectedMap = map;
+        for(var team:com.lastsector.team.TeamAssignment.assign(sessionId,com.lastsector.team.TeamAssignmentInput.automatic(players.keySet(),room.teamSize()),random)) {
+            teams.put(team.teamId(),team);
+            for(UUID id:team.playerIds()){var p=players.get(id);players.put(id,new GamePlayer(id,p.state(),Optional.of(team.teamId()),p.kills(),p.assists()));}
+        }
         transition(GameState.PREPARING);
     }
     /** Attaches only this session's selected-map resource and advances to staging. */

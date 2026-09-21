@@ -1,4 +1,31 @@
-# Architecture — M5
+# Architecture — M6
+
+## M6 组成与所有权
+
+`GameSession` 是 roster、Team 和比赛状态的权威；`TeamAssignmentInput` 预留 Party 分组输入，目前明确只接受 singleton。Fisher–Yates 洗牌后 round-robin 分到 ceil(N/cap) 个队伍，RandomGenerator 可注入测试。Team UUID 从 Session UUID 和本局序号派生，成员 Set 和返回集合不可变。死亡、离线、观战和回 Lobby 只改玩家状态，不能改 Team。teamSize 大于房间上限允许加载，最终一个 Team，首个运行 tick 结束时按正常规则获胜。
+
+`CombatPolicy` 同时供在线玩家和替身使用：只有同局已知玩家来源才应用保护期/同队拦截，自伤、天然环境和无 owner 怪物不被误拦截。伤害来源沿用 `PaperDamageProvenance` 和 HazardLedger，替身实体映射回原 participant UUID；喷溅/滞留、燃烧、TNT 和流动岩浆共享责任查询，不另建推断系统。
+
+`SpectatorRegistry` 独立记录 DEAD_PARTICIPANT / EXTERNAL presence（player/session/world/snapshot owner）；外部观众不放入 GameSession.players/teams。`PaperSpectators` 管理待重生、镜头目标、原快照和 UI，Listener 只翻译事件。优先 active teammate，其次同 Session active combatant，可观察活体替身；普通自由飞行不锁镜头。PaperStartSpectatingEntityEvent 校验目标，PlayerTeleportEvent 拒绝注册观众跨世界；未注册原版观战者不受影响。leave 先移除注册再允许 Lobby 传送，阵亡成员状态退回 ELIMINATED。断线观众只排队恢复原状态，不产生 body。
+
+`OfflineBody` 是纯状态机：RESERVED → LIVE → RESTORING → RECONNECTED，或 RESERVED/LIVE → ELIMINATED；结束变 RETIRED。snapshot 是不可变的本局 carried state，含原生 StoredItem 和数值/药效数据；不含赛前 Lobby/末影箱，也不持有 Player。BodyPosition 含 world UUID 和 pose。`PaperOfflineBodies` 是每 Session 一份注册表，`OfflineBodyRepresentation` 隔离实体实现，生产适配器是 VillagerBodyRepresentation。
+
+载体在真实 Paper 验证后选择：AI-disabled invisible Villager 承担生命/伤害，marker ArmorStand 展示姓名/盔甲/手持物；两者以 registry + PDC player/session UUID 联合识别。交互、交易、拾取和装备搬动被阻止，无原版掉落/XP。它不是 player NPC；没有玩家皮肤、完整玩家碰撞或玩家专属怪物感知保证。Health Boost/装备的 max-health modifier 在载体创建时避免重复计入，药效继续按原版递减。
+
+断线交易：捕获比赛状态 → 注册 RESERVED → Session DISCONNECTED + active 标记 → 清空旧 playerdata 可携带状态 → RUNNING 创建实体。准备阶段保留初始 Loadout 快照，计时从断线开始，落地时写入规划位置；超时早于开局则 RUNNING 第一批统一淘汰。spawn 失败或载体失效用 DISCONNECT_BODY_FAILURE 统一淘汰，无永久不可见存活者。任何生成的部分实体都会清理。
+
+重连交易：PlayerJoin LOWEST 隔离旧状态 → 校验 Session / 单调 deadline / live representation → 捕获实体当前位置、vitals 和当前装备 → claim RESTORING → 解码和恢复 → Session ALIVE → RECONNECTED → 删除实体与注册。期间不再次应用 Loadout，提交前不删除替身。失败清空客户端可携带状态、回到 LIVE、踢出重试；超时/死亡则从 M4 原快照回 Lobby。pending 原状态恢复失败期间同样冻结物品操作；不会先给玩家一个可操作的旧 playerdata tick。M6 仅同 JVM 内保存恢复数据。
+
+body health/timeout/zone/elimination 均在服务器线程，state claim 与 EliminationService 幂等提交是竞争线性化点，保证一份 carried payload/XP 和一次 stats/通知。伤害记录以原玩家 UUID 入 M5 CombatTracker，DISCONNECT_TIMEOUT 保留 15 秒最近有效来源归因；没有近期来源就无人击杀。死亡时读取实际载体位置/装备，死亡盒使用同一 M5 管线。毒圈走同 Session DamagePulse 和 ZoneDamage 公式，不经过护甲或吸收。
+
+单 Session loop：普通捕获/超时每 10 ticks，圈伤随真实秒脉冲；配置 mob interval 独立门控，可在其指定 tick 运行。到期判定精确使用 now - disconnectedAt >= window；循环调度最多延后一个检查间隔执行淘汰，登录会立即再次判断 deadline。附近 Monster 仅在无有效 target 时经 Mob.setTarget 指向活体，半径默认 24（上限 64）、间隔默认 20、每次最多 128 个候选。不会遍历全世界或为每 body 建 repeating task；原版实体活动距离/远距消失规则仍适用，AI 可重新选目标，Slime/Phantom 等不在 Monster 接口范围，飞行/特殊攻击不保证等同玩家。
+
+`PaperChunkTickets` 对 spawn / loot / OfflineBody / DeathBox 的 plugin chunk ticket 计数：Paper 原生仅区分 plugin，不区分业务 owner，故一处结束不能撤掉另一处仍需要的 ticket。跨 chunk capture 先 pin 新区块再释放旧区块；移除 body 清两个实体和引用。外部插件强制将实体传到未加载区域或移除实体可能触发失效淘汰，不能保证任意第三方实体搬动继续比赛。
+
+ENDING 固化 Outcome 后停止 Session loop/伤害/箱子访问，退休剩余 body（不生成新盒、不算死亡）、原快照入 pending；winner UUID 集合不随实体退休变化。离线赢家登录可收到 WINNER/TIE 队伍结果；死亡观战者、已回 Lobby 队友也收到展示。外部观众可继续观看，debug end/自然结束/disable 都移除 presence、UI、body、ticket，再恢复玩家和卸载世界。跨房间 registries 和 world UUID 隔离。
+
+M7：持久化和进程崩溃恢复、孤儿世界；第三方 Party、经济、排名和外观仍不在 M6。既有 provenance 不可观测边界继续适用，下文详细列出。
+
 
 ## M4 composition and transaction boundaries
 
@@ -6,9 +33,9 @@ PluginRuntime 持有跨空闲 reload 的 LoadoutEditor、WorldSanitizer、Player
 
 LoadoutEditor 的 View 以 InventoryHolder 身份识别，UUID 定位管理员。EditorDraft 只有复制画笔和虚拟槽位；InventoryClick/Creative/Drag/Drop/Swap 路径均阻止真实转移。每个 ID 有编辑锁，文件层只有一个在途保存，避免两个不同 Loadout 的全文件覆盖丢更新。主线程校验、序列化整个候选配置；专用线程只写已捕获路径和 YAML 文本，临时文件 force/close 后 ATOMIC_MOVE 替换，没有非原子 fallback；主线程 pump 仅在成功后替换注册表。保存期间关闭 GUI/断线仍保留锁，完成后释放。完整 reload 拒绝活动编辑器或保存。
 
-PaperMatches 在 STARTING 捕获 LoadoutDefinition 引用，生成不可变 InitialZone，按实际 World UUID 注册 sanitizer 并同步清理已加载 chunks。SpawnPreparation 保留 M3 出生区块 ticket 与取消 drain 语义，新 beforeLanding future 等待 PaperLootRuntime。Loot 完成后验证所有玩家仍可用，PlayerIsolation 先捕获全部原状态，再 journal 全部快照，最后应用装备并在同一 tick 传送。任何部分失败沿原有 abort/end 路径恢复原状态。纯事务 Gateway 允许注入 capture/apply/restore 故障测试。
+PaperMatches 在 PREPARING 建立 Entry，PlayerIsolation 先捕获冻结 roster 全部原状态，再 journal 快照、应用 Loadout 并冻结物品操作。STARTING 按冻结人数生成不可变 InitialZone，按实际 World UUID 注册 sanitizer 并同步清理已加载 chunks。SpawnPreparation 保留 M3 出生区块 ticket 与取消 drain 语义，beforeLanding future 等待 PaperLootRuntime。Loot 完成后同 tick 传送在线成员；DISCONNECTED 成员仍占自己的规划出生点，RUNNING 创建替身。任何部分失败沿原有 abort/end 路径恢复原状态。纯事务 Gateway 允许注入 capture/apply/restore 故障测试。
 
-PaperPlayerIsolation 保存原生 item payload、经验、模式、健康/饥饿/药水等，同时隔离末影箱和光标。结束时 PlayerIsolation 把 session 快照转入 UUID pending map，在线恢复并回大厅，成功才删除；离线/死亡/恢复异常保留。PlayerJoin 和原版 respawn 后重试，pending 阻止新 join。该服务不随普通 reload 重建；插件关闭/进程终止的离线恢复未持久化（M7）。M5 在统一淘汰提交时 defer 单个玩家原快照，原版 respawn 定位 Lobby，下一 tick 重试恢复；成功后从原 session 快照集合移除，结束不覆盖已经恢复的大厅物品。
+PaperPlayerIsolation 保存原生 item payload、经验、模式、健康/饥饿/药水等，同时隔离末影箱和光标。结束时 PlayerIsolation 把 session 快照转入 UUID pending map，在线恢复并回大厅，成功才删除；离线/死亡/恢复异常保留。PlayerJoin 和原版 respawn 后重试，pending 阻止新 join。该服务不随普通 reload 重建；插件关闭/进程终止的离线恢复未持久化（M7）。M6 在线淘汰保留原快照并登记待观战重生；respawn 在 runtime world，下一 tick 进入 SPECTATOR。观众离开/退出/结束才 defer 和恢复；离线替身淘汰直接 defer。成功后移除原快照，结束不覆盖已经恢复的 Lobby 物品。
 
 WorldSanitizer 使用每个 World UUID 的 SanitationLedger，分别记录 blocks/entities 首次完成，失败不标记；ChunkLoad 与 EntitiesLoad 独立处理。准备物资前 ensure 强制获得该候选 chunk 的实体集合，防止先放物资再执行迟到的首次实体清理。方块只枚举 tile entities，Chest.getBlockInventory 清理物理半箱；Lootable 表先置空，随后清 inventory。村民在 Mob 分类删除之前保留；仅当前 session 的 PDC ground marker 可豁免迟到实体检查。没有全图扫描、定期清扫或自然生物事件禁令。
 
@@ -49,7 +76,7 @@ autojoin 只考虑 WAITING / COUNTDOWN 且未满员的房间，选择人数最�
 - WAITING / COUNTDOWN → CLEANUP：空房间退休或准备前失败。
 - PREPARING / STARTING → CLEANUP：取消或失败。
 - CLEANUP 为终态，不能变回 WAITING；新局用新 Session。
-- RUNNING 成员标记 ALIVE，已断线者保持 DISCONNECTED。当前没有淘汰、胜者、队伍分配。
+- RUNNING 成员标记 ALIVE，已断线者保持 DISCONNECTED。M6 已有固定 Team、统一淘汰与 Team Outcome。
 
 倒计时使用每秒一个可取消任务，关键秒数才发消息。满员不缩短时长。每个房间独立任务，不存在全局 currentGame/currentWorld/countdown。
 
@@ -164,9 +191,9 @@ PvPHazardTracker 每个 Session 单独持有 UUID/方块坐标来源表，整个
 
 ## 断线与临时死亡
 
-WAITING/COUNTDOWN 断线移除 roster 并重新判断阈值。活动断线保留 UUID 为 DISCONNECTED，detach UI、停止圈伤；没有 OfflineBody/重连位置恢复（M6）。
+WAITING/COUNTDOWN 断线移除 roster 并重新判断阈值。PREPARING/STARTING/RUNNING 断线保留 Team/roster，保存独立比赛状态；RUNNING 替身继续承担圈伤、环境和战斗伤害。ENDING 不再生成替身。
 
-M5 死亡立即进入 ELIMINATED，停止 UI/圈伤，原版死亡画面后重生到 Lobby 并恢复原状态一次。原版掉落/XP 被 DeathBox 代替；没有死亡观战。ELIMINATED 断线不改写为 DISCONNECTED。未淘汰的 DISCONNECTED 选手会阻止 Solo 自动结算，等待 M6 定义离线淘汰策略。
+M6 死亡立即进入 ELIMINATED，经原版重生转 SPECTATING，停止参赛圈伤并使用观战 UI。DeathBox 替代原版掉落/XP。ELIMINATED/SPECTATING 不再创建替身；原 Team 成员关系保留。DISCONNECTED 只有持有存活/待落地替身才是 active combatant。
 
 
 ## Cleanup、reload 与 disable
@@ -185,13 +212,13 @@ disable 先关闭 MatchLifecycle，停止所有运行/出生任务、移除 UI�
 
 Session、membership、timer、token、loaded-world registry 仅由 server thread 修改。Player/World、传送、WorldCreator、load/unload 只在 Paper 适配器内且有主线程断言。复制/删除/源树遍历/NBT 校验位于专用 worker；只传递不可变 GameWorld、原子计数和受锁队列。Future 在运行期间由 server-thread pump 完成；关闭后的完成回调不会修改 Session。
 
-经济、Party、RatingCalculator 继续保持接口边界。ItemSerializer 已有 NativeItemSerializer 实现，LootItemResolver 提供原生 minecraft 命名空间。组队/观战/OfflineBody（M6）、数据库/恢复（M7）及第三方物品 Provider 尚未实现。
+经济、Party、RatingCalculator 继续保持接口边界。ItemSerializer 已有 NativeItemSerializer 实现，LootItemResolver 提供原生 minecraft 命名空间。组队/观战/OfflineBody 已在 M6 实现；数据库/进程恢复（M7）、第三方 Party 和物品 Provider 尚未实现。
 
 公共 API 参考：[异步区块](https://jd.papermc.io/paper/1.21.8/org/bukkit/World.html)、[DamageSource](https://jd.papermc.io/paper/1.21.8/org/bukkit/damage/DamageSource.html)、[喷溅药水](https://jd.papermc.io/paper/1.21.8/org/bukkit/event/entity/PotionSplashEvent.html)、[滞留云](https://jd.papermc.io/paper/1.21.8/org/bukkit/event/entity/AreaEffectCloudApplyEvent.html)。
 
 ## M5 combat, elimination and outcome composition
 
-PluginRuntime 注册共享 PaperDamageProvenance、CombatListener、PlayerEliminationListener、DeathBoxListener、StoredExperienceBottles、MatchTickListener；每个 PaperMatches.Entry 持有一个 PaperCombatSession（CombatTracker、EliminationService、PaperDeathBoxes、SoloOutcomeResolver）。同局关联使用 UUID；源解析与 M3 PvP 保护使用相同的 causing/direct entity、投射物 owner 和 hazards 记录，没有另建归属算法。
+PluginRuntime 注册共享 PaperDamageProvenance、CombatListener、PlayerEliminationListener、DeathBoxListener、StoredExperienceBottles、MatchTickListener；每个 PaperMatches.Entry 持有一个 PaperCombatSession（CombatTracker、EliminationService、PaperDeathBoxes、TeamOutcomeResolver）。同局关联使用 UUID；源解析与 M3 PvP 保护使用相同的 causing/direct entity、投射物 owner 和 hazards 记录，没有另建归属算法。
 
 CombatTracker 注入 GameClock；仅 MONITOR 未取消、正数有效伤害进入历史。finalDamage 按剩余健康截断，并计入公开 ABSORPTION modifier 可确认的实际消耗。每名 victim 至多 4096 条，写入/解析时惰性过期，窗口包含精确边界。结算再次验证同局参与者、排除自己，直接致死玩家优先，否则最近有效攻击者。助攻分母只取该窗口有效玩家伤害，累计 ≥4 HP 或占比 ≥20% 即计，killer 除外。GamePlayer 是不可变值，更新统计替换快照。极端超过历史硬上限会逐出最旧记录，不宣称无限量历史精度。
 
@@ -205,7 +232,7 @@ GUI 所有操作先 cancel，取物由主线程执行；左/右键只能从盒�
 
 ExperienceMath 从当前 level/progress 重建当前可花费点数，以 floor(total/2) 保存，最高 INT_MAX/2。Stored XP PDC 为 BYTE marker + INTEGER amount，不读取展示文本；PlayerLaunchProjectileEvent 验证类型/范围并强制消耗，MONITOR 复制到 ThrownExpBottle；ExpBottleEvent 设完整 XP 并打 paid 标记，重复处理不重复付款，普通瓶不进入此分支。
 
-EliminationService 记录实际 Bukkit current tick；MatchTickListener 在 ServerTickEndEvent 批处理 dirty session，MatchOutcomeResolver 接口隔离未来团队规则。SoloOutcomeResolver 只接受 teamSize=1：剩一人 LAST_ALIVE，最终同 tick 淘汰集合至少两人则 SAME_TICK tie，零存活且无同 tick 群组则 NO_SURVIVORS。MatchOutcome 保存不可变 winner UUID 集合、tie/reason/completedAt/tick，GameSession 只允许 RUNNING 决定一次结果。
+EliminationService 记录实际 Bukkit current tick；MatchTickListener 在 ServerTickEndEvent 批处理 dirty session，TeamOutcomeResolver 统一 Solo/Duo/Squad。开局的首次 tick 也检查 Outcome，因此单 Team 开局直接获胜；之后只有淘汰批次触发重算。active Teams >1 继续，=1 返回其全部固定成员；=0 只将最终 tick 失去最后活跃成员的多个 Team 合并为 SAME_TICK_TEAMS，包含各自已阵亡成员，早一 tick 全灭的 Team 不加入。MatchOutcome 保存不可变 winnerIds、winningTeamIds、tie/reason/completedAt/tick，GameSession 只允许 RUNNING 决定一次结果。旧 SoloOutcomeResolver 保留作 M5 兼容回归，不参与生产决策。
 
 进入 ENDING 停 SessionLoop/UI/来源与 CombatTracker、关闭箱子访问；世界和视觉保持。WinnerShowcase 持有一个独立可取消任务，GameClock 单调 deadline 为默认 60 秒，标题一次、效果每 5 秒且最多 12 轮，卡顿不补发风暴。CelebrationEffects 用自有 PDC + registry 识别烟花，CombatListener 取消其对任何实体的伤害；ENDING 存活选手另有本世界伤害保护。到期调用受 session identity/state guard 保护的 MatchLifecycle.onFinished，再走 RoomRuntimeService 的恢复、资源 drain 和 world release。debug end/disable/fatal abort 都取消展示任务并移除登记烟花，迟到回调不能再次结算。
 

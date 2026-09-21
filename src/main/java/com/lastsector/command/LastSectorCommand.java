@@ -18,7 +18,7 @@ public final class LastSectorCommand implements CommandExecutor, TabCompleter {
         if (!sender.hasPermission("lastsector.command")) { messages.denied(sender); return true; }
         String action = args.length == 0 ? "help" : args[0].toLowerCase(Locale.ROOT);
         if (Set.of("reload", "debug", "admin").contains(action) && !sender.hasPermission("lastsector.admin")
-                || Set.of("rooms", "join", "autojoin", "leave").contains(action) && !sender.hasPermission("lastsector.play")) {
+                || Set.of("rooms", "join", "autojoin", "leave", "team", "spectate").contains(action) && !sender.hasPermission("lastsector.play")) {
             messages.denied(sender); return true;
         }
         try {
@@ -46,11 +46,23 @@ public final class LastSectorCommand implements CommandExecutor, TabCompleter {
                     if (args.length != 1) { messages.unknown(sender); break; }
                     rooms.rooms().forEach(room -> messages.runtimeRoom(sender, room, rooms.session(room.id()).orElse(null)));
                 }
+                case "team" -> {
+                    if(!(sender instanceof Player player))throw new IllegalArgumentException("This command requires a player");
+                    var session=rooms.participant(player.getUniqueId()).orElseThrow(()->new IllegalStateException("You are not in a room"));
+                    var team=session.players().get(player.getUniqueId()).teamId().map(session.teams()::get).orElseThrow(()->new IllegalStateException("Teams are assigned when the roster freezes"));
+                    messages.team(sender,session,team);
+                }
+                case "spectate" -> {
+                    if(!(sender instanceof Player player))throw new IllegalArgumentException("This command requires a player");
+                    if(args.length!=2)throw new IllegalArgumentException("Usage: /ls spectate <room>");
+                    if(rooms.participant(player.getUniqueId()).isPresent())throw new IllegalStateException("Already participating in a room");
+                    var session=rooms.session(args[1]).orElseThrow(()->new IllegalArgumentException("Room has no active match"));runtime.spectators().external(player,session);
+                }
                 case "join", "autojoin", "leave" -> {
                     if (!(sender instanceof Player player)) { messages.send(sender, "This command requires a player."); break; }
                     if (action.equals("join") && args.length == 2) rooms.join(player.getUniqueId(), args[1]);
                     else if (action.equals("autojoin") && args.length == 1) rooms.autojoin(player.getUniqueId());
-                    else if (action.equals("leave") && args.length == 1) rooms.leave(player.getUniqueId());
+                    else if (action.equals("leave") && args.length == 1) {if(!runtime.spectators().leave(player.getUniqueId(),false))rooms.leave(player.getUniqueId());}
                     else messages.unknown(sender);
                 }
                 case "debug" -> {
@@ -62,6 +74,8 @@ public final class LastSectorCommand implements CommandExecutor, TabCompleter {
                         messages.count(sender, "Map templates", maps.size()); maps.forEach(map -> messages.map(sender, map));
                     } else if (args.length == 3) {
                         switch (args[1].toLowerCase(Locale.ROOT)) {
+                            case "teams" -> {var session=rooms.session(args[2]).orElseThrow(()->new IllegalArgumentException("No active session"));session.teams().values().forEach(team->messages.team(sender,session,team));}
+                            case "offline" -> {messages.send(sender,rooms.session(args[2]).map(s->runtime.matches().offline(s.sessionId())).orElse("offline=none"));}
                             case "deathboxes" -> {
                                 var session=rooms.session(args[2]);
                                 messages.send(sender,session.map(s->runtime.matches().deathboxes(s.sessionId())).orElse("deathboxes=0"));
@@ -102,18 +116,18 @@ public final class LastSectorCommand implements CommandExecutor, TabCompleter {
         List<String> choices = new ArrayList<>();
         if (args.length == 1) {
             choices.addAll(List.of("help", "version"));
-            if (sender.hasPermission("lastsector.play")) choices.addAll(List.of("rooms", "join", "autojoin", "leave"));
+            if (sender.hasPermission("lastsector.play")) choices.addAll(List.of("rooms", "join", "autojoin", "leave", "team", "spectate"));
             if (sender.hasPermission("lastsector.admin")) choices.addAll(List.of("reload", "debug", "admin"));
         } else if (args.length == 2 && args[0].equalsIgnoreCase("debug") && sender.hasPermission("lastsector.admin"))
-            choices.addAll(List.of("rooms", "maps", "session", "zone", "protection", "loot", "deathboxes", "start", "end"));
+            choices.addAll(List.of("rooms", "maps", "session", "zone", "protection", "loot", "deathboxes", "teams", "offline", "start", "end"));
         else if(args[0].equalsIgnoreCase("admin") && sender.hasPermission("lastsector.admin")) {
             if(args.length==2) choices.add("loadout");
             else if(args.length==3 && args[1].equalsIgnoreCase("loadout")) choices.add("edit");
             else if(args.length==4 && args[1].equalsIgnoreCase("loadout") && args[2].equalsIgnoreCase("edit")) runtime.rooms().rooms().forEach(room->choices.add(room.id()));
         }
-        else if (args.length == 2 && args[0].equalsIgnoreCase("join") && sender.hasPermission("lastsector.play")
+        else if (args.length == 2 && Set.of("join","spectate").contains(args[0].toLowerCase(Locale.ROOT)) && sender.hasPermission("lastsector.play")
                 || args.length == 3 && args[0].equalsIgnoreCase("debug") && sender.hasPermission("lastsector.admin")
-                && Set.of("session", "zone", "protection", "loot", "deathboxes", "start", "end").contains(args[1].toLowerCase(Locale.ROOT)))
+                && Set.of("session", "zone", "protection", "loot", "deathboxes", "teams", "offline", "start", "end").contains(args[1].toLowerCase(Locale.ROOT)))
             runtime.rooms().rooms().forEach(room -> choices.add(room.id()));
         String prefix = args.length == 0 ? "" : args[args.length - 1].toLowerCase(Locale.ROOT);
         return choices.stream().filter(choice -> choice.toLowerCase(Locale.ROOT).startsWith(prefix)).toList();

@@ -17,7 +17,7 @@ public final class EliminationService {
     }
     public Optional<DeathBox> eliminate(EliminationRequest request) {
         var victim=session.players().get(request.victim());
-        if(session.state()!=GameState.RUNNING || victim==null || victim.state()!=PlayerState.ALIVE) return Optional.empty();
+        if(session.state()!=GameState.RUNNING || victim==null || !session.combatActive(request.victim())) return Optional.empty();
         var reason=combat.resolve(request.victim(),request.directAttacker(),request.cause(),id->session.players().containsKey(id));
         DeathBox box=new DeathBox(UUID.randomUUID(),session.sessionId(),request.victim(),request.name(),request.location(),
                 Math.max(0,request.nanoTime()-started),request.tick(),reason,request.contents(),ExperienceMath.stored(request.totalExperience()));

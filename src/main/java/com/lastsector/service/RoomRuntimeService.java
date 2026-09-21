@@ -32,6 +32,7 @@ public final class RoomRuntimeService implements AutoCloseable {
     }
     public List<RoomDefinition> rooms() { return configuration.get().rooms(); }
     public Optional<GameSession> session(String room) { return sessions.findByRoom(room); }
+    public Optional<GameSession> participant(UUID id){return Optional.ofNullable(memberships.get(id)).flatMap(sessions::find);}
     public int remaining(GameSession session) {
         Countdown countdown = countdowns.get(session.sessionId());
         return countdown == null ? -1 : countdown.remaining;
@@ -78,8 +79,13 @@ public final class RoomRuntimeService implements AutoCloseable {
         if (session.players().isEmpty()) { session.transition(GameState.CLEANUP); retire(session); }
     }
     public void disconnected(UUID player) {
-        matches.disconnected(player);
         UUID sessionId = memberships.get(player);
+        try {matches.disconnected(player);}
+        catch(RuntimeException failure){
+            if(sessionId!=null){var session=sessions.find(sessionId).orElse(null);if(session!=null && !session.joinable())abort(session,failure);}
+            else players.error("Disconnect state capture failed",failure);
+            return;
+        }
         if (sessionId == null) return;
         GameSession session = sessions.find(sessionId).orElseThrow();
         if (session.joinable()) leave(player);
@@ -128,6 +134,7 @@ public final class RoomRuntimeService implements AutoCloseable {
         operations.put(session.sessionId(), token);
         try {
             session.prepare(selector.select(session.room(), configuration.get().maps()));
+            matches.preparing(session);
             players.notify(session.players().keySet(), "preparing", session.selectedMap().orElseThrow().id());
             worlds.prepare(session.sessionId(), session.room().id(), session.selectedMap().orElseThrow(),
                     () -> current(session, token)).whenComplete((world, error) -> {
@@ -183,7 +190,7 @@ public final class RoomRuntimeService implements AutoCloseable {
         } catch (Exception failure) { players.error("Lobby return failed", failure); }
         if (session.gameWorld().isPresent()) {
             matches.stop(session, () -> worlds.release(session.gameWorld().orElseThrow()).whenComplete((ignored, error) -> finish(session, error)));
-        } else if (previous != GameState.PREPARING) finish(session, null);
+        } else {matches.stop(session,()->{});if (previous != GameState.PREPARING) finish(session, null);}
         // Pending prepare completes only after cancelled copy cleanup; keep CLEANUP until then.
     }
     private void finish(GameSession session, Throwable error) {

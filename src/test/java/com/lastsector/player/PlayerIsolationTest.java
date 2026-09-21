@@ -16,6 +16,14 @@ class PlayerIsolationTest {
         states.put(a,"match loot"); isolation.end(session); assertEquals("original-a",states.get(a)); assertEquals("original-b",states.get(b));
         isolation.end(session); assertEquals(0,isolation.pendingCount());
     }
+    @Test void spectatorRetainsOriginalUntilLeaveAndCleanupDoesNotRestoreTwice() {
+        isolation.apply(session,List.of(a),"match");states.put(a,"empty spectator inventory");assertFalse(isolation.blocked(a));
+        isolation.defer(session,a);isolation.retry(a);assertEquals("original-a",states.get(a));states.put(a,"lobby additions");isolation.end(session);assertEquals("lobby additions",states.get(a));
+    }
+    @Test void externalSpectatorUsesIndependentSnapshotAndDisconnectQueuesRestore() {
+        UUID external=UUID.randomUUID();isolation.apply(external,List.of(b),"empty spectator inventory");offline=true;isolation.defer(external,b);isolation.end(external);
+        assertTrue(isolation.blocked(b));offline=false;assertTrue(isolation.retry(b));assertEquals("original-b",states.get(b));
+    }
     @Test void eliminatedPlayerRestoresExactlyOnceAcrossRespawnAndSessionEnd() {
         isolation.apply(session,List.of(a,b),"match");isolation.defer(session,a);assertTrue(isolation.blocked(a));
         assertEquals("match",states.get(a));assertTrue(isolation.retry(a));states.put(a,"new lobby possessions");

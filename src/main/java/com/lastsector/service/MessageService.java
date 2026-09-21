@@ -9,17 +9,22 @@ import java.util.logging.Logger;
 /** Centralized console and player messages. Configuration values are sent as literal text. */
 public final class MessageService {
     private final Logger logger;
+    private final java.util.Map<java.util.UUID,String> offlineReturns=new java.util.HashMap<>();
+    public void offlineResult(java.util.UUID player,boolean timeout){offlineReturns.put(player,timeout?"Reconnect window expired; your original Lobby state has been restored.":"You were eliminated while disconnected; your original Lobby state has been restored.");}
+    public void offlineWinner(java.util.UUID player,boolean tie){offlineReturns.put(player,(tie?"TIE":"WINNER")+": your Team won; your original Lobby state has been restored.");}
+    public void deliverOfflineResult(org.bukkit.entity.Player player){String text=offlineReturns.remove(player.getUniqueId());if(text!=null)send(player,text);}
+    public Component reconnectFailure(){return Component.text("Reconnect could not be restored safely. Please retry.");}
     public MessageService(Logger logger) { this.logger = logger; }
     public void send(CommandSender sender, String message) {
         sender.sendMessage(Component.text("[LastSector] " + message));
     }
     public void help(CommandSender sender) {
         send(sender, "/lastsector help | version");
-        if (sender.hasPermission("lastsector.play")) send(sender, "/lastsector rooms | join <room> | autojoin | leave");
-        if (sender.hasPermission("lastsector.admin")) send(sender, "/lastsector reload | admin loadout edit <room> | debug rooms/maps | debug session/zone/protection/loot/deathboxes/start/end <room>");
+        if (sender.hasPermission("lastsector.play")) send(sender, "/lastsector rooms | join <room> | autojoin | leave | team | spectate <room>");
+        if (sender.hasPermission("lastsector.admin")) send(sender, "/lastsector reload | admin loadout edit <room> | debug rooms/maps | debug session/zone/protection/loot/deathboxes/teams/offline/start/end <room>");
     }
     public void denied(CommandSender sender) { send(sender, "You do not have permission to use this command."); }
-    public void version(CommandSender sender, String version) { send(sender, "Version " + version + " (Milestone 5 Combat, DeathBoxes & Outcomes)"); }
+    public void version(CommandSender sender, String version) { send(sender, "Version " + version + " (Milestone 6 Teams, Spectators & Reconnect)"); }
     public void reloaded(CommandSender sender) { send(sender, "Configuration reloaded successfully."); }
     public void reloadFailed(CommandSender sender, String reason) { send(sender, "Reload failed; previous configuration retained. " + reason); }
     public void unknown(CommandSender sender) { send(sender, "Unknown command. Use /lastsector help."); }
@@ -35,7 +40,7 @@ public final class MessageService {
         // JavaPlugin's logger already supplies [LastSector].
         logger.info("Loaded " + snapshot.rooms().size() + " rooms.");
         logger.info("Loaded " + snapshot.maps().size() + " map templates.");
-        logger.info("Milestone 5 initialized. Combat, elimination, DeathBoxes and Solo outcomes ready.");
+        logger.info("Milestone 6 initialized. Teams, spectators and offline bodies ready.");
         if (snapshot.settings().debug()) logger.info("Debug enabled. Runtime directory: " + snapshot.settings().runtimeDirectory());
     }
     public void startupFailed(Exception error) { logger.log(java.util.logging.Level.SEVERE, "Startup failed; disabling LastSector. " + error.getMessage(), error); }
@@ -44,6 +49,13 @@ public final class MessageService {
     public void runtimeError(String context, Throwable error) { logger.log(java.util.logging.Level.SEVERE, context + ": " + error.getMessage(), error); }
     public void event(CommandSender sender, String event, Object... args) {
         String pattern = switch (event) {
+            case "teams-assigned" -> "Assigned %s balanced teams.";
+            case "disconnected" -> "%s disconnected. Reconnect window: %s seconds.";
+            case "reconnected" -> "Reconnected: your current match state has been restored.";
+            case "offline-eliminated" -> "You were eliminated while disconnected; returning to lobby.";
+            case "offline-timeout" -> "%s was eliminated: reconnect window expired.";
+            case "spectator-joined" -> "Spectating room %s. Use /ls leave to return to lobby.";
+            case "spectator-left" -> "Spectating ended. Lobby state restored.";
             case "joined" -> "Joined room %s.";
             case "left" -> "Left room %s.";
             case "countdown-started" -> "Countdown started: %s seconds.";
@@ -73,6 +85,10 @@ public final class MessageService {
                 + " countdown=" + (remaining < 0 ? "N/A" : remaining)
                 + " stats=" + session.players().values() + " outcome=" + session.outcome().map(Object::toString).orElse("N/A"));
         zone(sender, session);
+    }
+    public void team(CommandSender sender,com.lastsector.session.GameSession session,com.lastsector.team.GameTeam team) {
+        send(sender,"Team "+team.displayIndex()+" id="+team.teamId()+" active="+team.playerIds().stream().filter(session::combatActive).count()+" members="+
+                team.playerIds().stream().sorted().map(id->{var player=org.bukkit.Bukkit.getOfflinePlayer(id);return (player.getName()==null?id.toString():player.getName())+"="+session.players().get(id).state();}).toList());
     }
     public void zone(CommandSender sender, com.lastsector.session.GameSession session) {
         var zone = session.zone().orElse(null);

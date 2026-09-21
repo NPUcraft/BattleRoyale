@@ -33,7 +33,7 @@ public final class PaperDeathBoxes implements AutoCloseable {
         boxes.put(box.id(),view);
         World world=Objects.requireNonNull(plugin.getServer().getWorld(worldId));
         int cx=((int)Math.floor(box.location().x()))>>4,cz=((int)Math.floor(box.location().z()))>>4;
-        long key=Chunk.getChunkKey(cx,cz); if(chunks.add(key)) world.addPluginChunkTicket(cx,cz,plugin);
+        long key=Chunk.getChunkKey(cx,cz); if(chunks.add(key)) PaperChunkTickets.acquire(plugin,world,cx,cz);
         long seconds=box.elapsedNanos()/1_000_000_000L;
         Component label=Component.text(box.deceasedName()).appendNewline().append(DeathReasonRenderer.render(box.reason(),names))
                 .appendNewline().append(Component.text("T+%02d:%02d".formatted(seconds/60,seconds%60)));
@@ -57,7 +57,7 @@ public final class PaperDeathBoxes implements AutoCloseable {
         closeViewers();
         for(View view:boxes.values()) {view.valid=false;visuals.remove(view.visuals);view.inventory.clear();}
         entities.clear();boxes.clear(); World world=plugin.getServer().getWorld(worldId);
-        if(world!=null) for(long chunk:chunks) world.removePluginChunkTicket((int)chunk,(int)(chunk>>32),plugin);
+        if(world!=null) for(long chunk:chunks) PaperChunkTickets.release(plugin,world,(int)chunk,(int)(chunk>>32));
         chunks.clear();
     }
     public String diagnostics() {

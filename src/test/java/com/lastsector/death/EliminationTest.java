@@ -71,4 +71,26 @@ class EliminationTest {
         assertFalse(DeathBoxAccess.allowed(session(1),box,a,near,6));assertFalse(DeathBoxAccess.allowed(session,box,UUID.randomUUID(),near,6));
         session.outcome(new MatchOutcome(Set.of(a),false,"winner",0,1));assertFalse(DeathBoxAccess.allowed(session,box,a,near,6));
     }
+    @Test void offlineTimeoutUsesRecentCombatAndCommitsOnlyOnePayload() {
+        session.disconnected(b);session.offlineCombatant(b,true);
+        tracker.record(b,a,5,DamageOrigin.PROJECTILE,true);
+        now=15_000_000_000L;
+        var item=new StoredItem("paper-native",1,"AQID");
+        var timeout=new EliminationRequest(b,"B",new DeathPosition(world,7,65,8),DamageOrigin.DISCONNECT_TIMEOUT,null,List.of(item),101,now,200);
+        var box=service.eliminate(timeout).orElseThrow();
+        assertEquals(DamageOrigin.DISCONNECT_TIMEOUT,box.reason().origin());
+        assertEquals(Optional.of(a),box.reason().killer());assertEquals(1,session.players().get(a).kills());
+        assertEquals(List.of(item),box.contents());assertEquals(50,box.storedXp());assertFalse(session.combatActive(b));
+        assertTrue(service.eliminate(timeout).isEmpty());assertTrue(service.eliminate(request(b,200)).isEmpty());assertEquals(1,notifications);
+        assertFalse(session.reconnect(b));
+    }
+    @Test void offlineTimeoutOutsideAttributionWindowHasNoKiller() {
+        session.disconnected(b);session.offlineCombatant(b,true);tracker.record(b,a,5,DamageOrigin.PLAYER_MELEE,true);now=15_000_000_001L;
+        var box=service.eliminate(new EliminationRequest(b,"B",new DeathPosition(world,0,64,0),DamageOrigin.DISCONNECT_TIMEOUT,null,List.of(),0,now,1)).orElseThrow();
+        assertTrue(box.reason().killer().isEmpty());assertEquals(0,session.players().get(a).kills());
+    }
+    @Test void spectatorAndExternalCannotAccessSharedDeathBox() {
+        var box=service.eliminate(request(b,1)).orElseThrow();session.spectating(b,true);var at=box.location();
+        assertFalse(DeathBoxAccess.allowed(session,box,b,at,6));assertFalse(DeathBoxAccess.allowed(session,box,UUID.randomUUID(),at,6));
+    }
 }

@@ -22,6 +22,7 @@ await fs.copyFile('build/integration/lastsector-test-probe.jar', path.join(root,
 for (const file of ['config.yml', 'rooms.yml', 'maps.yml', 'zones.yml']) {
   let text = await fs.readFile(path.join('src/main/resources', file), 'utf8');
   if (file === 'rooms.yml') text = text.replaceAll('countdown-seconds: 30', 'countdown-seconds: 30').replace('min-players: 4', 'min-players: 2').replaceAll('pvp-protection-seconds: 60', 'pvp-protection-seconds: 0').replaceAll('max-players: 24', 'max-players: 8').replaceAll('max-players: 32', 'max-players: 8');
+  if (file === 'rooms.yml') text=text.replace('team-size: 4','team-size: 1');
   if (file === 'zones.yml') text = text.replace(/wait-seconds: \d+/g, 'wait-seconds: 300').replace(/shrink-seconds: \d+/g, 'shrink-seconds: 10');
   if (file === 'maps.yml') text = text.replace(/3000|2500/g, '600');
   await fs.writeFile(path.join(data, file), text);
@@ -99,7 +100,7 @@ async function dirs() {
 
 async function probe(command, expected) {
   const offset=output.length; child.stdin.write(command+'\n');
-  await until(()=>/M4 |M5 (?!death=|XP=)|PROBE (?:failed|player)=/.test(output.slice(offset)),command);
+  await until(()=>/M6 |M4 |M5 (?!death=|XP=)|PROBE (?:failed|player)=/.test(output.slice(offset)),command);
   const text=output.slice(offset);
   assert.ok(text.includes(expected), text);
   return text;
@@ -116,7 +117,7 @@ async function openBox(bot) {
   await until(()=>bot.currentWindow?.inventoryStart===54,'DeathBox GUI opens');
 }
 async function close(bot) {if(bot.currentWindow)bot.closeWindow(bot.currentWindow);await sleep(200);}
-async function restore(name) { await until(async()=>{const answer=await probe('lsprobe player '+name,'PROBE player=');return answer.includes('world=world ');},'Lobby respawn '+name); await probe('lsprobe m4original '+name,'M4 original=true world=world'); }
+async function restore(name) { const current=bots.findLast(b=>b.username===name); const status=await probe("lsprobe m6state "+name,"M6 mode="); if(status.includes("mode=SPECTATOR")){await chat(current,"/ls leave","Spectating ended");} await until(async()=>{const answer=await probe('lsprobe player '+name,'PROBE player=');return answer.includes('world=world ');},'Lobby respawn '+name); await probe('lsprobe m4original '+name,'M4 original=true world=world'); }
 async function startSolo(a,b) {
   await chat(a,'/ls join solo','Joined room solo');await chat(b,'/ls join solo','Joined room solo');
   await consoleCommand('ls debug start solo','Start requested');await state('solo','RUNNING');await kit(a);await kit(b);
@@ -124,11 +125,11 @@ async function startSolo(a,b) {
 async function endSolo() {await consoleCommand('ls debug end solo','End requested');await state('solo','WAITING');}
 try {
   await until(()=>output.includes('Done ('),'Paper startup',120000);
-  assert.match(output,/Milestone 5 initialized/);assert.doesNotMatch(output,/ERROR|Exception/);
-  const a=await connect('LSAlice',port),b=await connect('LSBob',port),c=await connect('LSCarol',port),d=await connect('LSDan',port),e=await connect('LSEve',port);
+  assert.match(output,/Milestone 6 initialized/);assert.doesNotMatch(output,/ERROR|Exception/);
+  const a=await connect('LSAlice',port),b=await connect('LSBob',port),c=await connect('LSCarol',port),d=await connect('LSDan',port),e=await connect('LSEve',port),f=await connect('LSFrank',port);
   for(const bot of bots)await probe('lsprobe m4seed '+bot.username,'M4 seeded');
   for(const bot of [a,b,c])await chat(bot,'/ls join solo','Joined room solo');
-  for(const bot of [d,e])await chat(bot,'/ls join squad','Joined room squad');
+  for(const bot of [d,e,f])await chat(bot,'/ls join squad','Joined room squad');
   await consoleCommand('ls debug start solo','Start requested');await consoleCommand('ls debug start squad','Start requested');
   await state('solo','RUNNING');await state('squad','RUNNING');
   for(const bot of bots)await kit(bot,bot===b);
@@ -167,7 +168,7 @@ try {
   assert.match(await consoleCommand('ls debug deathboxes solo','deathboxes='),/deathboxes=2/);
   await until(async()=> {await sleep(1000);return (await consoleCommand('ls debug session solo','countdown=')).includes('state=WAITING');},'60-second showcase complete',75000);
   assert.ok(Date.now()-endingStart>=59000);assert.match(output,/M5 own firework outsider damage cancelled=true/);assert.doesNotMatch(output,/M5 own firework outsider damage cancelled=false/);await restore('LSAlice');await state('squad','RUNNING');
-  results.push('Solo WINNER title and full default 60-real-second ENDING retain world/boxes, block damage, then restore and clean up. Independent team-size-4 room with one survivor remains RUNNING.');
+  results.push('Solo WINNER title and full default 60-real-second ENDING retain world/boxes, block damage, then restore and clean up. Independent second room with two active combatants remains RUNNING (M6 team winner rules tested in paper-m6).');
   await startSolo(a,b);await probe('lsprobe m5arrow LSAlice LSBob','M5 arrow launched');await state('solo','ENDING');
   assert.ok(a.lines.some(l=>l.includes('LSBob') && l.toLowerCase().includes('projectile')));await endSolo();await restore('LSBob');await restore('LSAlice');
   await startSolo(a,b);await probe('lsprobe m5damage LSAlice LSBob melee 4','M5 damage');await probe('lsprobe m5damage LSAlice LSBob fall 1000','M5 damage');const attributed=await state('solo','ENDING');assert.match(attributed,/kills=1/);await endSolo();await restore('LSBob');await restore('LSAlice');

@@ -4,10 +4,10 @@
 - **M2 Room & World — completed**：成员、独立倒计时、唯一 Session、选图、异步复制、安全加载/卸载/删除、多房间与取消/禁用。
 - **M3 Game Start & Zone — completed**：严格圈配置及地图容量验证、按实际人数随机 InitialZone、安全间隔出生、有限异步区块准备、同 tick 传送、单调时间连续缩圈、保护期、圈外真实伤害、局部粒子墙和 BossBar、debug zone、故障回滚与真实 Paper 验证。旧 500 → 700 配置冲突已解决，默认目标 400/250/125/50。
 - **M4 Loadout & Loot & World Rules — completed**：原生物品字节、共享 Loadout 虚拟编辑器与原子保存、玩家状态快照和同 JVM 离线恢复、首次区块/实体清理、容器与地面物资、InitialZone 筛选、一次性生成、世界 UUID 传送门规则。
-- **M5 Combat & DeathBox — completed（当前）**：共享 M3 来源、15 秒归因和助攻、幂等淘汰、实际库存死亡盒、精确 Stored XP Bottle、Solo tick 末胜负/平局和 60 秒 ENDING 展示。
-- **M6 Team, Spectator & OfflineBody — next**：Party、组队、友伤、观战、断线替身与重连。
-- M7 Database & Recovery：SQLite/MySQL、永久数据与恢复数据分离、异常恢复、孤儿世界处理、autosave/停服保留策略。
+- **M5 Combat & DeathBox — completed**：共享 M3 来源、15 秒归因和助攻、幂等淘汰、实际库存死亡盒、精确 Stored XP Bottle、Solo tick 末胜负/平局和 60 秒 ENDING 展示。
+- **M6 Team, Spectator & OfflineBody — completed（当前）**：均衡自动队伍、固定成员、共享友伤策略、Team winner/tie、死亡与外部观战、公共 API 替身、120 秒重连/超时、原背包隔离和清理。仅预留 Party 输入接口，第三方集成后续实现。
+- **M7 Database & Recovery — next**：SQLite/MySQL、永久数据与恢复数据分离、异常恢复、孤儿世界处理、autosave/停服保留策略。
 - M8 Lobby, Economy, Cosmetics & Ranking：大厅、CoinsEngine/Vault、公平外观、积分和榜单。
 - M9 Admin Tools, Stress Tests & Release：地图/装备工具、大图多房压力测试、故障演练和发布。
 
-M5 Solo 淘汰可自动完成整场生命周期；队伍房间仍由 debug end 结束。永久统计/Rating、断线比赛恢复和崩溃恢复仍未实现。
+M6 Solo/Duo/Squad 共用 Team Outcome 和完整比赛生命周期；在线死亡与离线替身淘汰共用一次性 DeathBox。比赛内重连已实现；永久统计/Rating、数据库和进程崩溃恢复仍未实现。

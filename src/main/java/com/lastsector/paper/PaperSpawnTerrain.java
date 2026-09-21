@@ -15,9 +15,15 @@ public final class PaperSpawnTerrain implements SpawnTerrain {
     private final WorldSanitizer sanitizer;
     private final java.util.function.Supplier<CompletableFuture<?>> beforeLanding;
     private final Runnable applyLoadout;
+    private final java.util.function.BiConsumer<UUID,Location> offlineLanding;
     public PaperSpawnTerrain(JavaPlugin plugin,GameSession session,WorldSanitizer sanitizer,
             java.util.function.Supplier<CompletableFuture<?>> beforeLanding,Runnable applyLoadout) {
+        this(plugin,session,sanitizer,beforeLanding,applyLoadout,null);
+    }
+    public PaperSpawnTerrain(JavaPlugin plugin,GameSession session,WorldSanitizer sanitizer,
+            java.util.function.Supplier<CompletableFuture<?>> beforeLanding,Runnable applyLoadout,java.util.function.BiConsumer<UUID,Location> offlineLanding) {
         this.plugin=plugin; this.session=session; this.sanitizer=sanitizer; this.beforeLanding=beforeLanding; this.applyLoadout=applyLoadout;
+        this.offlineLanding=offlineLanding;
     }
     @Override public CompletableFuture<?> beforeLanding() { return beforeLanding.get(); }
     private World world() { return Objects.requireNonNull(plugin.getServer().getWorld(session.gameWorld().orElseThrow().worldName()),"Runtime world missing"); }
@@ -28,7 +34,7 @@ public final class PaperSpawnTerrain implements SpawnTerrain {
     @Override public Double safeFeet(SpawnPlanner.Column column) {
         World world=world(); int cx=column.x()>>4,cz=column.z()>>4;
         if(!world.isChunkLoaded(cx,cz)) throw new IllegalStateException("Prepared chunk unloaded");
-        if(tickets.add(key(cx,cz))) world.addPluginChunkTicket(cx,cz,plugin);
+        if(tickets.add(key(cx,cz))) PaperChunkTickets.acquire(plugin,world,cx,cz);
         sanitizer.ensure(world.getChunkAt(cx,cz));
         int y=world.getHighestBlockYAt(column.x(),column.z(),HeightMap.MOTION_BLOCKING_NO_LEAVES);
         if(y<world.getMinHeight() || y+2>=world.getMaxHeight()) return null;
@@ -56,12 +62,13 @@ public final class PaperSpawnTerrain implements SpawnTerrain {
     @Override public void resolved(SpawnPlanner.Column column,boolean accepted) {
         int cx=column.x()>>4,cz=column.z()>>4; long key=key(cx,cz);
         if(accepted) acceptedChunks.add(key);
-        else if(!acceptedChunks.contains(key) && tickets.remove(key)) world().removePluginChunkTicket(cx,cz,plugin);
+        else if(!acceptedChunks.contains(key) && tickets.remove(key)) PaperChunkTickets.release(plugin,world(),cx,cz);
     }
     @Override public void teleport(List<UUID> starters,List<SpawnPlanner.Position> plan,BooleanSupplier current) {
         World world=world();
         // A changing starter roster aborts this attempt instead of using an incorrect initial bucket.
         for(UUID id:starters) {
+            if(offlineLanding!=null && session.players().get(id).state()==com.lastsector.player.PlayerState.DISCONNECTED)continue;
             var player=plugin.getServer().getPlayer(id);
             if(player==null || !player.isOnline() || session.players().get(id).state()==com.lastsector.player.PlayerState.DISCONNECTED)
                 throw new IllegalStateException("Starter disconnected before landing");
@@ -70,6 +77,7 @@ public final class PaperSpawnTerrain implements SpawnTerrain {
         for(int i=0;i<starters.size();i++) {
             if(!current.getAsBoolean()) return;
             var position=plan.get(i);
+            if(offlineLanding!=null && session.players().get(starters.get(i)).state()==com.lastsector.player.PlayerState.DISCONNECTED){offlineLanding.accept(starters.get(i),new Location(world,position.x(),position.y(),position.z()));continue;}
             var player=Objects.requireNonNull(plugin.getServer().getPlayer(starters.get(i)));
             if(!player.teleport(new Location(world,position.x(),position.y(),position.z())))
                 throw new IllegalStateException("Safe spawn teleport rejected");
@@ -77,7 +85,7 @@ public final class PaperSpawnTerrain implements SpawnTerrain {
     }
     @Override public void release() {
         World world=plugin.getServer().getWorld(session.gameWorld().orElseThrow().worldName());
-        if(world!=null) for(long key:tickets) world.removePluginChunkTicket((int)(key>>32),(int)key,plugin);
+        if(world!=null) for(long key:tickets) PaperChunkTickets.release(plugin,world,(int)(key>>32),(int)key);
         tickets.clear(); acceptedChunks.clear();
     }
 }

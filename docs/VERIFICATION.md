@@ -1,4 +1,66 @@
-# M5 验证记录
+# M6 验证记录
+
+2026-09-21，Windows / Java 21.0.8 / Gradle 8.14 / Paper 1.21.8。当前 M6，下一步 M7 数据库与进程恢复。以下 M5/M4/M3 章节保留为当时证据，其临时断线/死亡/队伍行为已由本节覆盖。
+
+## 自动测试与构建
+
+最终执行 `.\gradlew.bat clean test build`，**BUILD SUCCESSFUL**（6 tasks executed）。JUnit XML 汇总 **334 tests，0 failures，0 errors，0 skipped**；保留 M1–M5 297 项并新增 37 项。生产 JAR 不包含 probe/JUnit/NMS/NPC 实现。
+
+新增覆盖：Solo/Duo/Squad 人数容量、ceil 分队和均衡差值、确定性随机和 Session Team UUID；固定成员/死者和观众冠军、离线活体参与胜负、最终 Team 同 tick tie 与跨 tick 不合并；共享 CombatPolicy；外部观众独立 presence 和优先队友目标；120 秒精确截止、零窗口、重连/致死竞争和恢复失败可重试；离线 timeout 使用 15 秒近期来源、单份物品和 XP payload/统计、第二次淘汰拒绝；观众 DeathBox 访问拒绝；保留原快照直到观战结束且只恢复一次；旧配置缺省及 reconnect/radius/interval 下限和上限。
+
+## 真实 Paper：候选先验验证
+
+`scripts/paper-m6-candidate.mjs`，`.run/paper-m6-candidate-1789999500767`：AI-disabled Villager 接受公开 LivingEntity damage、真实箭实体、World.createExplosion、火焰、实际岩浆方块和 Zombie 攻击；equipment API 存在，移除后实体不可查询。zone 候选仅验证 setHealth 路径，独立生产 ZoneDamage 验证见下方。由此选择 invisible Villager 伤害载体 + marker ArmorStand 装备展示，未使用 NMS、NPC 插件或伪玩家。
+
+## 真实 Paper：M6 主流程
+
+`scripts/paper-m6.mjs`，`.run/paper-m6-1790002017329`，PASS：
+
+1. 四人 Duo 确认两队 2/2。同队 melee / arrow / TNT / lava / 有害 splash 拦截，敌队 melee 有效。保护时间设 0，证明友伤策略在保护期之外仍有效。
+2. 满四人房间仍允许外部观众进入；不改变 Team/participant 数量。阵亡原版重生进入 runtime SPECTATOR，自动镜头优先存活队友；同房间目标允许、另一房间目标拒绝，自由飞行允许，/ls leave 完整恢复原状态。
+3. RUNNING 退出创建带姓名/装备的 body。同队伤害无效，敌队造成的生命损失在重连后保留；原生 carried inventory / 盔甲 / 副手 / cursor / selected slot / 101 XP 精确恢复，Speed 保留。Health Boost 最大生命值 24 在载体和重连玩家保持一致，不重复变成 28。
+4. 注入重连 teleport 拒绝：客户端被隔离并踢出，body 留存，DeathBox 数量不增加；随后真实重新登录成功，body 移除，不重新发 Loadout。
+5. 真实箭杀死断线替身，统一 DeathBox；死亡后登录只恢复原 Lobby 物品。另一敌人完整等待默认 120 秒，超时淘汰，合计 3 个 DeathBox，没有重复比赛物品恢复。
+6. 获胜 Team 的已阵亡且已回 Lobby 队友收到 WINNER；最后阶段仍存活的获胜队友也断线，Outcome 包含他，ENDING 退休其 body 不新增死亡盒；ENDING 重新登录收到 WINNER 和原 Lobby 状态。
+7. debug end 跳过展示正确恢复在线/阵亡/外部观众；外部观众退出后登录回 Lobby，无替身；disable 清全部 runtime worlds。
+
+## 真实 Paper：边界与失败路径
+
+`scripts/paper-m6-edges.mjs`，`.run/paper-m6-edges-1790002167656`，PASS：
+
+- 五人 Squad 分成 3/2；在 STARTING 真正断线，冻结名单/Team 保留，其余人完成开局，在规划点存在 body；保护期间敌人不能伤 body；重连拿到原本空的本局 Loadout 状态。
+- 两个世界各有独立 body。同队爆炸阻止、敌队爆炸有效；实际火焰和 lava 方块扣血；附近 Zombie 从无目标经生产目标辅助攻击 body。
+- 为隔离原版目标竞争，Zombie fixture 使用近处 Creative 观察者维持实体活动，不直接调用 setTarget；其余角色不会成为攻击目标。先前 Survival 观察者场景出现僵尸优先追玩家；无人近处则可停用 AI 或远距 despawn。实现只在无有效目标时辅助，未改变全局怪物激活范围，不声称所有怪物/无人区等同攻击玩家。
+- body 被移动到已加载的远处圈外位置后，生产 ZoneDamage 使用该实时位置淘汰，最近玩家伤害被归因，登录恢复 Lobby。fixture 显式 force-load 目的区块，避免将测试变成第三方强制传送至未加载区块的失效检查。
+- 控制同一实际 server tick 淘汰最终两队的所有剩余成员，TIE winnerIds=5，包含早先阵亡 Bob。原版 spectate-cause 跨世界传送被拒绝；阵亡观众退出/登录回 Lobby；ENDING 外部观众结束恢复；另一局的 body 不被清掉。
+- 外部移除活体 carrier，下一次 session 检查安全淘汰且只生成一个盒，不保留 immortal DISCONNECTED。
+- 单 Team 开局在第一个 tick 边界直接结算，不需要先发生死亡，也不生成 DeathBox。
+- disable 后所有载体/装备实体、UI 和世界退出生命周期。
+
+## M3–M5 回归
+
+- M3：`.run/paper-m3-1790002094058` PASS，安全出生/同 tick 落地、模板 WorldGenSettings、保护来源、连续圈/FINAL 真伤、BossBar/particles、多房间、拒绝落地回滚、准备取消和 disable。
+- M4：`.run/paper-m4-1790002202353` PASS，原生物品、GUI/原子保存/锁、Loadout、隔离恢复、清理和 Loot、Portal、idle reload pending restore、回滚和 disable。
+- M5：`.run/paper-m5-1790002336495` PASS，42-stack 真实共享 GUI、XP101→50、交互限制/爆炸保护、kill/assist、完整默认 60 秒展示、箭/落摔归因、Solo tie、死亡画面退出登录和 cleanup。
+- M5 edges：`.run/paper-m5-edges-1790001688519` PASS，实际客户端投掷 PDC 经验瓶精确释放 347 XP，以及真实圈伤致死/最近来源/唯一淘汰。
+
+回归保留原有效断言。M6 语义相关 fixture 更新：需要继续 RUNNING 的独立房间放入至少两个 Team（单 Team 现在立即获胜）；M5 死亡者先进入 spectator，再 `/ls leave` 校验原背包恢复；版本 banner 更新为 M6。
+
+## 证据与测试边界
+
+脚本复制已停止 Paper 目录到各自 `.run`，只绑定 127.0.0.1；不触碰已有运行服务器。命令 `node scripts/paper-m6.mjs <stopped-paper-directory> <mineflayer-package-directory>`，candidate/edges/M3/M4/M5 参数相同。每个目录保留 console.log、results.json 和消息。测试探针单独 paperProbeJar，M3/M5/M6 世界 fixture 和伤害注入不打进生产包。
+
+真实 socket 客户端执行加入/退出/重连、GUI 和收到标题；箭/火/lava/Zombie 使用真实实体或方块。melee/爆炸 owner 和药水目标边界部分用公开事件/DamageSource 注入；spectate-start 检查是公开事件调用而非完整原版 spectator 菜单点击；跨世界传送使用真实 public teleport(SPECTATE)。同 tick tie 是同步公开 damage 调用。装备/皮肤并未由人工 Minecraft 图形客户端视觉验收。
+
+失败证据保留：最初 ArmorStand dropChance 不支持导致创建失败，已限制为 Mob 并验证安全淘汰；最初远处未加载区块测试触发 body failure，改为显式加载以隔离圈伤；Zombie 测试曾受到其他在线目标/远距活动规则干扰，改成上述受控 fixture。没有将失败轮次标为通过。
+
+## 当前限制
+
+进程 crash/restart 恢复属于 M7；仅同 JVM 内的快照/结果通知。无第三方 Party 集成、数据库、永久 stats/rating、经济或外观系统。载体不是 Player，没有真实玩家皮肤或完整玩家物理/饥饿模拟；Monster 辅助受原版活动距离、目标选择和类型接口限制。匿名爆炸、第三方 source-less damage、复杂火/lava 合流等 provenance 边界沿用 M3/M5；不能从公共事件不存在的数据猜测责任人。
+
+---
+
+# M5 历史验证记录
 
 ## 构建与自动测试
 

@@ -99,7 +99,7 @@ async function dirs() {
 
 async function probe(command, expected) {
   const offset=output.length; child.stdin.write(command+'\n');
-  await until(()=>/M4 |M5 (?!death=|XP=)|PROBE (?:failed|player)=/.test(output.slice(offset)),command);
+  await until(()=>/M6 |M4 |M5 (?!death=|XP=)|PROBE (?:failed|player)=/.test(output.slice(offset)),command);
   const text=output.slice(offset);
   assert.ok(text.includes(expected), text);
   return text;
@@ -116,7 +116,7 @@ async function openBox(bot) {
   await until(()=>bot.currentWindow?.inventoryStart===54,'DeathBox GUI opens');
 }
 async function close(bot) {if(bot.currentWindow)bot.closeWindow(bot.currentWindow);await sleep(200);}
-async function restore(name) { await until(async()=>{const answer=await probe('lsprobe player '+name,'PROBE player=');return answer.includes('world=world ');},'Lobby respawn '+name); await probe('lsprobe m4original '+name,'M4 original=true world=world'); }
+async function restore(name) { const current=bots.findLast(b=>b.username===name); const status=await probe("lsprobe m6state "+name,"M6 mode="); if(status.includes("mode=SPECTATOR")){await chat(current,"/ls leave","Spectating ended");} await until(async()=>{const answer=await probe('lsprobe player '+name,'PROBE player=');return answer.includes('world=world ');},'Lobby respawn '+name); await probe('lsprobe m4original '+name,'M4 original=true world=world'); }
 async function startSolo(a,b) {
   await chat(a,'/ls join solo','Joined room solo');await chat(b,'/ls join solo','Joined room solo');
   await consoleCommand('ls debug start solo','Start requested');await state('solo','RUNNING');await kit(a);await kit(b);

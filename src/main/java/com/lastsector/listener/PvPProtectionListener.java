@@ -32,15 +32,13 @@ public final class PvPProtectionListener implements Listener {
     }
     @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)
     public void combust(EntityCombustEvent event) {
-        if(!(event.getEntity() instanceof Player victim)) return;
-        matches().activePlayer(victim.getUniqueId()).filter(e -> inWorld(e,victim.getWorld())).ifPresent(entry -> {
-            UUID attacker=null;
-            if(event instanceof EntityCombustByEntityEvent entity) attacker=runtime.provenance().owner(entity.getCombuster(),entry);
-            if(event instanceof EntityCombustByBlockEvent block && block.getCombuster()!=null) attacker=entry.hazards.owner(key(block.getCombuster()));
-            if(attacker==null) attacker=runtime.provenance().contactOwner(victim,entry);
-            if(matches().blocks(entry,attacker,victim.getUniqueId())) event.setCancelled(true);
-            else entry.hazards.burning(victim.getUniqueId(),attacker);
-        });
+        if(!(event.getEntity() instanceof LivingEntity victim)) return;
+        var target=matches().victim(victim);if(target==null)return;var entry=target.entry();
+        UUID attacker=null;
+        if(event instanceof EntityCombustByEntityEvent entity)attacker=runtime.provenance().owner(entity.getCombuster(),entry);
+        if(event instanceof EntityCombustByBlockEvent block && block.getCombuster()!=null)attacker=entry.hazards.owner(key(block.getCombuster()));
+        if(attacker==null)attacker=runtime.provenance().contactOwner(victim,entry);
+        if(matches().blocks(entry,attacker,target.player()))event.setCancelled(true);else entry.hazards.burning(target.player(),attacker);
     }
     private static boolean harmful(Collection<PotionEffect> effects) {
         return effects.stream().anyMatch(e -> e.getType().getEffectCategory()==org.bukkit.potion.PotionEffectType.Category.HARMFUL);
@@ -48,10 +46,9 @@ public final class PvPProtectionListener implements Listener {
     @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)
     public void splash(PotionSplashEvent event) {
         if(!harmful(event.getPotion().getEffects())) return;
-        for(LivingEntity entity:event.getAffectedEntities()) if(entity instanceof Player victim)
-            matches().activePlayer(victim.getUniqueId()).ifPresent(entry -> {
-                if(matches().blocks(entry,runtime.provenance().owner(event.getPotion(),entry),victim.getUniqueId())) event.setIntensity(victim,0);
-            });
+        for(LivingEntity entity:event.getAffectedEntities()) {
+            var target=matches().victim(entity);if(target!=null && matches().blocks(target.entry(),runtime.provenance().owner(event.getPotion(),target.entry()),target.player()))event.setIntensity(entity,0);
+        }
     }
     @EventHandler(priority=EventPriority.MONITOR,ignoreCancelled=true)
     public void lingering(LingeringPotionSplashEvent event) {
@@ -64,9 +61,9 @@ public final class PvPProtectionListener implements Listener {
         List<PotionEffect> effects=new ArrayList<>(cloud.getCustomEffects());
         if(cloud.getBasePotionType()!=null) effects.addAll(cloud.getBasePotionType().getPotionEffects());
         if(!harmful(effects)) return;
-        event.getAffectedEntities().removeIf(entity -> entity instanceof Player victim &&
-                matches().activePlayer(victim.getUniqueId()).map(entry ->
-                        matches().blocks(entry,runtime.provenance().owner(cloud,entry),victim.getUniqueId())).orElse(false));
+        event.getAffectedEntities().removeIf(entity -> {
+            var target=matches().victim(entity);return target!=null && matches().blocks(target.entry(),runtime.provenance().owner(cloud,target.entry()),target.player());
+        });
     }
     @EventHandler(priority=EventPriority.MONITOR,ignoreCancelled=true)
     public void bucket(PlayerBucketEmptyEvent event) {
