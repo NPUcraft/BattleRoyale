@@ -17,6 +17,13 @@ public final class PluginRuntime implements AutoCloseable {
     private PaperMatches matches;
     private OnDemandWorldProvider provider;
     private final NativeItemSerializer itemSerializer=new NativeItemSerializer();
+    private final PaperDamageProvenance provenance=new PaperDamageProvenance();
+    private final StoredExperienceBottles bottles;
+    private final CelebrationEffects celebrations;
+    public CelebrationEffects celebrations() {return celebrations;}
+    public void deferRestore(java.util.UUID session,java.util.UUID player) {isolation.defer(session,player);}
+    public org.bukkit.Location lobbySpawn() {return java.util.Objects.requireNonNull(plugin.getServer().getWorld(foundation.state().configuration().settings().lobbyWorld())).getSpawnLocation();}
+    public PaperDamageProvenance provenance() { return provenance; }
     private final LoadoutEditor loadouts;
     private final WorldSanitizer sanitizer;
     private final org.bukkit.NamespacedKey groundMarker;
@@ -28,6 +35,7 @@ public final class PluginRuntime implements AutoCloseable {
     public PaperMatches matches() { return matches; }
     public PluginRuntime(JavaPlugin plugin, FoundationService foundation, MessageService messages) {
         this.plugin = plugin; this.foundation = foundation; this.messages = messages;
+        bottles=new StoredExperienceBottles(plugin);celebrations=new CelebrationEffects(plugin);
         groundMarker=new org.bukkit.NamespacedKey(plugin,"ground_loot_session");
         sanitizer=new WorldSanitizer(groundMarker);
         loadouts=new LoadoutEditor(plugin,itemSerializer);
@@ -37,6 +45,11 @@ public final class PluginRuntime implements AutoCloseable {
         plugin.getServer().getPluginManager().registerEvents(sanitizer,plugin);
         plugin.getServer().getPluginManager().registerEvents(new WorldRules(sanitizer),plugin);
         plugin.getServer().getPluginManager().registerEvents(new com.lastsector.listener.PlayerRestoreListener(plugin,this),plugin);
+        plugin.getServer().getPluginManager().registerEvents(bottles,plugin);
+        plugin.getServer().getPluginManager().registerEvents(new com.lastsector.listener.CombatListener(this),plugin);
+        plugin.getServer().getPluginManager().registerEvents(new com.lastsector.listener.PlayerEliminationListener(this,itemSerializer),plugin);
+        plugin.getServer().getPluginManager().registerEvents(new com.lastsector.listener.DeathBoxListener(this),plugin);
+        plugin.getServer().getPluginManager().registerEvents(new com.lastsector.listener.MatchTickListener(this),plugin);
     }
     public RoomRuntimeService rooms() { return rooms; }
     public void reload() {
@@ -69,7 +82,7 @@ public final class PluginRuntime implements AutoCloseable {
         try { provider = new OnDemandWorldProvider(files, new PaperWorlds(server, players), scheduler, worker, messages::runtimeError); }
         catch (RuntimeException error) { worker.shutdown(); throw error; }
         var matches = new PaperMatches(plugin, configuration, scheduler, com.lastsector.zone.GameClock.system(), new java.util.Random(), players,
-                loadouts,sanitizer,content,isolation,groundMarker);
+                loadouts,sanitizer,content,isolation,groundMarker,itemSerializer,bottles,celebrations);
         var result = new RoomRuntimeService(() -> foundation.state().configuration(), foundation.sessions(),
                 scheduler, MapSelector.random(new java.util.Random()), provider, players, Clock.systemUTC(), matches);
         this.matches = matches;

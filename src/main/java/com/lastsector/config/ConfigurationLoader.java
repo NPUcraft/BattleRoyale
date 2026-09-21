@@ -45,7 +45,19 @@ public final class ConfigurationLoader {
                         wall.integer("max-particles-per-player",1));
             } catch (IllegalArgumentException error) { throw node.error("",error.getMessage()); }
         }
-        PluginSettings settings = new PluginSettings(config.bool("debug"), storage, economy, runtime, lobbyWorld, ui);
+        CombatSettings combat=CombatSettings.DEFAULT;
+        Duration window=combat.attributionWindow(),showcase=combat.showcaseDuration();
+        double minDamage=combat.assistMinDamage(),share=combat.assistMinShare(),reach=combat.boxReach();
+        if(config.values().containsKey("combat")) {
+            Node node=config.section("combat"),assist=node.section("assist");
+            window=Duration.ofSeconds(node.integer("attribution-seconds",1));
+            minDamage=assist.number("min-damage",0); share=assist.number("min-damage-share",0);
+        }
+        if(config.values().containsKey("match")) showcase=Duration.ofSeconds(config.section("match").integer("winner-showcase-seconds",0));
+        if(config.values().containsKey("deathbox")) reach=config.section("deathbox").number("interaction-distance",.1);
+        try { combat=new CombatSettings(window,minDamage,share,showcase,reach); }
+        catch(IllegalArgumentException error) { throw config.error("combat/match/deathbox",error.getMessage()); }
+        PluginSettings settings = new PluginSettings(config.bool("debug"), storage, economy, runtime, lobbyWorld, ui,combat);
 
         Node mapsNode = read("maps.yml").section("maps");
         List<MapTemplate> maps = new ArrayList<>();

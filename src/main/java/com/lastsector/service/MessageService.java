@@ -16,10 +16,10 @@ public final class MessageService {
     public void help(CommandSender sender) {
         send(sender, "/lastsector help | version");
         if (sender.hasPermission("lastsector.play")) send(sender, "/lastsector rooms | join <room> | autojoin | leave");
-        if (sender.hasPermission("lastsector.admin")) send(sender, "/lastsector reload | admin loadout edit <room> | debug rooms/maps | debug session/zone/protection/loot/start/end <room>");
+        if (sender.hasPermission("lastsector.admin")) send(sender, "/lastsector reload | admin loadout edit <room> | debug rooms/maps | debug session/zone/protection/loot/deathboxes/start/end <room>");
     }
     public void denied(CommandSender sender) { send(sender, "You do not have permission to use this command."); }
-    public void version(CommandSender sender, String version) { send(sender, "Version " + version + " (Milestone 4 Loadout, Isolation & Loot)"); }
+    public void version(CommandSender sender, String version) { send(sender, "Version " + version + " (Milestone 5 Combat, DeathBoxes & Outcomes)"); }
     public void reloaded(CommandSender sender) { send(sender, "Configuration reloaded successfully."); }
     public void reloadFailed(CommandSender sender, String reason) { send(sender, "Reload failed; previous configuration retained. " + reason); }
     public void unknown(CommandSender sender) { send(sender, "Unknown command. Use /lastsector help."); }
@@ -35,7 +35,7 @@ public final class MessageService {
         // JavaPlugin's logger already supplies [LastSector].
         logger.info("Loaded " + snapshot.rooms().size() + " rooms.");
         logger.info("Loaded " + snapshot.maps().size() + " map templates.");
-        logger.info("Milestone 4 initialized. Loadouts, player isolation, sanitation and loot ready.");
+        logger.info("Milestone 5 initialized. Combat, elimination, DeathBoxes and Solo outcomes ready.");
         if (snapshot.settings().debug()) logger.info("Debug enabled. Runtime directory: " + snapshot.settings().runtimeDirectory());
     }
     public void startupFailed(Exception error) { logger.log(java.util.logging.Level.SEVERE, "Startup failed; disabling LastSector. " + error.getMessage(), error); }
@@ -70,7 +70,8 @@ public final class MessageService {
                 + " map=" + session.selectedMap().map(MapTemplate::id).orElse("N/A")
                 + " world=" + session.gameWorld().map(com.lastsector.map.GameWorld::worldName).orElse("N/A")
                 + " path=" + session.gameWorld().map(world -> world.runtimePath().toString()).orElse("N/A")
-                + " countdown=" + (remaining < 0 ? "N/A" : remaining));
+                + " countdown=" + (remaining < 0 ? "N/A" : remaining)
+                + " stats=" + session.players().values() + " outcome=" + session.outcome().map(Object::toString).orElse("N/A"));
         zone(sender, session);
     }
     public void zone(CommandSender sender, com.lastsector.session.GameSession session) {

@@ -29,12 +29,19 @@ public final class PaperMatches implements MatchLifecycle {
     private final Map<UUID,Entry> entries=new HashMap<>();
     private final Set<Entry> draining=new HashSet<>();
     private boolean closed;
+    private Consumer<GameSession> finished=session->{};
+    private final NativeItemSerializer itemSerializer;
+    private final StoredExperienceBottles bottles;
+    private final CelebrationEffects celebrations;
+    @Override public void onFinished(Consumer<GameSession> finished) {this.finished=finished;}
     public PaperMatches(JavaPlugin plugin,ConfigurationSnapshot configuration,GameScheduler scheduler,GameClock clock,
             RandomGenerator random,PlayerGateway players,LoadoutEditor loadouts,WorldSanitizer sanitizer,MatchContent content,
-            com.lastsector.player.PlayerIsolation<com.lastsector.player.MatchPlayerSnapshot,com.lastsector.loadout.LoadoutDefinition> isolation,org.bukkit.NamespacedKey groundMarker) {
+            com.lastsector.player.PlayerIsolation<com.lastsector.player.MatchPlayerSnapshot,com.lastsector.loadout.LoadoutDefinition> isolation,org.bukkit.NamespacedKey groundMarker,
+            NativeItemSerializer itemSerializer,StoredExperienceBottles bottles,CelebrationEffects celebrations) {
         this.plugin=plugin; this.configuration=configuration; this.scheduler=scheduler; this.clock=clock;
         this.random=random; this.players=players;
         this.loadouts=loadouts; this.sanitizer=sanitizer; this.content=content; this.isolation=isolation; this.groundMarker=groundMarker;
+        this.itemSerializer=itemSerializer;this.bottles=bottles;this.celebrations=celebrations;
     }
     @Override public void start(GameSession session,Runnable ready,Consumer<Throwable> failed) {
         var starters=session.players().values().stream().filter(p -> p.state()!=PlayerState.DISCONNECTED)
@@ -66,6 +73,9 @@ public final class PaperMatches implements MatchLifecycle {
         entry.damagePulse=new DamagePulse(now);
         players.notify(session.players().keySet(),"protection-started",session.room().pvpProtectionDuration().getSeconds());
         entry.protectionExpired=session.room().pvpProtectionDuration().isZero();
+        entry.combat=new PaperCombatSession(plugin,session,configuration.settings().combat(),clock,itemSerializer,bottles,id->{
+            isolation.defer(session.sessionId(),id);entry.ui.detach(id);entry.hazards.burning(id,null);
+        },failed);
         entry.task=new SessionLoop(scheduler,()->tick(entry),failed);
     }
     private void tick(Entry entry) {
@@ -74,7 +84,7 @@ public final class PaperMatches implements MatchLifecycle {
         long now=clock.nanoTime(); var zone=session.zone().orElseThrow(); zone.update(now);
         boolean pulse=entry.damagePulse.due(now);
         if (!entry.protectionExpired && !session.protection().orElseThrow().active(now)) {
-            entry.protectionExpired=true; entry.hazards.clear();
+            entry.protectionExpired=true;
             players.notify(session.players().keySet(),"protection-ended");
         }
         entry.tick++;
@@ -88,8 +98,8 @@ public final class PaperMatches implements MatchLifecycle {
             if (pulse) {
                 var location=player.getLocation();
                 double amount=ZoneDamage.amount(zone.current(),location.getX(),location.getZ(),zone.stage());
-                if (amount>0) applyZoneDamage(player,new ZoneDamage.Context(session.sessionId(),zone.stageIndex(),
-                        zone.current().distanceOutside(location.getX(),location.getZ()),amount));
+                if (amount>0) entry.combat.zone(id,()->applyZoneDamage(player,new ZoneDamage.Context(session.sessionId(),zone.stageIndex(),
+                        zone.current().distanceOutside(location.getX(),location.getZ()),amount)));
             }
             if (!player.isDead()) entry.ui.render(player,zone,entry.tick);
         }
@@ -103,6 +113,28 @@ public final class PaperMatches implements MatchLifecycle {
                 && e.session.players().containsKey(id) && e.session.players().get(id).state()==PlayerState.ALIVE
                 && e.session.protection().orElseThrow().active(clock.nanoTime())).findFirst();
     }
+    public Optional<Entry> activePlayer(UUID id) {
+        return entries.values().stream().filter(e->e.session.state()==GameState.RUNNING && e.session.players().containsKey(id)
+                && e.session.players().get(id).state()==PlayerState.ALIVE).findFirst();
+    }
+    public Collection<Entry> runningEntries() { return entries.values().stream().filter(e->e.session.state()==GameState.RUNNING).toList(); }
+    public Collection<Entry> combatEntries() { return entries.values().stream().filter(e->e.combat!=null).toList(); }
+    public boolean endingPlayer(UUID id,UUID world) {
+        return entries.values().stream().anyMatch(e->e.session.state()==GameState.ENDING && e.inWorld(world)
+                && e.session.players().containsKey(id) && e.session.players().get(id).state()==PlayerState.ALIVE);
+    }
+    public void endTick(long tick) {
+        if(closed) return;
+        for(Entry entry:List.copyOf(entries.values())) if(entry.combat!=null && entry.session.state()==GameState.RUNNING) {
+            try {entry.combat.endTick(tick).ifPresent(outcome->{
+                entry.session.outcome(outcome);entry.stopLoop();entry.combat.ending();
+                entry.showcase=new WinnerShowcase(scheduler,clock,configuration.settings().combat().showcaseDuration(),
+                        ()->celebrations.title(entry.session,entry.combat::name),()->celebrations.fire(entry.session),
+                        ()->finished.accept(entry.session),entry.combat::fail);
+            });} catch(RuntimeException error) {entry.combat.fail(error);}
+        }
+    }
+    public String deathboxes(UUID session) {Entry entry=entries.get(session);return entry==null || entry.combat==null?"deathboxes=0":entry.combat.boxes().diagnostics();}
     public boolean blocks(Entry entry,UUID attacker,UUID victim) {
         return ProtectionPolicy.blocks(entry.session.protection().orElseThrow(),clock.nanoTime(),entry.session.players().keySet(),attacker,victim);
     }
@@ -120,6 +152,7 @@ public final class PaperMatches implements MatchLifecycle {
         Entry entry=entries.remove(session.sessionId());
         if(entry==null) { drained.run(); return; }
         entry.stopLoop();
+        entry.closeCombat();celebrations.close(session.sessionId());
         draining.add(entry);
         if(entry.loot!=null) entry.loot.stop();
         Runnable completed=()-> {
@@ -131,6 +164,7 @@ public final class PaperMatches implements MatchLifecycle {
     @Override public void close() {
         closed=true;
         for(Entry entry:List.copyOf(entries.values())) {
+            entry.closeCombat();celebrations.close(entry.session.sessionId());
             isolation.end(entry.session.sessionId());
             if(entry.loot!=null) entry.loot.close();
             if(entry.worldId!=null) sanitizer.remove(entry.worldId);
@@ -147,6 +181,9 @@ public final class PaperMatches implements MatchLifecycle {
     public static final class Entry {
         public final GameSession session;
         public final PvPHazardTracker hazards=new PvPHazardTracker();
+        public PaperCombatSession combat;
+        WinnerShowcase showcase;
+        public boolean inWorld(UUID world) {return world.equals(worldId);}
         final ZoneProfile profile;
         final PaperZoneUi ui;
         SpawnPreparation preparation;
@@ -158,6 +195,7 @@ public final class PaperMatches implements MatchLifecycle {
         boolean protectionExpired;
         Entry(GameSession session,ZoneProfile profile,PaperZoneUi ui) { this.session=session; this.profile=profile; this.ui=ui; }
         void stopLoop() { if(task!=null) task.close(); ui.close(); hazards.clear(); }
+        void closeCombat() {if(showcase!=null)showcase.close();if(combat!=null)combat.close();}
     }
 }
 

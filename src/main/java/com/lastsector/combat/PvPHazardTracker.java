@@ -1,11 +1,14 @@
 package com.lastsector.combat;
 import java.util.*;
-/** Protection-only provenance, owned by one session and discarded on expiry. No kill attribution. */
+/** Shared session provenance for PvP protection and combat; legacy name retained for source compatibility. */
 public final class PvPHazardTracker {
     public record BlockKey(UUID world,int x,int y,int z) {}
-    private final Map<BlockKey,UUID> blocks=new HashMap<>();
-    private final Map<UUID,UUID> entities=new HashMap<>();
-    private final Map<UUID,UUID> burning=new HashMap<>();
+    private static <K> Map<K,UUID> bounded() {
+        return new LinkedHashMap<>() { @Override protected boolean removeEldestEntry(Map.Entry<K,UUID> entry) { return size()>65536; } };
+    }
+    private final Map<BlockKey,UUID> blocks=bounded();
+    private final Map<UUID,UUID> entities=bounded();
+    private final Map<UUID,UUID> burning=bounded();
     public void block(BlockKey key,UUID owner) { if(owner!=null) blocks.put(key,owner); else blocks.remove(key); }
     public UUID owner(BlockKey key) { return blocks.get(key); }
     public void spread(BlockKey from,BlockKey to) { block(to,owner(from)); }

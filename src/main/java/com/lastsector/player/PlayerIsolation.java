@@ -30,6 +30,11 @@ public final class PlayerIsolation<S,L> {
         Map<UUID,S> snapshots=matches.remove(session); if (snapshots==null) return;
         snapshots.forEach((player,snapshot)-> { pending.put(player,snapshot); retry(player); });
     }
+    /** Detach a single eliminated player's original exactly once; respawn/join owns the retry. */
+    public void defer(UUID session,UUID player) {
+        Map<UUID,S> snapshots=matches.get(session); if(snapshots==null) return;
+        S snapshot=snapshots.remove(player); if(snapshot!=null) pending.putIfAbsent(player,snapshot);
+    }
     public boolean retry(UUID player) {
         S snapshot=pending.get(player); if (snapshot==null) return true;
         try { if (gateway.restore(player,snapshot)) { pending.remove(player); return true; } }

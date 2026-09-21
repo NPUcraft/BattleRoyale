@@ -28,6 +28,7 @@ public final class RoomRuntimeService implements AutoCloseable {
         this.configuration = configuration; this.sessions = sessions; this.scheduler = scheduler;
         this.selector = selector; this.worlds = worlds; this.players = players; this.clock = clock;
         this.matches = matches;
+        matches.onFinished(session->{if(!closed && sessions.find(session.sessionId()).orElse(null)==session && session.state()==GameState.ENDING) end(session);});
     }
     public List<RoomDefinition> rooms() { return configuration.get().rooms(); }
     public Optional<GameSession> session(String room) { return sessions.findByRoom(room); }
@@ -157,8 +158,8 @@ public final class RoomRuntimeService implements AutoCloseable {
     }
     public void debugEnd(String room) {
         GameSession session = session(room).orElseThrow(() -> new IllegalArgumentException("No session for room: " + room));
-        if (!Set.of(GameState.PREPARING, GameState.STARTING, GameState.RUNNING).contains(session.state()))
-            throw new IllegalStateException("Only preparing, starting or running sessions may be ended");
+        if (!Set.of(GameState.PREPARING, GameState.STARTING, GameState.RUNNING, GameState.ENDING).contains(session.state()))
+            throw new IllegalStateException("Only preparing, starting, running or ending sessions may be ended");
         end(session);
     }
     private void abort(GameSession session, Throwable error) {

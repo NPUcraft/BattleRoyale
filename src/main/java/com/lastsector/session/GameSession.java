@@ -12,6 +12,22 @@ public final class GameSession {
     private final RoomDefinition room;
     private final Instant createdAt;
     private GameState state = GameState.WAITING;
+    private MatchOutcome outcome;
+    public Optional<MatchOutcome> outcome() { return Optional.ofNullable(outcome); }
+    public void outcome(MatchOutcome value) {
+        if(state!=GameState.RUNNING || outcome!=null) throw new IllegalStateException("Outcome already decided or session not running");
+        if(!players.keySet().containsAll(value.winnerIds())) throw new IllegalArgumentException("Unknown winner");
+        outcome=Objects.requireNonNull(value); transition(GameState.ENDING);
+    }
+    public boolean eliminate(UUID id) {
+        GamePlayer player=players.get(id);
+        if(state!=GameState.RUNNING || player==null || player.state()!=PlayerState.ALIVE) return false;
+        players.put(id,new GamePlayer(id,PlayerState.ELIMINATED,player.teamId(),player.kills(),player.assists())); return true;
+    }
+    public void credit(UUID id,boolean kill) {
+        GamePlayer p=Objects.requireNonNull(players.get(id));
+        players.put(id,new GamePlayer(id,p.state(),p.teamId(),p.kills()+(kill?1:0),p.assists()+(kill?0:1)));
+    }
     private MapTemplate selectedMap;
     private GameWorld gameWorld;
     private com.lastsector.zone.Zone initialZone;
@@ -58,7 +74,7 @@ public final class GameSession {
     /** M2 TEMPORARY BEHAVIOR: retains active disconnected UUIDs without reconnect recovery. */
     public void disconnected(UUID id) {
         GamePlayer old = players.get(id);
-        if (old != null) players.put(id, new GamePlayer(id, PlayerState.DISCONNECTED, old.teamId(), old.kills(), old.assists()));
+        if (old != null && old.state()!=PlayerState.ELIMINATED) players.put(id, new GamePlayer(id, PlayerState.DISCONNECTED, old.teamId(), old.kills(), old.assists()));
     }
     /** Selects exactly once and enters PREPARING; selection must belong to the room pool. */
     public void prepare(MapTemplate map) {

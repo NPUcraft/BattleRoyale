@@ -155,7 +155,7 @@ async function state(room, expected) {
   let answer;
   await until(async () => {
     answer = await consoleCommand('ls debug session ' + room, 'countdown=');
-    return answer.includes('state=' + expected);
+    return answer.match(/ session=\S+ state=(\w+)/)?.[1] === expected;
   }, 'Session ' + room + ' ' + expected);
   return answer;
 }
@@ -172,7 +172,7 @@ async function probe(command, expected) {
 }
 try {
   await until(() => output.includes('Done ('), 'Paper startup', 120000);
-  assert.match(output, /Milestone 4 initialized/); assert.doesNotMatch(output, /ERROR|Exception/);
+  assert.match(output, /Milestone 5 initialized/); assert.doesNotMatch(output, /ERROR|Exception/);
   await probe('lsprobe m4roundtrip','M4 roundtrip=true');
   const a=await connect('LSAlice',port), b=await connect('LSBob',port), c=await connect('LSCarol',port);
   await consoleCommand('op LSAlice','Made LSAlice');

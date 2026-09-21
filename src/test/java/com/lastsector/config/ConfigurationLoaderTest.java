@@ -32,8 +32,14 @@ class ConfigurationLoaderTest {
         assertFalse(Files.exists(directory.resolve("maps")));
         assertEquals("world", result.settings().lobbyWorld());
         assertEquals(30, result.rooms().getFirst().countdownDuration().getSeconds());
+        assertEquals(CombatSettings.DEFAULT,result.settings().combat());
     }
     @ParameterizedTest @CsvSource(delimiter='|',value={
+        "config.yml|attribution-seconds: 15|attribution-seconds: 0|combat.attribution-seconds",
+        "config.yml|min-damage: 4.0|min-damage: -1|combat.assist.min-damage",
+        "config.yml|min-damage-share: 0.20|min-damage-share: 1.1|combat/match/deathbox",
+        "config.yml|winner-showcase-seconds: 60|winner-showcase-seconds: -1|match.winner-showcase-seconds",
+        "config.yml|interaction-distance: 6.0|interaction-distance: .nan|deathbox.interaction-distance",
         "zones.yml|target-half-size: 400|target-half-size: 500|profiles.default.stages[0]",
         "zones.yml|target-half-size: 400|target-half-size: 700|profiles.default.stages[0]",
         "zones.yml|target-half-size: 50|target-half-size: 0|profiles.default.stages[3]",
@@ -134,6 +140,12 @@ class ConfigurationLoaderTest {
     @Test void rejectsMalformedYaml() throws Exception {
         Files.writeString(directory.resolve("rooms.yml"), "rooms: [unterminated");
         assertTrue(assertThrows(ConfigurationException.class, this::load).getMessage().contains("rooms.yml"));
+    }
+    @Test void oldConfigurationWithoutM5SectionsUsesDefaults() throws Exception {
+        Path config=directory.resolve("config.yml");String yaml=Files.readString(config);
+        int start=yaml.indexOf("combat:"),end=yaml.indexOf("storage:",start);
+        Files.writeString(config,yaml.substring(0,start)+yaml.substring(end));
+        assertEquals(CombatSettings.DEFAULT,load().settings().combat());
     }
     @Test void rejectsMissingFileAndField() throws Exception {
         replace("config.yml", "debug: false", "");

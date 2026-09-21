@@ -1,4 +1,46 @@
-# M4 验证记录
+# M5 验证记录
+
+## 构建与自动测试
+
+2026-09-21，Java 21.0.8 / Gradle Wrapper 8.14 / Windows，执行 `.\gradlew.bat clean test build`：**BUILD SUCCESSFUL；297 tests，0 failures，0 errors，0 skipped**。保留原 M1–M4 的 236 项，新增 61 项。报告见 `build/reports/tests/test/index.html`。生产安装包 `build/libs/lastsector-0.1.0-SNAPSHOT.jar`；独立 paperProbeJar 不进入生产包。
+
+新增测试覆盖单调时间 15 秒包含边界、直接致死优先/环境最近来源、助攻 OR 阈值/窗口分母、自伤/跨局/无效伤害、过量伤害与吸收上限；XP 等级边界与整数溢出；唯一淘汰提交和展示失败不重复 payload；不可变结果/物品数据、同 tick 最后两人平局与跨 tick 不合并；队伍房间不套 Solo、DISCONNECTED 不产生免费胜利；访问距离/世界/身份/状态；60 秒真实时间、效果上限、取消和异常；defer→respawn→结束不重复恢复、ENDING debug end；旧配置缺省及新配置范围。
+
+## M5 真实 Paper 1.21.8
+
+主验证 `.run/paper-m5-1789802874614/` 完整通过，使用五个 Mineflayer 1.21.8 协议客户端及只含 public API 的独立探针；安装服务器为 Paper 1.21.8-60-main@29c8822。通过项：
+
+1. 近战实际 damage/death 事件，三人累计伤害分配 killer 与 assist；原版 drops=0、XP=0、keepInventory=false，淘汰后原版 respawn 回 Lobby 并恢复 M4 原快照。
+2. 完整 36 storage +4 armor +offhand +cursor 的 42 个 stack，含消失诅咒皮甲，逐项原生物品内容校验；允许实际战斗造成的耐久变化。末影箱不进入 payload。101 当前 XP 生成一瓶 50 XP，真实客户端投掷后 ExpBottleEvent=50；普通瓶仍是原版 3–11 XP。347 XP 原生字节/PDC roundtrip、错误类型/负值/零/过大载荷拒绝。
+3. 两个客户端实际右键 Interaction，打开同一个 54 格 Inventory，正常点击与 shift 取出、另一 viewer 同步，底部 shift 存入失败。数字键、换副手、双击、中键、丢弃、Creative 和 Drag 由公开事件注入验证拒绝，未声称每种真人键盘操作都做了端到端测试。
+4. 所有物品被两个客户端取空后，三个展示实体仍存在；实际 `World.createExplosion` 在不破坏地形的测试设置下未销毁实体。淘汰玩家和跨房间访问被策略拒绝。
+5. Solo 剩一人进入 ENDING，客户端收到 WINNER；保留世界/盒子，环境伤害不扣血，完整默认 60 秒后自动恢复赢家并清理。另一 teamSize=4 房间剩一人仍 RUNNING，死亡盒分别归属各房间。
+6. 真实 Arrow 实体命中致死；近战→坠落在窗口内记 killer，等待超过 15 秒后坠落不记 killer。debug end 可跳过 ENDING。
+7. 通过一条探针命令在**同一真实服务端 tick 内同步调用两次公开伤害 API**杀死最后两人，真实 PlayerDeathEvent + ServerTickEndEvent 得到双赢家 TIE 和客户端标题；这是自动注入场景，不是真人自然同时死亡演练。
+8. 真实自有烟花爆炸事件触发时，以公开 damage event 对不受赢家保护的 Lobby 玩家注入伤害，确认 PDC + registry 路径取消；并未把这种验证表述成真人受到烟花物理爆炸。
+9. 禁用客户端自动复活，死在死亡画面后退出；清理该局，再登录/原版 respawn，同 JVM pending 快照恢复成功。disable 清理仍运行的队伍房间并恢复最后玩家，源模板 level.dat SHA-256 不变。
+
+主验证结果、服务端日志和客户端消息保存在运行目录的 results.json、console.log、messages.json。早期夹具失败保留：超大致死伤害击碎皮甲，以及探针给非耐久物品写入 Damage=0 导致比较失败；修正夹具后完整通过，不将失败运行计入成功结果。
+
+补充验证 `.run/paper-m5-edges-1789996249728/` 完整通过：真实客户端投掷 PDC 经验瓶，ExpBottleEvent 精确为 **347 XP**；玩家先受近战再被实际 M3 圈伤 setHealth 致死，killfeed 为 Zone、最近攻击者获 kill，随后恢复与清理成功。前一轮仅因脚本区分 `Zone`/`zone` 大小写而失败，修正断言后重跑通过。
+
+## M3 / M4 当前代码回归
+
+- `.run/paper-m3-1789996016289/` 完整通过：保护期近战/箭/TNT、药水/火/岩浆来源、自然伤害、到期恢复、连续缩圈、真实圈伤穿透护甲/抗性、UI、独立房间及取消/回滚/disable。
+- `.run/paper-m4-1789996021939/` 完整通过：原生序列化、装备 GUI、共享锁、完整状态隔离、首次世界清理和一次性 Loot、传送门规则、离线快照跨 idle reload 恢复、准备失败回滚和 disable。
+- M3 的早期运行因 debug session 新增玩家状态导致旧脚本误把玩家 WAITING 当房间 WAITING，已改成明确解析 session 状态后重跑。有效断言未删除。回归包含预期的拒绝落地故障注入日志，不宣称全日志零 ERROR。
+
+## 复现与边界
+
+先运行 `.\gradlew.bat build paperProbeJar`，再执行 `node scripts/paper-m5.mjs <已停止的Paper目录> <含mineflayer依赖的目录>`；补充用 `scripts/paper-m5-edges.mjs`。M3/M4 脚本用相同参数。每次复制到独立 `.run` 目录，仅绑定 loopback，原模板只读；fixture 在 M3/M5 运行副本中使用和平难度/关闭刷怪与自然回血，避免静止测试客户端随机死亡，生产插件不修改这些规则。
+
+M6：Team winner、Spectator、OfflineBody/比赛内重连。M7：离线快照持久化、crash recovery。永久 stats/rating、经济、第三方物品 Provider 未实现。DISCONNECTED contender 保守阻止自动 Solo 结算，需 debug end。
+
+公开 API 无法完整还原匿名红石/发射器、无 owner/坐标的 TNT 矿车/床锚连锁、多来源混合火/岩浆、第三方 source-less damage 或绕过事件的方块移动；无可用 causing entity 的持续毒/凋零也有来源缺口。第三方插件在之后事件优先级取消死亡或重新修改掉落未做兼容保证。来源表/伤害历史有硬上限，极端溢出逐出旧记录。大图压力、完整客户端操作组合、所有火/岩浆/虚空视觉位置与第三方战斗插件未穷举。
+
+---
+
+# M4 历史验证记录
 
 ## 构建与自动测试
 
@@ -33,7 +75,7 @@ M4 `results.json`、`console.log`、`messages.json` 与 `logs/latest.log` 保存
 
 `.run/paper-m3-1789797660468/` 完整通过：两个房间、同 tick 安全落地、WorldGenSettings、保护内/外伤害与药水/点火/岩浆来源、WAITING→SHRINKING→FINAL、真实圈伤穿透护甲/抗性、BossBar/particle 数据包、单局结束、落地失败回滚、取消后的迟到结果、disable 清理。该回归发生在最终光标保护调整之前；最终 M4 运行覆盖更新后的装备恢复与大厅返回路径。M1/M2 自动测试持续全过，历史实服记录保留在下方，不把旧实服结果重新标成当前代码运行。
 
-## 当前边界
+## M4 当时边界（已由上方 M5 说明更新）
 
 - 死亡仍为原版掉落/XP/复活；M5 实现 DeathBox、淘汰、胜者和统一死亡流程。结束时已死亡玩家的原快照等待原版重生重试；若其他插件拒绝返回或死者占用世界，沿 M2 安全卸载拒绝路径保留世界，不能强制删除。
 - OfflineBody 与比赛中重连恢复属于 M6；M4 只实现结束后原状态待恢复。

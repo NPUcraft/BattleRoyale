@@ -89,7 +89,7 @@ async function state(room, expected) {
   let answer;
   await until(async () => {
     answer = await consoleCommand('ls debug session ' + room, 'countdown=');
-    return answer.includes('state=' + expected);
+    return answer.match(/ session=\S+ state=(\w+)/)?.[1] === expected;
   }, 'Session ' + room + ' ' + expected);
   return answer;
 }
@@ -211,7 +211,7 @@ try {
   await consoleCommand('lsprobe health LSBob 20', 'PROBE health set');
   await until(async () => (await player('LSBob')).health === 1, 'Farther outside capped formula', 5000);
   results.push('FINAL persists; inside no damage; 10m outside 4.3 true damage through full diamond Protection IV + Resistance V; 500m outside 19 damage; BossBar and nearby particle packets observed');
-  // Keep the test clients alive for cleanup assertions; normal deaths are separately left to vanilla M3 behavior.
+  // Keep the test clients alive for cleanup assertions; M5 death/outcome behavior is covered by paper-m5.mjs.
   await position('LSBob', final.current.x, -60, final.current.z);
   await consoleCommand('lsprobe health LSBob 20', 'PROBE health set');
   const beforeEnd = b.packets.length;

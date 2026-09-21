@@ -16,6 +16,11 @@ class PlayerIsolationTest {
         states.put(a,"match loot"); isolation.end(session); assertEquals("original-a",states.get(a)); assertEquals("original-b",states.get(b));
         isolation.end(session); assertEquals(0,isolation.pendingCount());
     }
+    @Test void eliminatedPlayerRestoresExactlyOnceAcrossRespawnAndSessionEnd() {
+        isolation.apply(session,List.of(a,b),"match");isolation.defer(session,a);assertTrue(isolation.blocked(a));
+        assertEquals("match",states.get(a));assertTrue(isolation.retry(a));states.put(a,"new lobby possessions");
+        isolation.defer(session,a);isolation.end(session);assertEquals("new lobby possessions",states.get(a));assertEquals("original-b",states.get(b));
+    }
     @Test void applyOnceAndDifferentSessionsIndependent() {
         isolation.apply(session,List.of(a),"one"); UUID other=UUID.randomUUID(); isolation.apply(other,List.of(b),"two");
         assertThrows(IllegalStateException.class,()->isolation.apply(session,List.of(a),"three")); isolation.end(session);

@@ -1,4 +1,4 @@
-# Architecture — M4
+# Architecture — M5
 
 ## M4 composition and transaction boundaries
 
@@ -8,7 +8,7 @@ LoadoutEditor 的 View 以 InventoryHolder 身份识别，UUID 定位管理员�
 
 PaperMatches 在 STARTING 捕获 LoadoutDefinition 引用，生成不可变 InitialZone，按实际 World UUID 注册 sanitizer 并同步清理已加载 chunks。SpawnPreparation 保留 M3 出生区块 ticket 与取消 drain 语义，新 beforeLanding future 等待 PaperLootRuntime。Loot 完成后验证所有玩家仍可用，PlayerIsolation 先捕获全部原状态，再 journal 全部快照，最后应用装备并在同一 tick 传送。任何部分失败沿原有 abort/end 路径恢复原状态。纯事务 Gateway 允许注入 capture/apply/restore 故障测试。
 
-PaperPlayerIsolation 保存原生 item payload、经验、模式、健康/饥饿/药水等，同时隔离末影箱和光标。结束时 PlayerIsolation 把 session 快照转入 UUID pending map，在线恢复并回大厅，成功才删除；离线/死亡/恢复异常保留。PlayerJoin 和原版 respawn 后重试，pending 阻止新 join。该服务不随普通 reload 重建；插件关闭/进程终止的离线恢复未持久化（M7）。不监听 PlayerDeathEvent 修改掉落和经验；M5 接续统一死亡语义。
+PaperPlayerIsolation 保存原生 item payload、经验、模式、健康/饥饿/药水等，同时隔离末影箱和光标。结束时 PlayerIsolation 把 session 快照转入 UUID pending map，在线恢复并回大厅，成功才删除；离线/死亡/恢复异常保留。PlayerJoin 和原版 respawn 后重试，pending 阻止新 join。该服务不随普通 reload 重建；插件关闭/进程终止的离线恢复未持久化（M7）。M5 在统一淘汰提交时 defer 单个玩家原快照，原版 respawn 定位 Lobby，下一 tick 重试恢复；成功后从原 session 快照集合移除，结束不覆盖已经恢复的大厅物品。
 
 WorldSanitizer 使用每个 World UUID 的 SanitationLedger，分别记录 blocks/entities 首次完成，失败不标记；ChunkLoad 与 EntitiesLoad 独立处理。准备物资前 ensure 强制获得该候选 chunk 的实体集合，防止先放物资再执行迟到的首次实体清理。方块只枚举 tile entities，Chest.getBlockInventory 清理物理半箱；Lootable 表先置空，随后清 inventory。村民在 Mob 分类删除之前保留；仅当前 session 的 PDC ground marker 可豁免迟到实体检查。没有全图扫描、定期清扫或自然生物事件禁令。
 
@@ -150,23 +150,23 @@ PaperZoneUi 按 UUID 持有每位玩家的 Adventure BossBar，不长期保存 P
 
 ParticleWall 是纯采样器：先将四条边与玩家 XZ 视距圆裁剪，只采样局部可见线段；默认水平间距 2.5、垂直间距 1.5、高度 playerY-3..playerY+6，每次最多 300 点。只发给对应玩家，不广播，不按全周长扫描，不读取地形；运行成本由视距和 hard cap 限制。高度采用玩家局部范围，不模拟真实地形墙。
 
-## PvP 保护与临时来源
+## PvP 保护与共享来源
 
 ProtectionWindow 从统一传送成功、RUNNING 的单调时间开始；0 秒禁用，到期发一次通知。ProtectionPolicy 只阻止同一 Session 不同参与者之间的已识别玩家来源，天然/怪物伤害继续生效，无友伤或团队逻辑。
 
 PvPProtectionListener 使用公共 DamageSource causing/direct entity、Projectile.shooter、TNT source、AreaEffectCloud.source，补充 Firework.spawningEntity 和 LightningStrike.causingPlayer。玩家投射物覆盖箭、三叉戟、弩、烟花；有害药水在 PotionSplashEvent 调整对应玩家 intensity，AreaEffectCloudApplyEvent 移除对应玩家。混有有益/有害效果的同一药水会整体阻止作用于受保护对手，因为这些公开事件按目标暴露强度/列表，不能在同一命中中逐种修改。
 
-PvPHazardTracker 每个 Session 单独持有 UUID/方块坐标来源表，仅在保护期填充：玩家 lava bucket→流动；点火→蔓延；TNT 放置/priming→TNT entity；投射物/滞留云。床和重生锚的有效右键交互也记录块来源（床两半），伤害可用 block / block-state 坐标关联。燃烧事件可识别来源时阻止点燃，避免后续无来源 FIRE_TICK。清除熄灭/破坏/替换/取液体位置；到期或结束清空全部数据，不做击杀/助攻历史。
+PvPHazardTracker 每个 Session 单独持有 UUID/方块坐标来源表，整个 RUNNING 期间填充：玩家 lava bucket→流动；点火→蔓延；TNT 放置/priming→TNT entity；投射物/滞留云。床和重生锚的有效右键交互也记录块来源（床两半），伤害可用 block / block-state 坐标关联。燃烧事件可识别来源时阻止点燃，避免后续无来源 FIRE_TICK。清除熄灭/破坏/替换/取液体位置；保护到期不清除来源，ENDING/stop 清空。每张来源表最多 65536 条，满时逐出最旧；实际伤害历史由独立 CombatTracker 管理。
 
 这些边界不是全局免伤：自然 fall、drowning、lava、fire、cactus、suffocation、starvation、lightning 和无玩家来源 mob 仍可伤害玩家。玩家召唤的 channeling lightning 在公开 causingPlayer 存在时属于玩家来源。
 
-已知归因边界：纯红石/发射器无法一般性确定“最后责任玩家”；TNT 矿车、匿名连锁/床锚爆炸若事件既无 entity owner 又无 block/state 坐标，无法识别；第三方 source-less damage、直接方块变更/活塞搬动绕过已监听事件可能丢失或残留来源；多玩家/天然火或岩浆合流只保留传播到该格的来源，不能还原完整因果。保护外来源不补建历史。完整 Combat attribution 在 M5，不使用 NMS 猜测。
+已知归因边界：纯红石/发射器无法一般性确定“最后责任玩家”；TNT 矿车、匿名连锁/床锚爆炸若事件既无 entity owner 又无 block/state 坐标，无法识别；第三方 source-less damage、直接方块变更/活塞搬动绕过已监听事件可能丢失或残留来源；多玩家/天然火或岩浆合流只保留传播到该格的来源，不能还原完整因果。M5 对保护外继续登记来源，但无公开责任信息时不使用 NMS 猜测。持续 poison/wither 若后续事件没有 causing entity，也没有先前有效玩家伤害记录，不能凭药效还原投掷者。
 
 ## 断线与临时死亡
 
 WAITING/COUNTDOWN 断线移除 roster 并重新判断阈值。活动断线保留 UUID 为 DISCONNECTED，detach UI、停止圈伤；没有 OfflineBody/重连位置恢复（M6）。
 
-M3 可真实死亡，仍使用原版掉落、死亡画面和复活规则，没有 ELIMINATED、胜负判断、DeathBox、死亡观战或经验保留。死者暂时跳过 UI/圈伤；若原版复活到本局世界且状态仍 ALIVE，会继续参与圈规则。这是明确的临时行为，M5 统一处理死亡和淘汰。
+M5 死亡立即进入 ELIMINATED，停止 UI/圈伤，原版死亡画面后重生到 Lobby 并恢复原状态一次。原版掉落/XP 被 DeathBox 代替；没有死亡观战。ELIMINATED 断线不改写为 DISCONNECTED。未淘汰的 DISCONNECTED 选手会阻止 Solo 自动结算，等待 M6 定义离线淘汰策略。
 
 
 ## Cleanup、reload 与 disable
@@ -185,6 +185,28 @@ disable 先关闭 MatchLifecycle，停止所有运行/出生任务、移除 UI�
 
 Session、membership、timer、token、loaded-world registry 仅由 server thread 修改。Player/World、传送、WorldCreator、load/unload 只在 Paper 适配器内且有主线程断言。复制/删除/源树遍历/NBT 校验位于专用 worker；只传递不可变 GameWorld、原子计数和受锁队列。Future 在运行期间由 server-thread pump 完成；关闭后的完成回调不会修改 Session。
 
-经济、Party、RatingCalculator 继续保持接口边界。ItemSerializer 已有 NativeItemSerializer 实现，LootItemResolver 提供原生 minecraft 命名空间。完整 Combat/淘汰（M5）、组队/观战/OfflineBody（M6）、数据库/恢复（M7）及第三方物品 Provider 尚未实现。
+经济、Party、RatingCalculator 继续保持接口边界。ItemSerializer 已有 NativeItemSerializer 实现，LootItemResolver 提供原生 minecraft 命名空间。组队/观战/OfflineBody（M6）、数据库/恢复（M7）及第三方物品 Provider 尚未实现。
 
 公共 API 参考：[异步区块](https://jd.papermc.io/paper/1.21.8/org/bukkit/World.html)、[DamageSource](https://jd.papermc.io/paper/1.21.8/org/bukkit/damage/DamageSource.html)、[喷溅药水](https://jd.papermc.io/paper/1.21.8/org/bukkit/event/entity/PotionSplashEvent.html)、[滞留云](https://jd.papermc.io/paper/1.21.8/org/bukkit/event/entity/AreaEffectCloudApplyEvent.html)。
+
+## M5 combat, elimination and outcome composition
+
+PluginRuntime 注册共享 PaperDamageProvenance、CombatListener、PlayerEliminationListener、DeathBoxListener、StoredExperienceBottles、MatchTickListener；每个 PaperMatches.Entry 持有一个 PaperCombatSession（CombatTracker、EliminationService、PaperDeathBoxes、SoloOutcomeResolver）。同局关联使用 UUID；源解析与 M3 PvP 保护使用相同的 causing/direct entity、投射物 owner 和 hazards 记录，没有另建归属算法。
+
+CombatTracker 注入 GameClock；仅 MONITOR 未取消、正数有效伤害进入历史。finalDamage 按剩余健康截断，并计入公开 ABSORPTION modifier 可确认的实际消耗。每名 victim 至多 4096 条，写入/解析时惰性过期，窗口包含精确边界。结算再次验证同局参与者、排除自己，直接致死玩家优先，否则最近有效攻击者。助攻分母只取该窗口有效玩家伤害，累计 ≥4 HP 或占比 ≥20% 即计，killer 除外。GamePlayer 是不可变值，更新统计替换快照。极端超过历史硬上限会逐出最旧记录，不宣称无限量历史精度。
+
+PlayerDeathEvent 仅接管 RUNNING + ALIVE + 本局真实世界 UUID。先原生序列化 storage/offhand/armor/cursor，排除末影箱；不依赖 getDrops（消失诅咒可能已被原版过滤）。清空 drops/itemsToKeep/XP/光标和局内库存，提交不含 Paper 引用的 EliminationRequest。EliminationService 验证、建立唯一 DeathBox、ALIVE→ELIMINATED、更新统计和 tick 记录、再触发实体/killfeed 回调；重入不重复提交。展示部分失败会移除已生成实体，保留逻辑提交直到 fatal abort 安全清理；不退回原版掉落，不重试复制物品。第三方插件若在之后的事件优先级重新添加掉落或取消死亡，尚无跨插件事务保证。
+
+PaperMatches 以同步 zone damage scope 标记 setHealth(0) 的 ZONE 上下文，使圈伤经过同一死亡入口但不伪造 EntityDamageEvent。淘汰时原快照 detach 到 M4 pending restore，respawn 设置 Lobby、下一 tick 恢复；已完成者不参与结束时二次恢复。禁用/进程重启前未恢复的离线快照没有磁盘保证。
+
+DeathBox 创建 payload 使用不可变 StoredItem 字符串列表；Paper shared Inventory 是生成后剩余物品的唯一可变权威。54 格可容纳 36 storage +4 armor +1 offhand +1 cursor +1 XP 瓶。三展示实体具有 box/session PDC 和独立 registry，gravity=false、invulnerable、persistent；death position 有效高度内 clamp，静态文字记录 elapsed。每个涉及 chunk 一个 session ticket，结束删除三实体、清空库存、关闭 viewer、释放 ticket。无全图扫描或每盒 repeating task。
+
+GUI 所有操作先 cancel，取物由主线程执行；左/右键只能从盒子转到空或相似光标，shift 先取出再 addItem，剩余返回原槽。正常底部整理可放行；底部 shift、上部存入、数字键、换副手、collect、drag 和 Creative 均拒绝。每次交互和点击复查 session/ALIVE/RUNNING/world/distance，结束关闭所有 viewer。
+
+ExperienceMath 从当前 level/progress 重建当前可花费点数，以 floor(total/2) 保存，最高 INT_MAX/2。Stored XP PDC 为 BYTE marker + INTEGER amount，不读取展示文本；PlayerLaunchProjectileEvent 验证类型/范围并强制消耗，MONITOR 复制到 ThrownExpBottle；ExpBottleEvent 设完整 XP 并打 paid 标记，重复处理不重复付款，普通瓶不进入此分支。
+
+EliminationService 记录实际 Bukkit current tick；MatchTickListener 在 ServerTickEndEvent 批处理 dirty session，MatchOutcomeResolver 接口隔离未来团队规则。SoloOutcomeResolver 只接受 teamSize=1：剩一人 LAST_ALIVE，最终同 tick 淘汰集合至少两人则 SAME_TICK tie，零存活且无同 tick 群组则 NO_SURVIVORS。MatchOutcome 保存不可变 winner UUID 集合、tie/reason/completedAt/tick，GameSession 只允许 RUNNING 决定一次结果。
+
+进入 ENDING 停 SessionLoop/UI/来源与 CombatTracker、关闭箱子访问；世界和视觉保持。WinnerShowcase 持有一个独立可取消任务，GameClock 单调 deadline 为默认 60 秒，标题一次、效果每 5 秒且最多 12 轮，卡顿不补发风暴。CelebrationEffects 用自有 PDC + registry 识别烟花，CombatListener 取消其对任何实体的伤害；ENDING 存活选手另有本世界伤害保护。到期调用受 session identity/state guard 保护的 MatchLifecycle.onFinished，再走 RoomRuntimeService 的恢复、资源 drain 和 world release。debug end/disable/fatal abort 都取消展示任务并移除登记烟花，迟到回调不能再次结算。
+
+Paper API：[tick 末事件](https://jd.papermc.io/paper/1.21.8/com/destroystokyo/paper/event/server/ServerTickEndEvent.html)、[物品投射事件](https://jd.papermc.io/paper/1.21.8/com/destroystokyo/paper/event/player/PlayerLaunchProjectileEvent.html)、[玩家死亡事件](https://jd.papermc.io/paper/1.21.8/org/bukkit/event/entity/PlayerDeathEvent.html)。

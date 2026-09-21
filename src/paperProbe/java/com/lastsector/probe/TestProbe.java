@@ -15,6 +15,7 @@ import java.util.*;
 public final class TestProbe extends JavaPlugin implements Listener {
     private String rejectTeleport;
     private final M4Probe m4=new M4Probe(this);
+    private final M5Probe m5=new M5Probe(this);
     @EventHandler
     public void isolatedWorld(org.bukkit.event.world.WorldLoadEvent event) {
         if(!event.getWorld().getName().startsWith("plugins/LastSector/runtime/")) return;
@@ -27,9 +28,11 @@ public final class TestProbe extends JavaPlugin implements Listener {
     }
     @Override public void onEnable() {
         getServer().getPluginManager().registerEvents(this,this);
+        getServer().getPluginManager().registerEvents(m5,this);
         getCommand("lsprobe").setExecutor((sender,command,label,args)-> {
             try {
                 if(args[0].startsWith("m4")) { m4.command(sender,args); return true; }
+                if(args[0].startsWith("m5")) { m5.command(sender,args); return true; }
                 if(args[0].equals("player")) {
                     var player=Objects.requireNonNull(getServer().getPlayerExact(args[1]));
                     var world=player.getWorld(); var loc=player.getLocation();

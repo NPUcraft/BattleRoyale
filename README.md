@@ -1,6 +1,6 @@
 # LastSector
 
-LastSector 是 **Java 21 / Paper 1.21.8** 的多人 Battle Royale 插件项目。M1–M3 已完成；当前为 **M4 — Loadout, Player Isolation, World Sanitization & Loot**：共享装备编辑器、原生物品序列化、玩家状态隔离、首次区块清理、容器/地面一次性物资和传送门规则。安全出生、连续缩圈与 PvP 保护保持原有行为；M5 接续死亡、淘汰与胜负。
+LastSector 是 **Java 21 / Paper 1.21.8** 的多人 Battle Royale 插件。M1–M4 已完成；当前为 **M5 — Combat, Elimination, DeathBox & Solo Outcome**：15 秒归因与助攻、统一淘汰、共享死亡盒、精确经验瓶和 60 秒胜者展示。M6 接续组队、观战与 OfflineBody。
 
 ## 构建
 
@@ -21,7 +21,7 @@ Gradle 8.14 Wrapper 已附带，首次构建需要网络。Linux/macOS 使用 `.
 4. 在 playable-area 内提供足够安全地面。模板目录缺失会在准备该局时失败；区域尺寸与圈配置冲突会在启动/reload 时直接拒绝。
 5. 玩家 /ls join solo，人数达标自动倒计时。管理员 /ls debug start solo 可绕过 minPlayers，但必须有在线参与者。
 6. 副本准备完成后进入 STARTING，按实际在线参与人数选初始 halfSize，注册世界清理、处理已加载区块，规划出生点、完成一次性 Loot、捕获所有原状态并应用 Loadout。全部成功后同一 tick 传送，进入 RUNNING 并开始保护计时。
-7. /ls debug end solo 结束比赛，恢复原始背包/经验/状态、取消任务、移除 UI/临时来源记录、返回大厅、卸载并删除副本。M4 不自动判断胜者。
+7. /ls debug end solo 结束比赛，恢复原始背包/经验/状态、取消任务、移除 UI/临时来源记录、返回大厅、卸载并删除副本。Solo 正常淘汰在 tick 末判断胜负，展示 60 秒后自动清理；debug end 在 RUNNING 直接清理、不生成结果，在 ENDING 跳过剩余展示。
 
 源模板只读，不能使用大厅、运行中的世界、链接目录或被外部进程修改的模板。复制保留 seed / WorldGenSettings；必要的新区块由模板设置生成，不预生成整个地图。
 
@@ -29,7 +29,7 @@ Gradle 8.14 Wrapper 已附带，首次构建需要网络。Linux/macOS 使用 `.
 
 - lastsector.command（默认所有人）：/ls、/ls help、/ls version。
 - lastsector.play（默认所有人）：/ls rooms、/ls join <room>、/ls autojoin、/ls leave。
-- lastsector.admin（默认 OP）：/ls reload、/ls debug rooms、/ls debug maps、/ls debug session <room>、/ls debug zone <room>、/ls debug protection <room>、/ls debug start <room>、/ls debug end <room>、/ls debug loot <room>、/ls admin loadout edit <room>。
+- lastsector.admin（默认 OP）：/ls reload、/ls debug rooms、/ls debug maps、/ls debug session <room>、/ls debug zone <room>、/ls debug protection <room>、/ls debug start <room>、/ls debug end <room>、/ls debug loot <room>、/ls debug deathboxes <room>、/ls admin loadout edit <room>。
 
 完整命令名 /lastsector；补全按权限提供。join/leave 只允许 WAITING/COUNTDOWN；autojoin 选择人数最多的可加入房间，同人数保持配置顺序。人数不足取消并重置倒计时。活动 Session 或未完成资源清理存在时禁止 reload；失败 reload 保留旧配置。
 
@@ -110,7 +110,7 @@ areas:
 
 Area 每局判定一次激活概率与点数，仅采样其与 InitialZone 的交集。Y 是物品脚部高度范围，采用可安全支撑的最高地表，允许单格净空；不会向地下洞穴全面扫描。每点有限尝试，不预加载整个区域。地图最多 1024 容器/128 Areas，每 Area 最多 256 点、每点 256 尝试；单局最多 10000 地面物品实体。与出生规划共用 120 秒 STARTING 上限，过大的配置可能安全中止，应按地图负载调整。`/ls debug loot <room>` 显示生成状态、点/Area 计数、物品数与清理区块数。
 
-比赛装备应用前保存 storage/armor/offhand、快捷栏、XP、模式、生命/饥饿/饱和、药水、火焰/跌落状态；另隔离末影箱、光标、吸收生命、疲劳和飞行状态。结束丢弃局内所得并恢复原状态；离线/死亡者在结束后进入待恢复队列，上线/原版重生后重试，成功才清除。未恢复不能加入新局。
+比赛装备应用前保存 storage/armor/offhand、快捷栏、XP、模式、生命/饥饿/饱和、药水、火焰/跌落状态；另隔离末影箱、光标、吸收生命、疲劳和飞行状态。结束丢弃局内所得并恢复原状态；淘汰者立即进入待恢复队列，原版重生到 Lobby 后重试；其余离线/死亡者在结束后进入队列，上线/重生后重试，成功才清除。未恢复不能加入新局。
 
 比赛世界首次加载的区块清除原版容器物品/战利品表、物品实体、经验球与普通生物；保留村民、盔甲架、展示/悬挂实体及矿车（清空带库存实体）。后续自然生物、物品和 XP 正常存在，清理不会重复。昼夜、天气、自然刷怪与方块破坏/放置/爆炸保持原版；仅比赛世界禁止 Nether/End 门、End gateway 传送及门生成，珍珠/紫颂果保留。
 
@@ -118,10 +118,40 @@ M4 实服验证脚本：`node scripts/paper-m4.mjs <stopped-paper-directory> [mi
 
 ## 当前边界
 
-- M4 死亡仍走原版 Minecraft；没有淘汰、胜者、DeathBox、复活/观战管理。死亡时跳过伤害并移除 UI；原版复活后若仍在比赛世界且 UUID 状态仍 ALIVE，会再次受到圈规则影响。
+- M5 淘汰后通过原版死亡画面/重生回 Lobby，恢复原快照一次，保留 ELIMINATED 至比赛退休；没有 Spectator。
 - 活动断线保留 UUID 为 DISCONNECTED，移除 UI、跳过扣血；没有 OfflineBody、重连恢复或自动淘汰（M6）。
-- 离线待恢复快照只存在本插件实例内存中，跨正常空闲 reload 保留；插件禁用、崩溃和进程重启后的持久恢复属于 M7。第三方物品、完整比赛胜负仍未实现。
+- 离线待恢复快照只存在本插件实例内存中，跨正常空闲 reload 保留；插件禁用、崩溃和进程重启后的持久恢复属于 M7。第三方物品 Provider、Team 胜负和永久统计仍未实现。
 - 崩溃/强杀、异常生成器停滞、文件锁可能保留带 marker 的目录；不自动扫描删除（M7）。
 - 匿名红石/发射器、无来源的 TNT 矿车、第三方直接修改方块或制造 source-less 伤害，以及多来源混合火/岩浆，不能可靠还原玩家来源。见架构文档的具体限制。
 
 [架构](docs/ARCHITECTURE.md) · [路线图](docs/ROADMAP.md) · [验证记录](docs/VERIFICATION.md)
+
+## M5 战斗与死亡规则
+
+有效、未取消的同局玩家伤害进入 session 级 CombatTracker；单调时钟默认窗口 **15 秒，边界包含**。过量伤害按剩余生命截断，公开 API 可识别的吸收消耗计入有效伤害。直接致死玩家优先；环境死亡选择窗口内最近攻击者。排除自己和非本局 UUID；助攻按窗口累计伤害 **≥4 HP 或占玩家总伤害 ≥20%**，排除 killer 并去重。淘汰玩家的历史攻击仍可归因；统计只在本局内存中。
+
+实际 storage、盔甲、副手及光标由原生字节独立保存，包含仍存在的消失诅咒装备；不读取过滤后的原版 drops，不包含末影箱。已在致死攻击中损坏消失的装备不会凭空恢复。原版掉落、经验、itemsToKeep 和死亡消息被接管。
+
+DeathBox 是 **54 格共享库存**，以 BARREL BlockDisplay、Interaction 与 TextDisplay 展示，不放置真实方块。浮字显示死者、原因/击杀者和固定淘汰用时。Y 限制在世界有效高度内。允许左/右键取出与 shift 快速取出；禁止放入、拖入、数字键、换副手、双击收集及 Creative 注入。每次交互/点击复查同局、ALIVE、RUNNING、同世界和默认 6 格距离。空盒保持至清理。
+
+经验保存 **floor(当前总经验点数 / 2)**。从等级和进度重建当前可花费 XP，避免 Bukkit lifetime total 在附魔后陈旧；不是等级除以二。正数生成一瓶 Stored Experience，0 不生成。PDC 保存整数，投掷时复制到实体，ExpBottleEvent 精确设置；普通瓶不改。拒绝错误类型、负值及超范围载荷，不解析 lore。
+
+`teamSize == 1` 才运行 SoloOutcomeResolver；ServerTickEndEvent 统一处理本 tick 淘汰，最后两名同 tick 淘汰判 TIE，两人均为赢家，不同 tick 不拼接平局。结果不可变，只进入 ENDING 一次。默认展示 **60 真实秒**，停止圈、战斗和箱子访问，保留世界和实体，Adventure WINNER/TIE 标题及每 5 秒最多一轮中性烟花（至多 12 轮）；自有烟花以 PDC + registry 保护伤害。到期恢复剩余玩家并接入 M2 清理。
+
+队伍房间保留淘汰/盒子/统计，但不自动产生 Solo 冠军。有 DISCONNECTED 参赛者时也不授予免费 Solo 胜利，需要管理员结束，等待 M6 定义离线淘汰。原版重生前退出的淘汰玩家在同 JVM 的 pending restore 队列中等待登录/重生；不保证进程重启恢复。
+
+已有 config.yml 不覆盖；缺失整个新段采用默认，可手动添加：
+
+```yaml
+combat:
+  attribution-seconds: 15
+  assist:
+    min-damage: 4.0
+    min-damage-share: 0.20
+match:
+  winner-showcase-seconds: 60
+deathbox:
+  interaction-distance: 6.0
+```
+
+归因窗口上限 600 秒、助攻占比 0–1、展示 0–3600 秒、距离至多 16 格；非法配置拒绝加载。`/ls debug deathboxes <room>` 显示数量、ID、死者、位置及剩余非空 stack，debug session 包含临时统计和结果。

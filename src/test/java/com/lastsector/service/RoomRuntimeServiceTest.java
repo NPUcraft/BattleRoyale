@@ -90,6 +90,16 @@ class RoomRuntimeServiceTest {
         assertTrue(runtime.session("a").isEmpty()); assertEquals(1, worlds.released.size());
         runtime.join(alice, "a"); assertNotEquals(old.sessionId(), session("a").sessionId());
     }
+    @Test void debugEndSkipsShowcaseWithoutChangingOutcome() {
+        runtime.join(alice,"a");runtime.debugStart("a");var current=session("a");worlds.succeed(current.sessionId());
+        var result=new MatchOutcome(Set.of(alice),false,"LAST_ALIVE",123,42);current.outcome(result);
+        runtime.debugEnd("a");assertTrue(runtime.session("a").isEmpty());assertEquals(1,worlds.released.size());
+        assertSame(result,current.outcome().orElseThrow());assertEquals(GameState.CLEANUP,current.state());
+    }
+    @Test void runningDebugEndDoesNotInventOutcome() {
+        runtime.join(alice,"a");runtime.debugStart("a");var current=session("a");worlds.succeed(current.sessionId());
+        runtime.debugEnd("a");assertTrue(current.outcome().isEmpty());
+    }
     @Test void selectedMapCannotChange() {
         runtime.join(alice, "a"); runtime.debugStart("a"); var current = session("a");
         assertThrows(IllegalStateException.class, () -> current.prepare(TestSupport.map(Path.of("elsewhere"))));

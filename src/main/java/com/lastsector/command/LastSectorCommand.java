@@ -62,6 +62,10 @@ public final class LastSectorCommand implements CommandExecutor, TabCompleter {
                         messages.count(sender, "Map templates", maps.size()); maps.forEach(map -> messages.map(sender, map));
                     } else if (args.length == 3) {
                         switch (args[1].toLowerCase(Locale.ROOT)) {
+                            case "deathboxes" -> {
+                                var session=rooms.session(args[2]);
+                                messages.send(sender,session.map(s->runtime.matches().deathboxes(s.sessionId())).orElse("deathboxes=0"));
+                            }
                             case "loot" -> {
                                 var session=rooms.session(args[2]);
                                 messages.send(sender,session.map(s->runtime.matches().loot(s.sessionId())).orElse("loot=N/A"));
@@ -101,7 +105,7 @@ public final class LastSectorCommand implements CommandExecutor, TabCompleter {
             if (sender.hasPermission("lastsector.play")) choices.addAll(List.of("rooms", "join", "autojoin", "leave"));
             if (sender.hasPermission("lastsector.admin")) choices.addAll(List.of("reload", "debug", "admin"));
         } else if (args.length == 2 && args[0].equalsIgnoreCase("debug") && sender.hasPermission("lastsector.admin"))
-            choices.addAll(List.of("rooms", "maps", "session", "zone", "protection", "loot", "start", "end"));
+            choices.addAll(List.of("rooms", "maps", "session", "zone", "protection", "loot", "deathboxes", "start", "end"));
         else if(args[0].equalsIgnoreCase("admin") && sender.hasPermission("lastsector.admin")) {
             if(args.length==2) choices.add("loadout");
             else if(args.length==3 && args[1].equalsIgnoreCase("loadout")) choices.add("edit");
@@ -109,7 +113,7 @@ public final class LastSectorCommand implements CommandExecutor, TabCompleter {
         }
         else if (args.length == 2 && args[0].equalsIgnoreCase("join") && sender.hasPermission("lastsector.play")
                 || args.length == 3 && args[0].equalsIgnoreCase("debug") && sender.hasPermission("lastsector.admin")
-                && Set.of("session", "zone", "protection", "loot", "start", "end").contains(args[1].toLowerCase(Locale.ROOT)))
+                && Set.of("session", "zone", "protection", "loot", "deathboxes", "start", "end").contains(args[1].toLowerCase(Locale.ROOT)))
             runtime.rooms().rooms().forEach(room -> choices.add(room.id()));
         String prefix = args.length == 0 ? "" : args[args.length - 1].toLowerCase(Locale.ROOT);
         return choices.stream().filter(choice -> choice.toLowerCase(Locale.ROOT).startsWith(prefix)).toList();
