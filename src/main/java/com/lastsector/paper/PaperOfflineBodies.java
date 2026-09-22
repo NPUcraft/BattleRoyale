@@ -108,6 +108,7 @@ public final class PaperOfflineBodies {
     }
     private void remove(OfflineBody body){representation.entityIds(body).forEach(entities::remove);representation.remove(body);bodies.remove(body.player());}
     public void ending(){for(var body:List.copyOf(bodies.values())){body.retire();entry.session.offlineCombatant(body.player(),false);remove(body);restoreLobby.accept(body.player());}}
+    public int size(){return bodies.size();}
     public String diagnostics(){return "offline="+(bodies.isEmpty()?"none":bodies.values().stream().map(b->"player="+b.name()+" id="+b.player()+" entity="+b.representation()+" state="+b.state()+" health="+(representation.valid(b)?representation.capture(b).health():b.snapshot().health())+" location="+b.snapshot().position()+" remaining="+b.remainingNanos(clock.nanoTime())/1e9).toList());}
     public void close(){ending();}
 }

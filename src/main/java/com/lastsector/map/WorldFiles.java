@@ -42,7 +42,10 @@ public final class WorldFiles {
         return new GameWorld(session, room, name, target, template);
     }
     /** Validates complete source first. Failed partial copies keep a marker unless cleanup succeeds. */
-    public GameWorld copy(UUID session, String room, MapTemplate template) throws IOException {
+    public GameWorld copy(UUID session, String room, MapTemplate template) throws IOException { return copy(session,room,template,"GAME",session); }
+    public GameWorld copy(UUID session,String room,MapTemplate template,String type,UUID owner)throws IOException {
+        if(!Set.of("GAME","EDITOR","MAINTENANCE").contains(type))throw new IOException("Unknown runtime type");
+        long cloneStarted=System.nanoTime();
         Path source = validateTemplate(template);
         GameWorld descriptor = descriptor(session, room, template);
         GameWorld world = new GameWorld(session, room, descriptor.worldName(), descriptor.runtimePath(), template,
@@ -51,7 +54,7 @@ public final class WorldFiles {
         Files.createDirectories(runtimeRoot); noLinks(runtimeRoot);
         Files.createDirectory(world.runtimePath()); // Never merge with or overwrite an existing directory.
         try {
-            writeMarker(world);
+            writeMarker(world,type,owner);
             Files.walkFileTree(source, new SimpleFileVisitor<>() {
                 @Override public FileVisitResult preVisitDirectory(Path directory, BasicFileAttributes attributes) throws IOException {
                     noLinks(directory);
@@ -74,6 +77,7 @@ public final class WorldFiles {
             });
             LevelData.validate(world.runtimePath().resolve("level.dat"));
             checkTree(world.runtimePath());
+            com.lastsector.admin.PerformanceMetricsService.LIVE.record(com.lastsector.admin.PerformanceMetricsService.Timer.WORLD_CLONE,System.nanoTime()-cloneStarted);
             return world;
         } catch (IOException | RuntimeException failure) {
             try { delete(world, true); } catch (Exception cleanup) { failure.addSuppressed(cleanup); }
@@ -100,7 +104,7 @@ public final class WorldFiles {
         var expected=descriptor(id,room,template);
         if(!expected.worldName().equals(name) || !expected.runtimePath().getFileName().toString().equals(relative))throw new IOException("Recovery path identity mismatch");
         validateLoad(expected);checkTree(expected.runtimePath());
-        var properties=marker(expected);if(!properties.getProperty("status","ACTIVE").equals("ACTIVE"))throw new IOException("World is not ACTIVE");
+        var properties=marker(expected);if(!properties.getProperty("type","GAME").equals("GAME"))throw new IOException("Not a GAME runtime");if(!properties.getProperty("status","ACTIVE").equals("ACTIVE"))throw new IOException("World is not ACTIVE");
         return new GameWorld(id,room,name,expected.runtimePath(),template,LevelData.validate(expected.runtimePath().resolve("level.dat")));
     }
     private Properties marker(GameWorld world)throws IOException {validateTarget(world);validateMarker(world);var p=new Properties();try(var input=Files.newInputStream(world.runtimePath().resolve(MARKER))){p.load(input);}return p;}
@@ -136,6 +140,7 @@ public final class WorldFiles {
     }
     /** Call only with a server-thread unload acknowledgement, or for a clone never offered to Bukkit. */
     public void delete(GameWorld world, boolean confirmedUnloaded) throws IOException {
+        long cleanupStarted=System.nanoTime();
         if (!confirmedUnloaded) throw new IOException("Refusing deletion without unload confirmation: " + world.runtimePath());
         validateTarget(world);
         Path target = world.runtimePath();
@@ -167,6 +172,7 @@ public final class WorldFiles {
                 Files.delete(target.resolve(MARKER));
                 try { Files.delete(target); }
                 catch (IOException error) { Files.write(target.resolve(MARKER),retainedMarker,StandardOpenOption.CREATE_NEW); throw error; }
+                com.lastsector.admin.PerformanceMetricsService.LIVE.record(com.lastsector.admin.PerformanceMetricsService.Timer.WORLD_CLEANUP,System.nanoTime()-cleanupStarted);
                 return;
             } catch (IOException error) {
                 failure = error;
@@ -197,6 +203,7 @@ public final class WorldFiles {
         if (!Files.isRegularFile(world.runtimePath().resolve("level.dat"), LinkOption.NOFOLLOW_LINKS))
             throw new IOException("Clone level.dat is no longer present");
     }
+    public void validateClone(GameWorld world)throws IOException {validateLoad(world);checkTree(world.runtimePath());LevelData.validate(world.runtimePath().resolve("level.dat"));}
     private void validateMarker(GameWorld world) throws IOException {
         Path marker = world.runtimePath().resolve(MARKER); noLinks(marker);
         if (!Files.isRegularFile(marker, LinkOption.NOFOLLOW_LINKS) || Files.size(marker) > 16384)
@@ -208,14 +215,17 @@ public final class WorldFiles {
                 || !world.template().id().equals(properties.getProperty("mapId"))
                 || !world.worldName().equals(properties.getProperty("worldName")))
             throw new IOException("Ownership marker does not match this session: " + marker);
+        if(!Set.of("GAME","EDITOR","MAINTENANCE").contains(properties.getProperty("type","GAME")))throw new IOException("Invalid ownership type");
+        if(!properties.getProperty("type","GAME").equals("GAME"))try{UUID.fromString(properties.getProperty("editorUUID"));}catch(RuntimeException error){throw new IOException("Invalid maintenance owner",error);}
         try { Instant.parse(properties.getProperty("createdAt")); }
         catch (RuntimeException error) { throw new IOException("Invalid ownership timestamp", error); }
     }
-    private void writeMarker(GameWorld world) throws IOException {
+    private void writeMarker(GameWorld world,String type,UUID owner) throws IOException {
         noLinks(world.runtimePath());
         Properties properties = new Properties();
         properties.setProperty("sessionId", world.sessionId().toString()); properties.setProperty("roomId", world.roomId());
         properties.setProperty("mapId", world.template().id()); properties.setProperty("worldName", world.worldName());
+        properties.setProperty("type",type);properties.setProperty("editorUUID",owner.toString());
         properties.setProperty("createdAt", Instant.now().toString());properties.setProperty("status","ACTIVE");
         try (var output = Files.newOutputStream(world.runtimePath().resolve(MARKER), StandardOpenOption.CREATE_NEW)) {
             properties.store(output, "LastSector owned runtime world");

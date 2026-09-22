@@ -1,3 +1,4 @@
+config-version: 2
 cosmetics:
   kill_particle_burst:
     category: KILL_EFFECT

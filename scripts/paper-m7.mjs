@@ -17,7 +17,7 @@ const data = path.join(root, 'plugins/LastSector');
 await fs.mkdir(data, { recursive: true });
 for (const name of ['paper.jar', 'libraries', 'versions', 'cache', 'eula.txt'])
   await fs.cp(path.join(source, name), path.join(root, name), { recursive: true });
-await fs.copyFile('build/libs/lastsector-0.1.0-SNAPSHOT.jar', path.join(root, 'plugins/lastsector.jar'));
+await fs.copyFile('build/libs/lastsector-1.0.0-rc.1.jar', path.join(root, 'plugins/lastsector.jar'));
 await fs.copyFile('build/integration/lastsector-test-probe.jar', path.join(root, 'plugins/probe.jar'));
 for (const file of ['config.yml', 'rooms.yml', 'maps.yml', 'zones.yml']) {
   let text = await fs.readFile(path.join('src/main/resources', file), 'utf8');
@@ -124,7 +124,7 @@ async function startSolo(a,b) {
 async function endSolo() {await consoleCommand('ls debug end solo','End requested');await state('solo','WAITING');}
 
 const db=path.join(data,'data/lastsector.db');
-function mysql(sql){const text=execFileSync('docker',['exec','--env','MYSQL_PWD=lastsector-isolated-test','lastsector-m7-mysql','mysql','--user=lastsector_test','--database=lastsector_test','--batch','--raw','--execute',sql],{encoding:'utf8',windowsHide:true}).trim();if(!text)return [];const [header,...lines]=text.split('\n');const columns=header.split('\t');return lines.map(line=>Object.fromEntries(line.split('\t').map((value,i)=>[columns[i],value])));}
+function mysql(sql){const text=execFileSync('docker',['exec','--env','MYSQL_PWD=lastsector-isolated-test',(process.env.LASTSECTOR_MYSQL_CONTAINER ?? 'lastsector-m7-mysql'),'mysql','--user=lastsector_test','--database=lastsector_test','--batch','--raw','--execute',sql],{encoding:'utf8',windowsHide:true}).trim();if(!text)return [];const [header,...lines]=text.split('\n');const columns=header.split('\t');return lines.map(line=>Object.fromEntries(line.split('\t').map((value,i)=>[columns[i],value])));}
 function query(sql){if(process.env.M7_MYSQL_PORT)return mysql(sql);return JSON.parse(execFileSync('python',['-c','import sqlite3,json,sys; c=sqlite3.connect(sys.argv[1]); c.row_factory=sqlite3.Row; print(json.dumps([dict(r) for r in c.execute(sys.argv[2])]))',db,sql],{encoding:'utf8',windowsHide:true}));}
 async function ready(){await until(()=>output.includes('Done (')&&output.includes('Recovery bootstrap complete'),'Paper/DB bootstrap',120000);}
 async function json(command){const text=await consoleCommand(command,'M7 JSON=');return JSON.parse(text.match(/M7 JSON=(.*)/)[1]);}

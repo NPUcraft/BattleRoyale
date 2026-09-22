@@ -21,7 +21,7 @@ public final class PaperLobby implements Listener {
     public PaperLobby(JavaPlugin plugin,PluginRuntime runtime){this.plugin=plugin;this.runtime=runtime;actionKey=new NamespacedKey(plugin,"lobby_action");}
     private PaperProgression data(){return runtime.progression();}
     public boolean eligible(Player player) {
-        UUID id=player.getUniqueId();if(!runtime.recoveryReady() || player.isDead() || runtime.pendingRestore(id) || runtime.matches().frozen(id) || runtime.spectators().registry().find(id).isPresent())return false;
+        UUID id=player.getUniqueId();if(runtime.editing(id))return false;if(!runtime.recoveryReady() || player.isDead() || runtime.pendingRestore(id) || runtime.matches().frozen(id) || runtime.spectators().registry().find(id).isPresent())return false;
         var session=runtime.rooms().participant(id).orElse(null);
         return session==null || session.players().get(id).state()==com.lastsector.player.PlayerState.ELIMINATED || (session.state()==com.lastsector.session.GameState.ENDING || session.state()==com.lastsector.session.GameState.CLEANUP) && player.getWorld().equals(runtime.lobbySpawn().getWorld());
     }

@@ -1,3 +1,4 @@
+config-version: 2
 # Square halfSize is half the side length. Every target is below every initial bucket.
 profiles:
   default:

@@ -17,8 +17,16 @@ public final class PluginRuntime implements AutoCloseable {
     private PaperMatches matches;
     private PaperProgression progression;
     private final PaperLobby lobby;
+    private final PaperDiagnostics diagnostics;
+    public PaperDiagnostics diagnostics(){return diagnostics;}
+    private com.lastsector.paper.PaperMapAdministration mapAdministration;
+    public com.lastsector.paper.PaperMapAdministration mapAdministration(){return mapAdministration;}
+    public boolean editing(java.util.UUID id){return mapAdministration!=null && mapAdministration.editing(id);}
+    public java.util.concurrent.CompletionStage<Void> isolateEditor(java.util.UUID token,java.util.UUID player,java.util.function.BooleanSupplier current){return isolation.applyAsync(token,java.util.List.of(player),new com.lastsector.loadout.LoadoutDefinition("editor",java.util.Map.of(),0),current);}
+    public void restoreEditor(java.util.UUID token){isolation.end(token);}
     public PaperLobby lobby(){return lobby;}
     private org.bukkit.scheduler.BukkitTask progressionTask;
+    private boolean startupReported;
     public PaperProgression progression(){return progression;}
     private OnDemandWorldProvider provider;
     private final NativeItemSerializer itemSerializer=new NativeItemSerializer();
@@ -54,11 +62,13 @@ public final class PluginRuntime implements AutoCloseable {
     public void beginRecovery(){recovery.start();}
     private final com.lastsector.player.PlayerIsolation<com.lastsector.player.MatchPlayerSnapshot,com.lastsector.loadout.LoadoutDefinition> isolation;
     public LoadoutEditor loadouts() { return loadouts; }
+    public int pendingRestoreCount(){return isolation.pendingCount();}
     public boolean pendingRestore(java.util.UUID player) { return isolation.blocked(player); }
     public void restorePlayer(java.util.UUID player) { isolation.retry(player); }
     public PaperMatches matches() { return matches; }
     public PluginRuntime(JavaPlugin plugin, FoundationService foundation, MessageService messages) {
         this.plugin = plugin; this.foundation = foundation; this.messages = messages;
+        diagnostics=new PaperDiagnostics(plugin,this,foundation);
         lobby=new PaperLobby(plugin,this);plugin.getServer().getPluginManager().registerEvents(lobby,plugin);
         bottles=new StoredExperienceBottles(plugin);celebrations=new CelebrationEffects(plugin);
         groundMarker=new org.bukkit.NamespacedKey(plugin,"ground_loot_session");
@@ -87,6 +97,7 @@ public final class PluginRuntime implements AutoCloseable {
     public void reload() {
         if(recovery!=null && (!recovery.ready() || !recovery.idle() || !durablePlayers.idleForReload()))throw new IllegalStateException("Recovery/checkpoint completion must finish before reload");
         if(progression!=null && !progression.idle())throw new IllegalStateException("Permanent data operations must finish before reload");
+        if(mapAdministration!=null && mapAdministration.busy())throw new IllegalStateException("Map maintenance must finish before reload");
         if(loadouts.busy()) throw new IllegalStateException("Close loadout editors and wait for saves before reload");
         if (rooms != null && !rooms.canReload())
             throw new IllegalStateException("Cannot reload LastSector while rooms or game sessions are active.");
@@ -103,7 +114,7 @@ public final class PluginRuntime implements AutoCloseable {
         if(storage==null){storageSettings=configuration.settings().database();storage=new com.lastsector.storage.RecoveryStorage(new com.lastsector.storage.JdbcStorageProvider(storageSettings),plugin.getLogger()::severe);}
         var progressionConfig=com.lastsector.config.ProgressionConfig.load(plugin);
         var nextProgression=new PaperProgression(plugin,storage,new com.lastsector.storage.JdbcStorageProvider(storageSettings),progressionConfig,configuration.settings().economyProvider());
-        var content=new com.lastsector.config.MatchContentLoader(plugin.getDataFolder().toPath(),new NativeLootItems(),itemSerializer::item).load(configuration);
+        var content=new com.lastsector.config.MatchContentLoader(plugin.getDataFolder().toPath(),new NativeLootItems(),itemSerializer::item).load(configuration,true);
         var server = plugin.getServer();
         var players = new PaperPlayers(server, configuration.settings().lobbyWorld(), messages);
         WorldFiles files;
@@ -124,22 +135,35 @@ public final class PluginRuntime implements AutoCloseable {
         var matches = new PaperMatches(plugin, configuration, scheduler, new com.lastsector.zone.RecoveryClock(com.lastsector.zone.GameClock.system()), new java.util.Random(), players,
                 loadouts,sanitizer,content,isolation,groundMarker,itemSerializer,bottles,celebrations,spectators,messages);
         var result = new RoomRuntimeService(() -> foundation.state().configuration(), foundation.sessions(),
-                scheduler, MapSelector.random(new java.util.Random()), provider, players, Clock.systemUTC(), matches);
+                scheduler, (room,candidates)->MapSelector.random(new java.util.Random()).select(room,foundation.state().maps().all().stream().filter(m->foundation.state().maps().isAvailable(m.id()) && (mapAdministration==null || !mapAdministration.locked(m.id()))).toList()), provider, players, Clock.systemUTC(), matches);
         if(progression!=null)progression.close();
         progression=nextProgression;matches.progression(progression);
         if(progressionTask!=null)progressionTask.cancel();
         lobby.reset();
-        progressionTask=server.getScheduler().runTaskTimer(plugin,()->{progression.tick(recoveryReady());if(recoveryReady())lobby.tick();},1,20);
+        startupReported=false;
+        progressionTask=server.getScheduler().runTaskTimer(plugin,()->{progression.tick(recoveryReady());if(recoveryReady())lobby.tick();
+            if(!startupReported && recoveryReady() && progression.ready() && mapAdministration!=null && mapAdministration.ready()){
+                startupReported=true;plugin.getLogger().info("LastSector "+plugin.getPluginMeta().getVersion()+" rooms="+rooms.rooms().size()+" maps="+foundation.state().maps().all().size()+" storage="+storageSettings.type()+" schema=V"+storage.schema()+" economy="+progression.economy().active()+" recovery=OK");
+                long warnings=diagnostics.collect().checks().stream().filter(c->c.status()!=com.lastsector.admin.DiagnosticsService.Status.OK).count();
+                progression.manualReviewCount().whenComplete((count,error)->{long total=warnings+(error!=null||count>0?1:0);if(total>0)plugin.getLogger().warning("Startup completed with "+total+" warning components. MANUAL_REVIEW="+(error==null?count:"unavailable")+". Run /ls admin diagnose");});
+                if(foundation.state().maps().all().stream().noneMatch(m->foundation.state().maps().isAvailable(m.id())))plugin.getLogger().warning("No valid map templates available. Install templates and run /ls admin map validate <map>.");
+            }
+        },1,20);
         this.matches = matches;
         this.provider = provider;
         recovery=new PaperRecoveryCoordinator(plugin,configuration,storage,durablePlayers,isolation,files,provider,matches,result,foundation.sessions(),sanitizer,recoveryEntities);
         durablePlayers.storage(storage,this::recoveryReady);
         matches.recoveryAccess(this::recoveryReady,storage::healthy,durablePlayers::blocked);
+        if(mapAdministration!=null)mapAdministration.close();
+        mapAdministration=new PaperMapAdministration(plugin,this,foundation,configuration,content);
+        matches.administrationBlocked(this::editing);
         loadouts.replace(content.loadouts());
         playerStates.lobby(configuration.settings().lobbyWorld());
         return result;
     }
     @Override public void close() {
+        if(mapAdministration!=null)mapAdministration.close();
+        diagnostics.close();
         if(progressionTask!=null)progressionTask.cancel();
         if(progression!=null)progression.close();
         if(recovery!=null)recovery.close();

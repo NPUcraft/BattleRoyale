@@ -42,6 +42,8 @@ public final class PaperProgression implements AutoCloseable {
         plugin.getLogger().info("Economy: "+economy.diagnostics());
         if(config.shopEnabled() && economy.provider()==null)plugin.getLogger().warning("Paid cosmetic shop disabled: configured economy provider/currency is unavailable. Matches and free cosmetics remain available.");
     }
+    public String diagnostics(){return "profiles="+profiles.size()+" profileLoading="+loading.size()+" profileFailed="+failed.size()+" resultOutboxPending="+pending.size()+" initialized="+initialized+" leaderboards="+cache.diagnostics();}
+    public boolean ready(){return initialized;}
     public ProgressionConfig config(){return config;}
     public EconomySelection economy(){return economy;}
     public boolean idle(){return loading.isEmpty()&&writing.isEmpty()&&pending.isEmpty()&&plugin.getServer().getOnlinePlayers().stream().noneMatch(p->purchases.busy(p.getUniqueId()));}
@@ -105,6 +107,7 @@ public final class PaperProgression implements AutoCloseable {
         if(!config.cosmetics().containsKey(cosmetic))throw new IllegalArgumentException("Unknown cosmetic");
         return storage.call(()->{if(revoke)cosmetics.revoke(id,cosmetic);else cosmetics.grant(id,cosmetic,System.currentTimeMillis());return (Void)null;}).whenComplete((value,error)->refresh(id));
     }
+    public CompletableFuture<Long> manualReviewCount(){return storage.call(cosmetics::manualReviewCount);}
     public CompletableFuture<List<Purchase>> purchases(){return storage.call(()->cosmetics.manualReview(0));}
     private void refresh(UUID id){var online=plugin.getServer().getPlayer(id);if(online!=null)load(online);}
     public void close(){closed=true;for(var result:pending.values())storage.call(()->{if(outbox==null)outbox=new ResultOutbox(plugin.getDataFolder().toPath().resolve("result-outbox"));outbox.persist(result);return null;});}

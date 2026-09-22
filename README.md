@@ -1,6 +1,6 @@
 # LastSector
 
-LastSector 是 **Java 21 / Paper 1.21.8** 的多人 Battle Royale 插件。当前为 **M8 — Lobby, Economy, Cosmetics & Ranking**：固定大厅菜单、永久档案与战绩、按队伍名次计算的 Rating、独立 Kill Score、历史排行榜和纯外观商店。M1–M7 的比赛、物品隔离及崩溃恢复继续保留。下一里程碑为 M9 管理工具、地图编辑、诊断、压力测试与发布加固。
+LastSector 是 **Java 21 / Paper 1.21.8** 的多人 Battle Royale 插件。当前为 **M9 — Release Hardening，1.0.0-rc.1 发布候选**：在 M1–M8 基础上加入安全地图编辑/维护、诊断、配置迁移、压力测试和发布工件。未自动发布到任何平台。
 
 ## 构建
 
@@ -11,14 +11,14 @@ LastSector 是 **Java 21 / Paper 1.21.8** 的多人 Battle Royale 插件。当�
 ```
 
 Gradle 8.14 Wrapper 已附带，首次构建需要网络。Linux/macOS 使用 `./gradlew clean test build`。
-安装产物：`build/libs/lastsector-0.1.0-SNAPSHOT.jar`。Paper API 为 compileOnly，JUnit 和测试探针不进入安装 JAR。
+安装产物：`build/libs/lastsector-1.0.0-rc.1.jar`。Paper API 为 compileOnly，JUnit 和测试探针不进入安装 JAR。
 
 ## 安装与开局
 
-1. 将 JAR 放入 Paper 1.21.8 的 plugins。首次启动生成 config/rooms/maps/zones/loadouts/loot-tables.yml 和默认两张地图的 map-data/<id>/loot.yml，已有配置不会覆盖。
+1. 将 JAR 放入 Paper 1.21.8 的 plugins。首次启动生成 config/rooms/maps/zones/loadouts/loot-tables/lobby/ranking/cosmetics.yml 和默认两张地图的 map-data/<id>/loot.yml，已有配置不会覆盖。
 2. config.yml 的 lobby.world 必须是已加载世界，默认 world；大厅返回点使用世界 spawn。
 3. 将**已经关闭且不再被编辑**的 Overworld 模板放入 plugins/LastSector/maps/city、maps/desert，或修改 maps.yml。保留有效 level.dat、WorldGenSettings、region/entities/poi/data/datapacks。
-4. 在 playable-area 内提供足够安全地面。模板目录缺失会在准备该局时失败；区域尺寸与圈配置冲突会在启动/reload 时直接拒绝。
+4. 在 playable-area 内提供足够安全地面。启动/reload 校验将模板缺失或地图尺寸冲突的地图标记为不可用；其他有效地图继续运行。全局房间/圈规则损坏仍拒绝加载。
 5. 玩家 /ls join solo，人数达标自动倒计时。管理员 /ls debug start solo 可绕过 minPlayers，但必须有在线参与者。
 6. PREPARING 冻结 roster、均衡分队、保存 Lobby 原快照并应用一次 Loadout；准备期间冻结物品操作。STARTING 按冻结人数选初始 halfSize，清理世界、规划出生点、生成一次性 Loot。全部成功后同 tick 传送在线成员，在各自出生点创建断线成员的替身，进入 RUNNING 并开始保护计时。
 7. /ls debug end solo 结束比赛，恢复原状态后应用固定大厅菜单、保留末影箱/经验等状态、取消任务、移除 UI/临时来源记录、返回大厅、卸载并删除副本。所有模式的正常淘汰在 tick 末按 Team 判断胜负，展示 60 秒后自动清理；debug end 在 RUNNING 直接清理，仅保存非正式审计结果、不计永久战绩，在 ENDING 跳过剩余展示。
@@ -238,3 +238,14 @@ M7 V1 老快照仍可恢复游戏，但没有 M8 名次/伤害/冻结档案的�
 KILL_EFFECT、WIN_EFFECT、DEATHBOX_SKIN、LOBBY_EFFECT 每类最多装备一个；解锁永久保存，缺失定义保留 ownership 并回退默认视觉。提供粒子击杀、无伤闪电、胜利烟花、末影/金色死亡盒和大厅星光示例。比赛 roster 冻结外观，恢复使用本局快照；击杀使用 killer，DeathBox 使用 deceased，Team/tie 所有胜者均有庆祝。大厅效果为单一循环（每玩家 3 粒子/秒、总上限 300/次），加入房间/退出即停止。视觉不改变装备、伤害、碰撞、掉落、拾取距离或游戏优势。
 
 未实现 Seasons、MMR 匹配、Party、NPC/Citizens、PlaceholderAPI 要求或任何付费战斗优势。M5 provenance 与 M6 公共 API 替身的既有限制继续适用。
+
+
+## M9 管理与发布
+
+管理入口：`/ls admin map list`、`edit <map>`、`validate <map> [--deep]`、`pregenerate <map>`。预生成需要独立 `pregenerate commit <map> confirm`。`/ls admin diagnose`、`/ls debug perf`、`/ls debug worlds`、`/ls admin supportbundle` 提供维护信息。完整说明见 [ADMIN](docs/ADMIN.md)、[MAPS](docs/MAPS.md)、[COMMANDS](docs/COMMANDS.md)、[CONFIGURATION](docs/CONFIGURATION.md)、[RECOVERY](docs/RECOVERY.md)、[ECONOMY](docs/ECONOMY.md)。
+
+升级前停服备份插件目录、数据库和模板；替换 JAR，检查 config v1→v2 迁移日志，再运行 config validate / diagnose。未知更高配置版本拒绝加载。无模板的首次安装允许核心启动，但地图不可开局。
+
+`gradlew.bat stressTest` 是独立压力测试，不随普通 test/check 执行。`scripts/soak/paper-soak.mjs` 使用隔离 Paper 与 10 个协议客户端，默认 20 轮 × 5 房间。测试范围及实测数字见 [VERIFICATION](docs/VERIFICATION.md)，不等同于大量真实玩家容量承诺。
+
+构建同时生成 JAR 和 `.jar.sha256`；compileOnly Paper/经济 API 不进入生产 JAR。Gradle lockfile 固定解析的传递依赖版本；Paper 提供方 API 本身是 1.21.8 SNAPSHOT，不宣称上游快照内容不可变化。所有 runtime 库均固定版本。

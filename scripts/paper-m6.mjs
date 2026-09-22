@@ -17,7 +17,7 @@ const data = path.join(root, 'plugins/LastSector');
 await fs.mkdir(data, { recursive: true });
 for (const name of ['paper.jar', 'libraries', 'versions', 'cache', 'eula.txt'])
   await fs.cp(path.join(source, name), path.join(root, name), { recursive: true });
-await fs.copyFile('build/libs/lastsector-0.1.0-SNAPSHOT.jar', path.join(root, 'plugins/lastsector.jar'));
+await fs.copyFile('build/libs/lastsector-1.0.0-rc.1.jar', path.join(root, 'plugins/lastsector.jar'));
 await fs.copyFile('build/integration/lastsector-test-probe.jar', path.join(root, 'plugins/probe.jar'));
 for (const file of ['config.yml', 'rooms.yml', 'maps.yml', 'zones.yml']) {
   let text = await fs.readFile(path.join('src/main/resources', file), 'utf8');

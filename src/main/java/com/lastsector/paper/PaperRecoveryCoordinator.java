@@ -19,6 +19,7 @@ public final class PaperRecoveryCoordinator implements AutoCloseable {
     private final PaperMatches matches;private final RoomRuntimeService rooms;private final SessionManager sessions;private final RecoveryEntityCleaner cleaner;
     private final PaperRecoverySnapshots snapshots;private final SnapshotCodec codec=new SnapshotCodec();private final org.bukkit.scheduler.BukkitTask pump;
     private final Map<UUID,Long> revisions=new HashMap<>();private final Map<UUID,SessionRecoverySnapshot> known=new HashMap<>();private final Set<UUID> completing=new HashSet<>();
+    private final long recoveryStarted=System.nanoTime();
     private boolean ready,closing,housekeeping;private long lastCheckpoint,lastLease,lastHousekeeping;private int recovered,abandoned,orphans;private String bootstrap="CONNECTING";
     public PaperRecoveryCoordinator(JavaPlugin plugin,ConfigurationSnapshot config,RecoveryStorage storage,PaperDurablePlayers players,PlayerIsolation<MatchPlayerSnapshot,LoadoutDefinition> isolation,WorldFiles files,OnDemandWorldProvider worlds,PaperMatches matches,RoomRuntimeService rooms,SessionManager sessions,WorldSanitizer sanitizer,RecoveryEntityCleaner cleaner) {
         this.plugin=plugin;this.config=config;this.storage=storage;this.players=players;this.isolation=isolation;this.files=files;this.worlds=worlds;this.matches=matches;this.rooms=rooms;this.sessions=sessions;this.cleaner=cleaner;
@@ -47,7 +48,7 @@ public final class PaperRecoveryCoordinator implements AutoCloseable {
             if(!saved.sessionId().equals(row.session()) || !saved.roomId().equals(row.room()) || !saved.mapId().equals(row.map()) || !saved.worldName().equals(row.world()) || saved.revision()!=row.revision() || !saved.gameState().equals(row.state()))throw new RecoveryPlan.Rejected("METADATA_MISMATCH");
             preserveResult(saved);
             if(!config.settings().recovery().enabled() || !Set.of("RUNNING","ENDING").contains(saved.gameState()))throw new RecoveryPlan.Rejected("DISABLED_OR_UNRECOVERABLE_PHASE");
-            var room=config.rooms().stream().filter(r->r.id().equals(saved.roomId())).findFirst().orElseThrow();var map=config.maps().stream().filter(m->m.id().equals(saved.mapId())).findFirst().orElseThrow();var zone=config.zoneProfiles().stream().filter(z->z.id().equals(room.zoneProfileId())).findFirst().orElseThrow();
+            var room=config.rooms().stream().filter(r->r.id().equals(saved.roomId())).findFirst().orElseThrow();var map=config.maps().stream().filter(m->m.id().equals(saved.mapId())).findFirst().orElseThrow();if(saved.mapMetadata()!=null)map=saved.mapMetadata().apply(map);var zone=config.zoneProfiles().stream().filter(z->z.id().equals(room.zoneProfileId())).findFirst().orElseThrow();
             if(!PaperRecoverySnapshots.rules(room,map,zone).equals(saved.rulesHash()))throw new RecoveryPlan.Rejected("CONFIGURATION_CHANGED");
             try{return new Candidate(saved,files.recovery(saved.sessionId(),saved.roomId(),map,saved.worldName(),saved.relativePath()));}catch(java.io.IOException failure){throw new RecoveryPlan.Rejected("OWNERSHIP_PATH_OR_WORLD_FILES");}
         }).whenComplete((candidate,error)->{
@@ -85,7 +86,7 @@ public final class PaperRecoveryCoordinator implements AutoCloseable {
     }
     private void finishBootstrap(){
         var active=new HashMap<UUID,Set<UUID>>();for(var entry:matches.allEntries())if(entry.session.state()==GameState.RUNNING)active.put(entry.session.sessionId(),entry.session.players().keySet().stream().filter(entry.session::combatActive).collect(java.util.stream.Collectors.toSet()));
-        players.route(isolation,active);ready=true;matches.recoveryCompleted();bootstrap="READY";lastCheckpoint=System.nanoTime();lastLease=0;
+        players.route(isolation,active);com.lastsector.admin.PerformanceMetricsService.LIVE.record(com.lastsector.admin.PerformanceMetricsService.Timer.RECOVERY,System.nanoTime()-recoveryStarted);ready=true;matches.recoveryCompleted();bootstrap="READY";lastCheckpoint=System.nanoTime();lastLease=0;
         plugin.getLogger().info("Recovery bootstrap complete: recovered="+recovered+" abandoned="+abandoned+" durableOriginals="+players.pendingCount());housekeep();
     }
     private void fatal(String text){bootstrap="FAILED";plugin.getLogger().severe(text);plugin.getServer().getPluginManager().disablePlugin(plugin);}

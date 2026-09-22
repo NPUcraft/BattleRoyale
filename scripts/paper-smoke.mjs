@@ -14,7 +14,7 @@ await fs.mkdir(path.join(root, 'plugins'), { recursive: true });
 for (const name of ['paper.jar', 'libraries', 'versions', 'cache', 'eula.txt']) {
   await fs.cp(path.join(source, name), path.join(root, name), { recursive: true });
 }
-await fs.copyFile(path.resolve('build/libs/lastsector-0.1.0-SNAPSHOT.jar'),
+await fs.copyFile(path.resolve('build/libs/lastsector-1.0.0-rc.1.jar'),
   path.join(root, 'plugins', 'lastsector.jar'));
 await fs.writeFile(path.join(root, 'server.properties'), [
   'server-ip=127.0.0.1', 'server-port=0', 'online-mode=true',
@@ -69,8 +69,8 @@ try {
   assert.doesNotMatch(server.text(), /ERROR.*LastSector|Error occurred while enabling LastSector/);
   assert.doesNotMatch(server.text(), /ERROR|Exception/);
   results.push('Paper 1.21.8 startup and plugin enable');
-  await server.command('lastsector version', 'Version 0.1.0-SNAPSHOT');
-  await server.command('ls version', 'Version 0.1.0-SNAPSHOT');
+  await server.command('lastsector version', 'Version 1.0.0-rc.1');
+  await server.command('ls version', 'Version 1.0.0-rc.1');
   await server.command('lastsector help', '/lastsector reload');
   await server.command('lastsector', '/lastsector help');
   const rooms = await server.command('lastsector debug rooms', 'squad (Squad)');

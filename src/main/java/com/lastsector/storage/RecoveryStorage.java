@@ -14,7 +14,7 @@ public final class RecoveryStorage implements AutoCloseable {
     public RecoveryRepository repository(){return repository;}public UUID owner(){return owner;}public boolean healthy(){return connected;}public int schema(){return schema;}
     public <T> CompletableFuture<T> call(Callable<T> work) {
         var result=new CompletableFuture<T>();if(closed)return CompletableFuture.failedFuture(new IllegalStateException("Storage closed"));
-        worker.submit(work).whenComplete((value,error)->{if(error!=null)failure(error);else connected=true;completions.add(()->{if(error==null)result.complete(value);else result.completeExceptionally(new IllegalStateException(error instanceof com.lastsector.recovery.RecoveryPlan.Rejected ? error.getMessage() : "Recovery storage operation failed; see redacted storage diagnostics"));});});return result;
+        worker.submit(()->{long started=System.nanoTime();try{return work.call();}finally{com.lastsector.admin.PerformanceMetricsService.LIVE.record(com.lastsector.admin.PerformanceMetricsService.Timer.DB_OPERATION,System.nanoTime()-started);}}).whenComplete((value,error)->{if(error!=null)failure(error);else connected=true;completions.add(()->{if(error==null)result.complete(value);else result.completeExceptionally(new IllegalStateException(error instanceof com.lastsector.recovery.RecoveryPlan.Rejected ? error.getMessage() : "Recovery storage operation failed; see redacted storage diagnostics"));});});return result;
     }
     public CompletableFuture<Void> initialize(){return call(repository::migrate).thenAccept(version->schema=version);}
     public void pump(){for(int i=0;i<128;i++){var completion=completions.poll();if(completion==null)break;completion.run();}}
@@ -22,7 +22,7 @@ public final class RecoveryStorage implements AutoCloseable {
     public void checkpoint(RecoveryRepository.Row row){if(retired.contains(row.session()))return;latest.compute(row.session(),(id,previous)->previous==null || row.revision()>previous.revision()?row:previous);flush(row.session());}
     private void flush(UUID id) {
         var row=latest.get(id);if(row==null || retired.contains(id) || !writing.add(id))return;
-        call(()->repository.save(row,owner,System.currentTimeMillis()+LEASE_MILLIS)).whenComplete((saved,error)->{
+        call(()->{long started=System.nanoTime();try{return repository.save(row,owner,System.currentTimeMillis()+LEASE_MILLIS);}finally{com.lastsector.admin.PerformanceMetricsService.LIVE.record(com.lastsector.admin.PerformanceMetricsService.Timer.CHECKPOINT,System.nanoTime()-started);com.lastsector.admin.PerformanceMetricsService.LIVE.record(com.lastsector.admin.PerformanceMetricsService.Timer.DB_WRITE,System.nanoTime()-started);}}).whenComplete((saved,error)->{
             writing.remove(id);if(error!=null)return;
             if(!saved){failure(new IllegalStateException("Revision/ownership rejected"));return;}
             lastWrite=System.currentTimeMillis();revisions.put(id,row.revision());latest.remove(id,row);if(latest.containsKey(id))flush(id);
@@ -31,6 +31,6 @@ public final class RecoveryStorage implements AutoCloseable {
     public void retry(){if(!connected && latest.isEmpty())call(repository::restores);for(UUID id:List.copyOf(latest.keySet()))flush(id);}
     public CompletableFuture<Void> retire(UUID id,String status){retired.add(id);latest.remove(id);return call(()->{repository.retire(id,owner,status);return null;});}
     public long written(UUID id){return revisions.getOrDefault(id,0L);}
-    public String diagnostics(){return "provider="+provider+" connected="+connected+" schema="+schema+" queue="+worker.depth()+" coalesced="+latest.size()+" lastSuccessfulWrite="+lastWrite+" lastFailure="+lastFailure;}
+    public String diagnostics(){return "provider="+provider+" connected="+connected+" schema="+schema+" queue="+worker.depth()+" maxQueue="+worker.maximumDepth()+" coalesced="+latest.size()+" lastSuccessfulWrite="+lastWrite+" lastFailure="+lastFailure;}
     public void close(){closed=true;worker.close();}
 }

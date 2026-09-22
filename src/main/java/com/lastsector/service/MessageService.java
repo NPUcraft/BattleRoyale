@@ -26,7 +26,7 @@ public final class MessageService {
         if (sender.hasPermission("lastsector.admin")) send(sender, "/lastsector reload | admin loadout edit <room> | debug storage/recovery/rooms/maps | debug session/zone/protection/loot/deathboxes/teams/offline/start/end <room>");
     }
     public void denied(CommandSender sender) { send(sender, "You do not have permission to use this command."); }
-    public void version(CommandSender sender, String version) { send(sender, "Version " + version + " (Milestone 8 Lobby & Permanent Progression)"); }
+    public void version(CommandSender sender, String version) { send(sender, "Version " + version + " (Milestone 9 Release Hardening) | Paper target: 1.21.8 | Java target: 21 | Schema: V2 | "+com.lastsector.admin.BuildInfo.text()); }
     public void reloaded(CommandSender sender) { send(sender, "Configuration reloaded successfully."); }
     public void reloadFailed(CommandSender sender, String reason) { send(sender, "Reload failed; previous configuration retained. " + reason); }
     public void unknown(CommandSender sender) { send(sender, "Unknown command. Use /lastsector help."); }
@@ -42,7 +42,7 @@ public final class MessageService {
         // JavaPlugin's logger already supplies [LastSector].
         logger.info("Loaded " + snapshot.rooms().size() + " rooms.");
         logger.info("Loaded " + snapshot.maps().size() + " map templates.");
-        logger.info("Milestone 8 initialized. Recovery bootstrap started; joins remain gated.");
+        logger.info("Milestone 9 initialized. Recovery bootstrap started; joins remain gated.");
         if (snapshot.settings().debug()) logger.info("Debug enabled. Runtime directory: " + snapshot.settings().runtimeDirectory());
     }
     public void startupFailed(Exception error) { logger.log(java.util.logging.Level.SEVERE, "Startup failed; disabling LastSector. " + error.getMessage(), error); }
@@ -82,7 +82,7 @@ public final class MessageService {
     public void session(CommandSender sender, com.lastsector.session.GameSession session, int remaining,long now) {
         send(sender, "room=" + session.room().id() + " session=" + session.sessionId() + " state=" + session.state()
                 + " players=" + session.players().keySet() + " min/max=" + session.room().minPlayers() + "/" + session.room().maxPlayers()
-                + " map=" + session.selectedMap().map(MapTemplate::id).orElse("N/A")
+                + " mapRevision="+session.selectedMap().map(MapTemplate::metadataRevision).orElse(0L)+ " map=" + session.selectedMap().map(MapTemplate::id).orElse("N/A")
                 + " world=" + session.gameWorld().map(com.lastsector.map.GameWorld::worldName).orElse("N/A")
                 + " path=" + session.gameWorld().map(world -> world.runtimePath().toString()).orElse("N/A")
                 + " countdown=" + (remaining < 0 ? "N/A" : remaining)

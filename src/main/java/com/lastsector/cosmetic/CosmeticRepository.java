@@ -68,6 +68,7 @@ public final class CosmeticRepository {
     public void quarantineAmbiguous()throws SQLException {
         try(var c=provider.connect();var s=c.prepareStatement("UPDATE cosmetic_purchase_ledger SET status='MANUAL_REVIEW',updated_at=? WHERE status IN ('PENDING','WITHDRAWING')")) {s.setLong(1,System.currentTimeMillis());s.executeUpdate();}
     }
+    public long manualReviewCount()throws SQLException{try(var c=provider.connect();var s=c.prepareStatement("SELECT COUNT(*) FROM cosmetic_purchase_ledger WHERE status='MANUAL_REVIEW'");var rows=s.executeQuery()){rows.next();return rows.getLong(1);}}
     public List<Purchase> manualReview(int page)throws SQLException {
         if(page<0 || page>Integer.MAX_VALUE/40)throw new IllegalArgumentException("Invalid page");
         try(var c=provider.connect();var s=c.prepareStatement("SELECT * FROM cosmetic_purchase_ledger WHERE status='MANUAL_REVIEW' ORDER BY created_at,purchase_id LIMIT 40 OFFSET ?")) {

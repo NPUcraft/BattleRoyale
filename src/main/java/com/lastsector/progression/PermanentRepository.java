@@ -50,7 +50,8 @@ public final class PermanentRepository {
             s.setString(1,session.toString());try(var r=s.executeQuery()){return r.next()?Optional.of(gson.fromJson(r.getString(1),MatchResult.class)):Optional.empty();}
         }
     }
-    public MatchResult finalizeResult(MatchResult facts)throws SQLException {
+    public MatchResult finalizeResult(MatchResult facts)throws SQLException {long start=System.nanoTime();try{return finalizeMeasured(facts);}finally{com.lastsector.admin.PerformanceMetricsService.LIVE.record(com.lastsector.admin.PerformanceMetricsService.Timer.DB_WRITE,System.nanoTime()-start);}}
+    private MatchResult finalizeMeasured(MatchResult facts)throws SQLException {
         try(var c=provider.connect()) {
             c.setAutoCommit(false);
             try {

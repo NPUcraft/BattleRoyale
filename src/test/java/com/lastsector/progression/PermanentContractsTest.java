@@ -106,6 +106,11 @@ class PermanentContractsTest {
         assertEquals("vault",EconomySelection.select("auto",List.of("coinsengine","vault"),"coins",true,name->{if(name.equals("coinsengine"))throw new NoClassDefFoundError("optional");return available;}).active());
         assertNull(EconomySelection.select("coinsengine",List.of("coinsengine","vault"),"coins",true,name->{throw new NoClassDefFoundError("optional");}).provider());
     }
+    @Test void incompatibleModernApiFallsBackAndDiagnosticsAreSafe() {
+        var available=new Economy();
+        assertEquals("vault",EconomySelection.select("auto",List.of("excellenteconomy","vault"),"coins",true,name->{if(name.equals("excellenteconomy"))throw new UnsupportedClassVersionError("Java 25 API on Java 21");return available;}).active());
+        assertFalse(EconomySelection.select("auto",List.of("excellenteconomy","vault"),"coins",true,name->null).shopEnabled());
+    }
     @Test void pendingPurchaseRejectsConcurrentRequestBeforeAnyWithdrawal()throws Exception {
         var queued=new ArrayList<Runnable>();var service=new PurchaseService(cosmetics,new PurchaseService.AsyncDatabase(){public <T> CompletableFuture<T> call(Callable<T> work){var result=new CompletableFuture<T>();queued.add(()->{try{result.complete(work.call());}catch(Exception e){result.completeExceptionally(e);}});return result;}});
         UUID player=UUID.randomUUID();var economy=new Economy();var definition=definition("effect",CosmeticCategory.KILL_EFFECT,10);

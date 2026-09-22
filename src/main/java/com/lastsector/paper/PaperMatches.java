@@ -36,6 +36,8 @@ public final class PaperMatches implements MatchLifecycle {
     private java.util.function.BooleanSupplier recoveryReady=()->true,storageHealthy=()->true;
     private java.util.function.Predicate<UUID> durableBlocked=id->false;
     public void recoveryAccess(java.util.function.BooleanSupplier ready,java.util.function.BooleanSupplier healthy,java.util.function.Predicate<UUID> blocked){recoveryReady=ready;storageHealthy=healthy;durableBlocked=blocked;}
+    private java.util.function.Predicate<java.util.UUID> administrationBlocked=id->false;
+    public void administrationBlocked(java.util.function.Predicate<java.util.UUID> value){administrationBlocked=value;}
     @Override public void checkStart(){if(!recoveryReady.getAsBoolean())throw new IllegalStateException("LastSector is still recovering sessions");if(!storageHealthy.getAsBoolean())throw new IllegalStateException("Match cannot start because recovery storage is unavailable");}
 
     private Consumer<GameSession> finished=session->{};
@@ -90,7 +92,8 @@ public final class PaperMatches implements MatchLifecycle {
         entry.offline.started();entry.changed();
         entry.task=new SessionLoop(scheduler,()->tick(entry),failed);
     }
-    private void tick(Entry entry) {
+    private void tick(Entry entry) {long started=System.nanoTime();try{tickMeasured(entry);}finally{com.lastsector.admin.PerformanceMetricsService.LIVE.record(com.lastsector.admin.PerformanceMetricsService.Timer.ZONE_TICK,System.nanoTime()-started);}}
+    private void tickMeasured(Entry entry) {
         if(!recoveryReady.getAsBoolean())return;
         GameSession session=entry.session;
         if (entries.get(session.sessionId())!=entry || session.state()!=GameState.RUNNING) return;
@@ -197,6 +200,7 @@ public final class PaperMatches implements MatchLifecycle {
         if(!isolation.ready(entry.session.sessionId()))throw new IllegalStateException("Disconnected before durable preparation completed");
         entry.offline.disconnect(player);
     }
+    public java.util.Map<String,Long> resourceCounts(){var all=new java.util.HashSet<Entry>(entries.values());all.addAll(draining);return java.util.Map.of("entries",(long)entries.size(),"draining",(long)draining.size(),"bossbars",all.stream().mapToLong(e->e.ui.size()).sum(),"deathboxes",all.stream().mapToLong(e->e.combat==null?0:e.combat.boxes().size()).sum(),"offlineBodies",all.stream().mapToLong(e->e.offline==null?0:e.offline.size()).sum());}
     public Entry entry(UUID session){return entries.get(session);}
     public Entry participant(UUID id){return entries.values().stream().filter(e->e.session.players().containsKey(id)).findFirst().orElse(null);}
     public boolean joined(Player player){Entry entry=participant(player.getUniqueId());return entry!=null && entry.offline!=null && entry.offline.reconnect(player);}
@@ -214,6 +218,7 @@ public final class PaperMatches implements MatchLifecycle {
     public boolean frozen(UUID player){if(durableBlocked.test(player) || isolation.blocked(player))return true;var entry=participant(player);return entry!=null && (entry.session.state()==GameState.PREPARING || entry.session.state()==GameState.STARTING || entry.session.players().get(player).state()==PlayerState.DISCONNECTED && entry.offline.find(player)!=null);}
     public String offline(UUID session){var entry=entries.get(session);return entry==null?"offline=none":entry.offline.diagnostics();}
     @Override public void checkJoin(UUID player) {
+        if(administrationBlocked.test(player))throw new IllegalStateException("Close your map editor first");
         if(progression!=null)progression.check(player);
         if(!recoveryReady.getAsBoolean())throw new IllegalStateException("LastSector is still recovering sessions");
         if(durableBlocked.test(player))throw new IllegalStateException("Your durable player restore must finish before joining");

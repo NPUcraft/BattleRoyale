@@ -1,3 +1,4 @@
+config-version: 2
 loot-tables:
   basic:
     min-rolls: 1

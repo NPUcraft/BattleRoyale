@@ -50,6 +50,7 @@ public final class PaperSpectators {
     private Location safe(PaperMatches.Entry entry,Location requested) {
         World world=Objects.requireNonNull(plugin.getServer().getWorld(entry.session.gameWorld().orElseThrow().worldName()));
         if(requested!=null && requested.getWorld().getUID().equals(world.getUID()))return new Location(world,requested.getX(),Math.max(world.getMinHeight()+2,Math.min(world.getMaxHeight()-3,requested.getY())),requested.getZ());
+        var metadata=entry.session.selectedMap().orElseThrow().metadata();if(metadata!=null && metadata.spectator()!=null){var p=metadata.spectator();return new Location(world,p.x(),Math.max(world.getMinHeight()+2,Math.min(world.getMaxHeight()-3,p.y())),p.z(),p.yaw(),p.pitch());}
         var zone=entry.session.zone().orElse(null);return zone==null?world.getSpawnLocation():new Location(world,zone.current().centerX(),Math.max(world.getMinHeight()+5,world.getSpawnLocation().getY()+10),zone.current().centerZ());
     }
     private void enter(Player p,PaperMatches.Entry entry,SpectatorRegistry.Kind kind,UUID snapshot,Location location) {

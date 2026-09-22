@@ -33,6 +33,20 @@ public final class TestProbe extends JavaPlugin implements Listener {
         getServer().getPluginManager().registerEvents(m6,this);
         getCommand("lsprobe").setExecutor((sender,command,label,args)-> {
             try {
+                if(args[0].equals("m9abuse")) {
+                    var player=Objects.requireNonNull(getServer().getPlayerExact(args[1]));
+                    var view=player.getOpenInventory();var pm=getServer().getPluginManager();int checks=0;
+                    for(var click:java.util.List.of(org.bukkit.event.inventory.ClickType.SHIFT_LEFT,org.bukkit.event.inventory.ClickType.NUMBER_KEY,org.bukkit.event.inventory.ClickType.DOUBLE_CLICK,org.bukkit.event.inventory.ClickType.MIDDLE,org.bukkit.event.inventory.ClickType.DROP,org.bukkit.event.inventory.ClickType.SWAP_OFFHAND)) {
+                        var event=new org.bukkit.event.inventory.InventoryClickEvent(view,org.bukkit.event.inventory.InventoryType.SlotType.CONTAINER,0,click,org.bukkit.event.inventory.InventoryAction.UNKNOWN,0);
+                        pm.callEvent(event);if(!event.isCancelled())throw new IllegalStateException("GUI abuse not cancelled: "+click);checks++;
+                    }
+                    var drag=new org.bukkit.event.inventory.InventoryDragEvent(view,new org.bukkit.inventory.ItemStack(Material.STONE),new org.bukkit.inventory.ItemStack(Material.STONE),false,java.util.Map.of(0,new org.bukkit.inventory.ItemStack(Material.STONE)));
+                    pm.callEvent(drag);if(!drag.isCancelled())throw new IllegalStateException("GUI drag not cancelled");checks++;
+                    var creative=new org.bukkit.event.inventory.InventoryCreativeEvent(view,org.bukkit.event.inventory.InventoryType.SlotType.CONTAINER,0,new org.bukkit.inventory.ItemStack(Material.DIAMOND));
+                    pm.callEvent(creative);if(!creative.isCancelled())throw new IllegalStateException("Creative inventory mutation not cancelled");checks++;
+                    sender.sendMessage("M9 abuse cancelled="+checks);return true;
+                }
+                if(args[0].equals("m9interact")){var player=Objects.requireNonNull(getServer().getPlayerExact(args[1]));int slot=Integer.parseInt(args[2]);player.getInventory().setHeldItemSlot(slot);var block=player.getWorld().getBlockAt(Integer.parseInt(args[4]),Integer.parseInt(args[5]),Integer.parseInt(args[6]));if(args.length>7)block.setType(Material.valueOf(args[7]));var event=new org.bukkit.event.player.PlayerInteractEvent(player,args[3].equals("left")?org.bukkit.event.block.Action.LEFT_CLICK_BLOCK:org.bukkit.event.block.Action.RIGHT_CLICK_BLOCK,player.getInventory().getItemInMainHand(),block,org.bukkit.block.BlockFace.UP,org.bukkit.inventory.EquipmentSlot.HAND);getServer().getPluginManager().callEvent(event);sender.sendMessage("M9 interaction cancelled="+event.isCancelled());return true;}
                 if(args[0].equals("m8visual")){var player=Objects.requireNonNull(getServer().getPlayerExact(args[1]));sender.sendMessage("M8 displays="+player.getWorld().getEntitiesByClass(BlockDisplay.class).stream().map(d->d.getBlock().getMaterial()).toList());return true;}
                 if(args[0].equals("m8money")) {
                     var player=Objects.requireNonNull(getServer().getPlayerExact(args[1]));

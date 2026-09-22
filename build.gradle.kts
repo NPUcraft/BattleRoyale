@@ -1,6 +1,7 @@
+import java.security.MessageDigest
 plugins { java }
 group = "com.lastsector"
-version = "0.1.0-SNAPSHOT"
+version = "1.0.0-rc.1"
 repositories {
     mavenCentral()
     maven("https://repo.nightexpressdev.com/releases")
@@ -51,4 +52,47 @@ tasks.jar {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     from(configurations.runtimeClasspath.get().map { if (it.isDirectory) it else zipTree(it) })
     exclude("META-INF/*.SF", "META-INF/*.RSA", "META-INF/*.DSA", "module-info.class", "META-INF/versions/**/module-info.class")
+}
+
+// Lock the complete resolved dependency graph; Paper remains a provided API.
+dependencyLocking { lockAllConfigurations() }
+val commitHash = providers.provider {
+    try {
+        val process = ProcessBuilder("git", "rev-parse", "--short", "HEAD").directory(rootDir).redirectErrorStream(true).start()
+        val value = process.inputStream.bufferedReader().readText().trim()
+        if (process.waitFor() == 0 && value.matches(Regex("[0-9a-f]{7,40}"))) value else "unknown"
+    } catch (_: Exception) { "unknown" }
+}
+val generateBuildInfo by tasks.registering {
+    val output = layout.buildDirectory.file("generated/build-info/lastsector-build.properties")
+    inputs.property("commit", commitHash)
+    inputs.property("version", project.version.toString())
+    outputs.file(output)
+    doLast { output.get().asFile.apply { parentFile.mkdirs(); writeText("commit=${commitHash.get()}\nversion=${project.version}\ntype=release-candidate\njava-target=21\npaper-target=1.21.8\n") } }
+}
+tasks.processResources { dependsOn(generateBuildInfo); from(layout.buildDirectory.dir("generated/build-info")) }
+tasks.jar { manifest.attributes("Implementation-Version" to project.version, "Build-Type" to "release-candidate", "Java-Target" to "21", "Paper-Target" to "1.21.8", "Build-Commit" to commitHash.get()) }
+val releaseChecksum by tasks.registering {
+    dependsOn(tasks.jar)
+    val jar = tasks.jar.flatMap { it.archiveFile }
+    inputs.file(jar)
+    val output = jar.map { it.asFile.resolveSibling(it.asFile.name + ".sha256") }
+    outputs.file(output)
+    doLast { val bytes = MessageDigest.getInstance("SHA-256").digest(jar.get().asFile.readBytes()); output.get().writeText(bytes.joinToString("") { "%02x".format(it) } + "  " + jar.get().asFile.name + "\n") }
+}
+tasks.build { dependsOn(releaseChecksum) }
+val stressTest by sourceSets.creating
+stressTest.compileClasspath += sourceSets.main.get().output + sourceSets.test.get().output
+stressTest.runtimeClasspath += stressTest.output + stressTest.compileClasspath
+configurations[stressTest.implementationConfigurationName].extendsFrom(configurations.testImplementation.get())
+configurations[stressTest.runtimeOnlyConfigurationName].extendsFrom(configurations.testRuntimeOnly.get())
+tasks.register<Test>("stressTest") {
+    description = "Opt-in logical/database stress tests, separate from normal test/check"
+    group = "verification"
+    dependsOn(tasks.testClasses)
+    testClassesDirs = stressTest.output.classesDirs
+    classpath = stressTest.runtimeClasspath
+    useJUnitPlatform { if (!providers.environmentVariable("LASTSECTOR_MYSQL_TEST_PORT").isPresent) excludeTags("mysql") }
+    inputs.property("mysqlTestPort", providers.environmentVariable("LASTSECTOR_MYSQL_TEST_PORT").orElse("disabled"))
+    maxHeapSize = "1g"
 }

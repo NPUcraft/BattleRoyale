@@ -1,3 +1,4 @@
+config-version: 2
 # Templates are validated when a match prepares; missing/invalid maps cancel only that match.
 maps:
   city:

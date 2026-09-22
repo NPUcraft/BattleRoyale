@@ -2,7 +2,7 @@ name: LastSector
 version: '${version}'
 main: com.lastsector.LastSectorPlugin
 api-version: '1.21.8'
-description: Multiplayer battle royale with permanent progression and cosmetic Lobby - Milestone 8
+description: Multiplayer battle royale with safe map authoring and release diagnostics - Milestone 9
 load: POSTWORLD
 commands:
   lastsector:
@@ -19,8 +19,25 @@ permissions:
     children:
       lastsector.command: true
       lastsector.play: true
+      lastsector.admin.map: true
+      lastsector.admin.config: true
+      lastsector.admin.cosmetic: true
+      lastsector.admin.diagnostics: true
   lastsector.play:
     description: List, join and leave waiting rooms
     default: true
+
+  lastsector.admin.map:
+    description: Map editor, validation and maintenance
+    default: op
+  lastsector.admin.config:
+    description: Configuration diagnostics and backups
+    default: op
+  lastsector.admin.cosmetic:
+    description: Cosmetic grants and purchase diagnostics
+    default: op
+  lastsector.admin.diagnostics:
+    description: Diagnostics and support bundles
+    default: op
 
 softdepend: [CoinsEngine, ExcellentEconomy, Vault]

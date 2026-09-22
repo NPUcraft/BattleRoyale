@@ -1,5 +1,19 @@
-# Architecture — M8
+# Architecture — M9
 
+
+## M9 管理边界
+
+`admin` 包包含纯元数据/草稿、维护 lease、校验报告、原子写入、模板替换 journal、配置脱敏与有界性能计数。`PaperMapAdministration` 是主线程协调器：一个有界 IO worker、一个 completion pump，独立 EDITOR/MAINTENANCE root 与 marker。它不注册 GameSession，不接入 Loot/Combat/Zone 监听器；管理员状态隔离复用已有持久 originals 通道。
+
+统一 metadata.json 是单文件发布边界，包含 playable area、Loot、spectator、名称和 revision。MapRegistry 发布新 immutable MapTemplate；Room 选图实时读取注册表并排除 invalid/locked 地图，运行中的 GameSession 保留旧对象。恢复 DTO 添加可选 mapMetadata 字段，旧快照兼容。新地图元数据不能热修改已有会话。
+
+预生成只在副本进行，完成后明确确认保存/卸载，再以 PREPARED/COMMITTED journal 协调目录替换；原模板完整保留为备份。原子目录移动不可用或所有权检查失败则拒绝，不降级为 region 覆盖。启动先处理 journal，再清理未加载且可信的维护孤儿。
+
+ConfigMigrationService 将 legacy v1 配置集备份后逐文件原子迁移到 v2，预检未知版本；不是跨文件断电事务，失败使用原件回滚。命令 validate 使用只读加载路径。DiagnosticsService 隔离组件错误；SupportBundle 只写白名单摘要，ConfigRedactor 递归按键/类型处理，不导出原始数据库或玩家物品。
+
+性能计时使用 nanoTime，固定 enum + 每计时器 128 样本环；DB_OPERATION 包括所有 worker 调用，DB_WRITE 记录检查点及永久结果写入，CHECKPOINT 独立记录检查点耗时。计时与持久 gameplay elapsed 分离。DB 最大排队深度、缓存命中/未命中、真实粒子与资源数量可查询。stressTest sourceSet 独立于普通 test/check。
+
+出生准备在 Paper async chunk future 的主线程完成回调内立即获取 ticket，再把完成暴露给下一 tick 检查；避免低负载/高并发下完成后未固定 chunk 被卸载的窗口。取消/关闭禁止迟到回调重新取得 ticket。
 
 ## M8 永久数据与 Lobby
 

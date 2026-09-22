@@ -12,8 +12,9 @@ public record ProgressionConfig(RankingSettings ranking,Map<String,CosmeticDefin
                                 String currency,boolean shopEnabled) {
     public record MenuItem(int slot,Material material,String name,List<String> lore) {public MenuItem {lore=List.copyOf(lore);}}
     public ProgressionConfig {cosmetics=Map.copyOf(cosmetics);menu=Map.copyOf(menu);titles=Map.copyOf(titles);economyPriority=List.copyOf(economyPriority);}
-    public static ProgressionConfig load(JavaPlugin plugin) {
-        for(String file:List.of("ranking.yml","lobby.yml","cosmetics.yml"))if(!new java.io.File(plugin.getDataFolder(),file).exists())plugin.saveResource(file,false);
+    public static ProgressionConfig load(JavaPlugin plugin) {return load(plugin,true);}
+    public static ProgressionConfig load(JavaPlugin plugin,boolean createDefaults) {
+        for(String file:List.of("ranking.yml","lobby.yml","cosmetics.yml"))if(createDefaults && !new java.io.File(plugin.getDataFolder(),file).exists())plugin.saveResource(file,false);
         var ranking=read(plugin,"ranking.yml");var lobby=read(plugin,"lobby.yml");var cosmetics=read(plugin,"cosmetics.yml");var config=read(plugin,"config.yml");
         var bands=new ArrayList<RankingSettings.Band>();
         for(var band:ranking.getMapList("ranking.rating.placement-bands"))bands.add(new RankingSettings.Band(((Number)band.get("max-percentile")).doubleValue(),integer(band.get("delta"),"rating band delta")));
@@ -52,6 +53,6 @@ public record ProgressionConfig(RankingSettings ranking,Map<String,CosmeticDefin
         try{return new BigDecimal(value.toString()).intValueExact();}catch(ArithmeticException error){throw new IllegalArgumentException(path+" must be a 32-bit integer",error);}
     }
     private static YamlConfiguration read(JavaPlugin plugin,String name) {
-        var yaml=new YamlConfiguration();try{String text=java.nio.file.Files.readString(plugin.getDataFolder().toPath().resolve(name));var options=new org.yaml.snakeyaml.LoaderOptions();options.setAllowDuplicateKeys(false);new org.yaml.snakeyaml.Yaml(new org.yaml.snakeyaml.constructor.SafeConstructor(options)).load(text);yaml.loadFromString(text);return yaml;}catch(Exception error){throw new IllegalArgumentException("Cannot load "+name,error);}
+        var yaml=new YamlConfiguration();try{String text=java.nio.file.Files.readString(plugin.getDataFolder().toPath().resolve(name));var options=new org.yaml.snakeyaml.LoaderOptions();options.setAllowDuplicateKeys(false);new org.yaml.snakeyaml.Yaml(new org.yaml.snakeyaml.constructor.SafeConstructor(options)).load(text);yaml.loadFromString(text);ConfigMigrationService.version(yaml);return yaml;}catch(Exception error){throw new IllegalArgumentException("Cannot load "+name,error);}
     }
 }

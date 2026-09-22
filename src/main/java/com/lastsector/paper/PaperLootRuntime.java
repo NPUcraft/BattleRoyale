@@ -38,7 +38,7 @@ public final class PaperLootRuntime {
     private GameScheduler.Task task;
     private State state=State.NOT_STARTED;
     public State state(){return state;}
-    private boolean cancelled;
+    private boolean cancelled;private long generationStarted;
     private int activePoints,skippedPoints,activeAreas,skippedAreas,groundItems,missedSpawns;
     public PaperLootRuntime(JavaPlugin plugin,GameSession session,WorldSanitizer sanitizer,MatchContent content,NativeLootItems items,
             RandomGenerator random,NamespacedKey marker,GameScheduler scheduler) {
@@ -48,8 +48,8 @@ public final class PaperLootRuntime {
     private World world() { return Objects.requireNonNull(plugin.getServer().getWorld(worldId),"Match world unloaded"); }
     public CompletableFuture<Void> generate() {
         if(state!=State.NOT_STARTED) return result;
-        state=State.GENERATING;
-        var metadata=content.maps().get(session.selectedMap().orElseThrow().id()); var initial=session.initialZone().orElseThrow();
+        state=State.GENERATING;generationStarted=System.nanoTime();
+        var map=session.selectedMap().orElseThrow();var metadata=map.metadata()==null?content.maps().get(map.id()):map.metadata().loot(); var initial=session.initialZone().orElseThrow();
         for(var point:metadata.containers()) {
             if(initial.contains(point.x(),point.z())) { points.add(point); activePoints++; } else skippedPoints++;
         }
@@ -152,6 +152,7 @@ public final class PaperLootRuntime {
         tickets.clear();
     }
     private void finish(Throwable error) {
+        if(generationStarted!=0&&!result.isDone())com.lastsector.admin.PerformanceMetricsService.LIVE.record(com.lastsector.admin.PerformanceMetricsService.Timer.LOOT,System.nanoTime()-generationStarted);
         if(result.isDone()) return;
         if(task!=null) task.cancel(); releaseTickets();
         state=error==null?State.COMPLETE:State.FAILED;

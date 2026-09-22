@@ -10,5 +10,6 @@ public record EconomySelection(String configured,String active,EconomyProvider p
         }
         return new EconomySelection(configured,"none",null,currency,false);
     }
-    public String diagnostics(){return "configured="+configured+" active="+active+" currency="+currency+" available="+(provider!=null&&provider.isAvailable())+" shopEnabled="+shopEnabled;}
+    public boolean available(){try{return provider!=null&&provider.isAvailable();}catch(LinkageError|RuntimeException error){return false;}}
+    public String diagnostics(){return "configured="+configured+" active="+active+" currency="+currency+" available="+available()+" shopEnabled="+shopEnabled;}
 }

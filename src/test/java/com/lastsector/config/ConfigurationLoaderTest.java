@@ -80,6 +80,20 @@ class ConfigurationLoaderTest {
         replace(file,from,to);
         assertTrue(assertThrows(ConfigurationException.class,this::load).getMessage().contains(context));
     }
+    @Test void runtimeIsolatesMalformedMapWithoutWritingConfiguration() throws Exception {
+        replace("maps.yml", "min-x: -3000", "min-x: invalid");
+        byte[] before = Files.readAllBytes(directory.resolve("maps.yml"));
+        var snapshot = new ConfigurationLoader(directory, true).load();
+        assertEquals(2, snapshot.maps().size());
+        assertNotNull(snapshot.maps().stream().filter(m -> m.id().equals("city")).findFirst().orElseThrow().validationError());
+        assertNull(snapshot.maps().stream().filter(m -> m.id().equals("desert")).findFirst().orElseThrow().validationError());
+        assertThrows(ConfigurationException.class, this::load);
+        assertArrayEquals(before, Files.readAllBytes(directory.resolve("maps.yml")));
+    }
+    @Test void runtimeStillRejectsMalformedGlobalRules() throws Exception {
+        replace("zones.yml", "wait-seconds: 300", "wait-seconds: -1");
+        assertThrows(ConfigurationException.class, () -> new ConfigurationLoader(directory, true).load());
+    }
     @Test void crossValidationNamesRoomMapProfileAndRequiredArea() throws Exception {
         replace("maps.yml","min-x: -3000","min-x: 1500");
         var error=assertThrows(ConfigurationException.class,this::load).getMessage();

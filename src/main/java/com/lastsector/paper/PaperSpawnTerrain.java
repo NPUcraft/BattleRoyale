@@ -11,6 +11,7 @@ import java.util.function.BooleanSupplier;
 public final class PaperSpawnTerrain implements SpawnTerrain {
     private final JavaPlugin plugin;
     private final GameSession session;
+    private boolean released;
     private final Set<Long> acceptedChunks=new HashSet<>(),tickets=new HashSet<>();
     private final WorldSanitizer sanitizer;
     private final java.util.function.Supplier<CompletableFuture<?>> beforeLanding;
@@ -29,7 +30,14 @@ public final class PaperSpawnTerrain implements SpawnTerrain {
     private World world() { return Objects.requireNonNull(plugin.getServer().getWorld(session.gameWorld().orElseThrow().worldName()),"Runtime world missing"); }
     private static long key(int x,int z) { return ((long)x<<32) ^ (z&0xffffffffL); }
     @Override public CompletableFuture<?> prepare(SpawnPlanner.Column column) {
-        return world().getChunkAtAsync(column.x()>>4,column.z()>>4,true);
+        World world=world();int x=column.x()>>4,z=column.z()>>4;
+        // Paper completes this future on the server thread. Pin before publishing completion,
+        // otherwise an unload can happen before SpawnPreparation inspects it on the next tick.
+        return world.getChunkAtAsync(x,z,true).thenApply(chunk->{
+            if(released || !plugin.isEnabled())throw new java.util.concurrent.CancellationException("Spawn terrain released");
+            if(tickets.add(key(x,z)))PaperChunkTickets.acquire(plugin,world,x,z);
+            return chunk;
+        });
     }
     @Override public Double safeFeet(SpawnPlanner.Column column) {
         World world=world(); int cx=column.x()>>4,cz=column.z()>>4;
@@ -84,6 +92,7 @@ public final class PaperSpawnTerrain implements SpawnTerrain {
         }
     }
     @Override public void release() {
+        released=true;
         World world=plugin.getServer().getWorld(session.gameWorld().orElseThrow().worldName());
         if(world!=null) for(long key:tickets) PaperChunkTickets.release(plugin,world,(int)(key>>32),(int)key);
         tickets.clear(); acceptedChunks.clear();

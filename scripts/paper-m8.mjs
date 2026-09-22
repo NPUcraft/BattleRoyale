@@ -18,7 +18,7 @@ await fs.mkdir(data, { recursive: true });
 for (const name of ['paper.jar', 'libraries', 'versions', 'cache', 'eula.txt'])
   await fs.cp(path.join(source, name), path.join(root, name), { recursive: true });
 if(process.env.M8_LIBRARY_CACHE)await fs.cp(path.join(process.env.M8_LIBRARY_CACHE,'libraries'),path.join(root,'libraries'),{recursive:true});
-await fs.copyFile('build/libs/lastsector-0.1.0-SNAPSHOT.jar', path.join(root, 'plugins/lastsector.jar'));
+await fs.copyFile('build/libs/lastsector-1.0.0-rc.1.jar', path.join(root, 'plugins/lastsector.jar'));
 await fs.copyFile('build/integration/lastsector-test-probe.jar', path.join(root, 'plugins/probe.jar'));
 if(process.env.M8_ECONOMY) {
   for(const name of (process.env.M8_ECONOMY==='excellenteconomy'?['ExcellentEconomy-2.8.0.jar','nightcore-2.16.2.jar','Vault-1.7.3.jar']:['CoinsEngine-2.7.0.jar','nightcore-2.15.0.jar','Vault-1.7.3.jar']))await fs.copyFile(path.join('.run/m8-api',name),path.join(root,'plugins',name));

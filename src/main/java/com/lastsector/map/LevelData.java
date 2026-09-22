@@ -5,9 +5,9 @@ import java.util.*;
 import java.util.zip.GZIPInputStream;
 
 /** Bounded standard NBT reader for validation only; never rewrites seed or generator data. */
-final class LevelData {
+public final class LevelData {
     private LevelData() {}
-    static long validate(Path file) throws IOException {
+    public static long validate(Path file) throws IOException {
         if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Missing regular level.dat: " + file);
         try (var gzip = new GZIPInputStream(Files.newInputStream(file));
              var input = new DataInputStream(new BufferedInputStream(new LimitedInputStream(gzip, 64L * 1024 * 1024)))) {

@@ -2,6 +2,12 @@ package com.lastsector.map;
 import java.util.*;
 /** Owner-thread registry of template descriptors; never operates on world files. */
 public final class MapRegistry {
+    private final Map<String,String> unavailable=new LinkedHashMap<>();
+    public void unavailable(String id,String reason){unavailable.put(id,reason);}
+    public void available(String id){unavailable.remove(id);}
+    public boolean isAvailable(String id){return maps.containsKey(id)&&!unavailable.containsKey(id);}
+    public String status(String id){return unavailable.getOrDefault(id,"AVAILABLE");}
+    public void replace(MapTemplate map){if(!maps.containsKey(map.id()))throw new IllegalArgumentException("Unknown map");maps.put(map.id(),map);}
     private final Map<String, MapTemplate> maps = new LinkedHashMap<>();
     /** Registers metadata only; duplicate ids fail without replacing the original. */
     public void register(MapTemplate map) {

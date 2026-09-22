@@ -17,7 +17,7 @@ public final class LastSectorCommand implements CommandExecutor, TabCompleter {
     @Override public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!sender.hasPermission("lastsector.command")) { messages.denied(sender); return true; }
         String action = args.length == 0 ? "help" : args[0].toLowerCase(Locale.ROOT);
-        if (Set.of("reload", "debug", "admin").contains(action) && !sender.hasPermission("lastsector.admin")
+        if (Set.of("reload", "debug").contains(action) && !sender.hasPermission("lastsector.admin")
                 || Set.of("rooms", "join", "autojoin", "leave", "team", "spectate", "lobby", "profile", "leaderboard", "shop", "cosmetics").contains(action) && !sender.hasPermission("lastsector.play")) {
             messages.denied(sender); return true;
         }
@@ -29,6 +29,10 @@ public final class LastSectorCommand implements CommandExecutor, TabCompleter {
                     runtime.lobby().command(player,action,args.length>1?args[1]:null);
                 }
                 case "admin" -> {
+                    String required=args.length>1?switch(args[1].toLowerCase(Locale.ROOT)){case "map"->"lastsector.admin.map";case "config"->"lastsector.admin.config";case "cosmetic","purchases"->"lastsector.admin.cosmetic";case "diagnose","supportbundle"->"lastsector.admin.diagnostics";default->"lastsector.admin";}:"lastsector.admin";
+                    if(!sender.hasPermission(required)){messages.denied(sender);break;}
+                    if(args.length>=2 && Set.of("diagnose","supportbundle","config").contains(args[1].toLowerCase(Locale.ROOT))){runtime.diagnostics().command(sender,args);break;}
+                    if(args.length>=2 && args[1].equalsIgnoreCase("map")){runtime.mapAdministration().command(sender,args);break;}
                     if(args.length>=2 && args[1].equalsIgnoreCase("purchases")) {
                         runtime.progression().purchases().whenComplete((rows,error)->{if(error!=null)messages.send(sender,"Purchase diagnostics unavailable");else if(rows.isEmpty())messages.send(sender,"No MANUAL_REVIEW purchases");else rows.forEach(row->messages.send(sender,row.toString()));});break;
                     }
@@ -78,6 +82,7 @@ public final class LastSectorCommand implements CommandExecutor, TabCompleter {
                     else messages.unknown(sender);
                 }
                 case "debug" -> {
+                    if(args.length==2 && Set.of("perf","tasks","worlds").contains(args[1])){if(args[1].equals("worlds"))runtime.diagnostics().debugWorlds(sender);else messages.send(sender,runtime.diagnostics().perf());break;}
                     if(args.length>=2 && args[1].equalsIgnoreCase("economy")){messages.send(sender,runtime.progression().economy().diagnostics());break;}
                     if(args.length==3 && args[1].equalsIgnoreCase("stats")){var target=org.bukkit.Bukkit.getPlayerExact(args[2]);if(target==null)throw new IllegalArgumentException("Player must be online");messages.send(sender,String.valueOf(runtime.progression().profile(target.getUniqueId())));break;}
                     if(args.length==2 && args[1].equalsIgnoreCase("storage")){messages.send(sender,runtime.storageDiagnostics());}
@@ -127,17 +132,25 @@ public final class LastSectorCommand implements CommandExecutor, TabCompleter {
         } catch (IllegalArgumentException | IllegalStateException error) { messages.send(sender, error.getMessage()); }
         return true;
     }
+    private boolean adminAccess(CommandSender sender){return java.util.stream.Stream.of("lastsector.admin","lastsector.admin.map","lastsector.admin.config","lastsector.admin.cosmetic","lastsector.admin.diagnostics").anyMatch(sender::hasPermission);}
     @Override public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (!sender.hasPermission("lastsector.command")) return List.of();
         List<String> choices = new ArrayList<>();
         if (args.length == 1) {
             choices.addAll(List.of("help", "version"));
             if (sender.hasPermission("lastsector.play")) choices.addAll(List.of("rooms", "join", "autojoin", "leave", "team", "spectate", "lobby", "profile", "leaderboard", "shop", "cosmetics"));
-            if (sender.hasPermission("lastsector.admin")) choices.addAll(List.of("reload", "debug", "admin"));
+            if (sender.hasPermission("lastsector.admin")) choices.addAll(List.of("reload", "debug"));
+            if(adminAccess(sender))choices.add("admin");
         } else if (args.length == 2 && args[0].equalsIgnoreCase("debug") && sender.hasPermission("lastsector.admin"))
-            choices.addAll(List.of("economy", "stats", "storage", "recovery", "rooms", "maps", "session", "zone", "protection", "loot", "deathboxes", "teams", "offline", "start", "end"));
-        else if(args[0].equalsIgnoreCase("admin") && sender.hasPermission("lastsector.admin")) {
-            if(args.length==2) choices.addAll(List.of("loadout","cosmetic","purchases"));
+            choices.addAll(List.of("perf", "tasks", "worlds", "economy", "stats", "storage", "recovery", "rooms", "maps", "session", "zone", "protection", "loot", "deathboxes", "teams", "offline", "start", "end"));
+        else if(args[0].equalsIgnoreCase("admin") && adminAccess(sender)) {
+            if(args.length==2){if(sender.hasPermission("lastsector.admin"))choices.add("loadout");if(sender.hasPermission("lastsector.admin.cosmetic"))choices.addAll(List.of("cosmetic","purchases"));if(sender.hasPermission("lastsector.admin.map"))choices.add("map");if(sender.hasPermission("lastsector.admin.config"))choices.add("config");if(sender.hasPermission("lastsector.admin.diagnostics"))choices.addAll(List.of("diagnose","supportbundle"));}
+            else if(args.length==3 && args[1].equalsIgnoreCase("map"))choices.addAll(List.of("list","info","edit","editor","validate","pregenerate","save","discard","exit","area","ground","spectator","remove","name"));
+            else if(args.length==4 && args[1].equalsIgnoreCase("map") && Set.of("info","edit","validate","pregenerate").contains(args[2])){foundation.state().maps().all().forEach(m->choices.add(m.id()));if(args[2].equals("pregenerate"))choices.addAll(List.of("cancel","commit"));}
+            else if(args.length==5 && args[1].equalsIgnoreCase("map") && args[2].equals("validate"))choices.add("--deep");
+            else if(args.length==5 && args[1].equalsIgnoreCase("map") && args[2].equals("pregenerate"))foundation.state().maps().all().forEach(m->choices.add(m.id()));
+            else if(args.length==6 && args[1].equalsIgnoreCase("map") && args[3].equals("commit"))choices.add("confirm");
+            else if(args.length==3 && args[1].equalsIgnoreCase("config"))choices.addAll(List.of("validate","backup"));
             else if(args.length==3 && args[1].equalsIgnoreCase("cosmetic"))choices.addAll(List.of("grant","revoke"));
             else if(args.length==4 && args[1].equalsIgnoreCase("cosmetic"))org.bukkit.Bukkit.getOnlinePlayers().forEach(p->choices.add(p.getName()));
             else if(args.length==5 && args[1].equalsIgnoreCase("cosmetic"))choices.addAll(runtime.progression().config().cosmetics().keySet());

@@ -16,10 +16,13 @@ import java.util.*;
 /** Strict YAML adapter. Builds local values first; never mutates live registries. */
 public final class ConfigurationLoader {
     private final Path directory;
-    public ConfigurationLoader(Path directory) { this.directory = directory.toAbsolutePath().normalize(); }
+    private final boolean isolateMapErrors;
+    public ConfigurationLoader(Path directory) {this(directory,false);}
+    public ConfigurationLoader(Path directory,boolean isolateMapErrors) { this.directory = directory.toAbsolutePath().normalize();this.isolateMapErrors=isolateMapErrors; }
 
     /** Reads all four UTF-8 files or throws ConfigurationException without publishing partial state. */
     public ConfigurationSnapshot load() {
+        try{new ConfigMigrationService(directory).validateVersions();}catch(IOException e){throw new ConfigurationException("configuration","config-version","<redacted>",e.getMessage());}
         Node config = read("config.yml");
         String storage = config.section("storage").choice("type", Set.of("sqlite", "mysql"));
         String economy = config.section("economy").choice("provider", Set.of("auto", "coinsengine", "excellenteconomy", "vault", "none"));
@@ -79,7 +82,7 @@ public final class ConfigurationLoader {
         Node mapsNode = read("maps.yml").section("maps");
         List<MapTemplate> maps = new ArrayList<>();
         for (String id : mapsNode.keys()) {
-            Node map = mapsNode.section(id);
+            try { Node map = mapsNode.section(id);
             Node area = map.section("playable-area");
             double minX = area.number("min-x", -Double.MAX_VALUE);
             double maxX = area.number("max-x", -Double.MAX_VALUE);
@@ -89,6 +92,7 @@ public final class ConfigurationLoader {
             area.require("max-z", maxZ > minZ, "must be > min-z (" + minZ + ")");
             maps.add(new MapTemplate(id, map.text("display-name"), map.relativePath("directory", directory),
                     new PlayableArea(minX, maxX, minZ, maxZ)));
+            }catch(IllegalArgumentException|ConfigurationException e){if(!isolateMapErrors)throw e;maps.add(new MapTemplate(id,id,directory.resolve("invalid-map-configuration"),new PlayableArea(-1,1,-1,1)).invalid(e.getMessage()));}
         }
 
         Node profiles = read("zones.yml").section("profiles");
@@ -135,7 +139,7 @@ public final class ConfigurationLoader {
             room.require("max-players", zone.initialSizes().getLast().maxPlayers() >= maximum,
                     "zone profile thresholds must cover room max-players");
             double required = 2 * zone.largestReachableHalfSize(maximum);
-            for (MapTemplate map : maps) if (pool.contains(map.id())) {
+            for (MapTemplate map : maps) if (pool.contains(map.id()) && !isolateMapErrors) {
                 PlayableArea area = map.playableArea();
                 room.require("maps", area.maxX()-area.minX() >= required && area.maxZ()-area.minZ() >= required,
                         "room=" + id + " map=" + map.id() + " profile=" + zoneId + " requires width/depth >= " + required

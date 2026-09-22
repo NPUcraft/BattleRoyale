@@ -4,3 +4,12 @@ build/
 *.iml
 .run/
 node_modules/
+
+# Local operational data must never enter release source control.
+*.db
+*.db-wal
+*.db-shm
+*.log
+/support/
+/runtime/
+/maintenance-worlds/

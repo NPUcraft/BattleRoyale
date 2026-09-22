@@ -12,5 +12,6 @@ public final class SpectatorRegistry {
     public boolean target(UUID viewer,GameSession session,UUID target){var p=entries.get(viewer);return p!=null && p.session().equals(session.sessionId()) && session.combatActive(target);}
     public Optional<UUID> preferred(GameSession session,UUID viewer){return session.players().keySet().stream().filter(session::combatActive)
             .sorted(Comparator.<UUID>comparingInt(id->session.sameTeam(viewer,id)?0:1).thenComparing(UUID::toString)).findFirst();}
+    public int size(){return entries.size();}
     public boolean empty(){return entries.isEmpty();}
 }

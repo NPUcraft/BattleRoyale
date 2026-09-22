@@ -74,6 +74,7 @@ public final class PaperDeathBoxes implements AutoCloseable {
         if(world!=null) for(long chunk:chunks) PaperChunkTickets.release(plugin,world,(int)chunk,(int)(chunk>>32));
         chunks.clear();
     }
+    public int size(){return boxes.size();}
     public String diagnostics() {
         return "deathboxes="+boxes.size()+" "+boxes.values().stream().map(v->"id="+v.box.id()+" dead="+v.box.deceasedName()+" location="+v.box.location()+" stacks="+Arrays.stream(v.inventory.getContents()).filter(Objects::nonNull).filter(i->!i.getType().isAir()).count()).toList();
     }

@@ -31,8 +31,9 @@ public final class PaperZoneUi {
         }
         if (!spectator && settings.wallEnabled() && tick%settings.wallInterval()==0)
             for(var point:ParticleWall.sample(zone.current(),location.getX(),location.getY(),location.getZ(),settings))
-                player.spawnParticle(Particle.valueOf(settings.particle()),point.x(),point.y(),point.z(),1,0,0,0,0);
+                {player.spawnParticle(Particle.valueOf(settings.particle()),point.x(),point.y(),point.z(),1,0,0,0,0);com.lastsector.admin.PerformanceMetricsService.LIVE.add(com.lastsector.admin.PerformanceMetricsService.Counter.PARTICLE_SAMPLES,1);}
     }
+    public int size(){return bars.size();}
     public void detach(UUID id) {
         BossBar bar=bars.remove(id);
         Player player=server.getPlayer(id);

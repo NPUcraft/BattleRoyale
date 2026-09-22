@@ -16,7 +16,8 @@ public final class MatchContentLoader {
     public MatchContentLoader(Path directory, LootItemResolver<?> items, Consumer<StoredItem> validateItem) {
         this.directory = directory; this.items = items; this.validateItem = validateItem;
     }
-    public MatchContent load(ConfigurationSnapshot configuration) {
+    public MatchContent load(ConfigurationSnapshot configuration) {return load(configuration,false);}
+    public MatchContent load(ConfigurationSnapshot configuration,boolean isolateMapErrors) {
         Map<String, LoadoutDefinition> loadouts = new LinkedHashMap<>();
         ConfigurationSection root = section(read("loadouts.yml"), "loadouts");
         for (String id : root.getKeys(false)) {
@@ -44,8 +45,10 @@ public final class MatchContentLoader {
             }
             tables.put(id, new LootTable(id, integer(node,"min-rolls"), integer(node,"max-rolls"), entries));
         }
-        Map<String, MapLoot> maps = new LinkedHashMap<>();
-        for (var map : configuration.maps()) {
+        Map<String, MapLoot> maps = new LinkedHashMap<>();var mapErrors=new LinkedHashMap<String,String>();
+        for (var map : configuration.maps()) {try{
+            if(map.validationError()!=null)throw new IllegalArgumentException(map.validationError());
+            var overlay=new com.lastsector.admin.MapMetadataStore(directory).read(map.id());if(overlay.isPresent()){var value=overlay.get();var report=new com.lastsector.admin.MapValidationService().metadata(value.apply(map),value,configuration,tables.keySet());if(!report.valid())throw new IllegalArgumentException(report.text());maps.put(map.id(),value.loot());continue;}
             if (!map.id().matches("[a-zA-Z0-9_-]+")) throw new IllegalArgumentException("Unsafe map metadata id: " + map.id());
             ConfigurationSection metadata = read("map-data/" + map.id() + "/loot.yml");
             List<ContainerLootPoint> points = new ArrayList<>(); List<LootArea> areas = new ArrayList<>();
@@ -66,8 +69,9 @@ public final class MatchContentLoader {
             }
             if (points.size() > 1024 || areas.size() > 128) throw new IllegalArgumentException("Map loot limit: 1024 containers / 128 areas");
             maps.put(map.id(), new MapLoot(points,areas));
+            }catch(Exception e){if(!isolateMapErrors)throw new IllegalArgumentException("Map "+map.id()+": "+e.getMessage(),e);mapErrors.put(map.id(),e.getMessage());maps.put(map.id(),new MapLoot(List.of(),List.of()));}
         }
-        return new MatchContent(loadouts,tables,maps);
+        return new MatchContent(loadouts,tables,maps,mapErrors);
     }
     public static String loadoutYaml(Map<String,LoadoutDefinition> definitions) {
         YamlConfiguration yaml = new YamlConfiguration();

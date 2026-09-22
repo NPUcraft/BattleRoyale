@@ -1,4 +1,81 @@
-# M8 验证记录
+# M9 发布候选验证记录
+
+2026-09-22，Windows / Java 21.0.8 / Gradle 8.14 / Paper 1.21.8 build 60；可选现代经济插件另用 Java 25.0.2。版本 **1.0.0-rc.1**。以下为 M9 实际验证；后面的 M8/M7 段落仅保留历史证据。
+
+## 自动测试与复现
+
+普通测试 **416 total / 0 failures / 0 errors / 0 skipped**（包含真实 MySQL）；不设置 MySQL 环境变量时排除 1 个 MySQL contract，为 415 项。独立 stressTest **9 total / 0 failures / 0 errors / 0 skipped**；无 MySQL 时明确排除 1 项，为 8 项。没有删除有效旧测试。
+
+环境设置：JAVA_HOME 指向 Java 21，LASTSECTOR_MYSQL_TEST_PORT 指向隔离 MySQL 8.4 的 localhost 端口。本次测试容器 lastsector-m9-mysql，标签 lastsector.test=m9；测试结束后删除该容器及其匿名卷，不操作其他容器。
+
+最终以下三条命令均 **BUILD SUCCESSFUL**：
+
+```powershell
+.\gradlew.bat clean test build
+.\gradlew.bat stressTest
+.\gradlew.bat clean check build
+```
+
+压力测试与普通 check 分离，XML/HTML 分别位于 build/test-results、build/reports/tests；clean 会清掉上一轮报告，因此本轮原始测试 XML 另存 .run/release-verification。生产 JAR 与 .sha256 位于 build/libs。SHA-256 由 releaseChecksum 自动生成。最终生产包 `lastsector-1.0.0-rc.1.jar`：**15,565,040 bytes**，SHA-256 `3a56d49af65a06a47dcbc8f52f4ce9d521e48709e1d53f9f5784a41838d5465d`。JAR 检查确认 283 个本插件生产 class 全部 major 65（Java 21），九份默认配置均为 v2，不含探针/JUnit/Paper/Vault/NightExpress API、测试口令或 DB/log 临时文件。
+
+## 压力层次与实际规模
+
+- **Logical**：100 轮 × 20 房间 × 32 玩家，即 2,000 个逻辑 Session；Team/session 隔离、终态和清理。Zone 为 100 Session × 64 参与者 × 100 次，192,000,000 个有界粒子采样。Combat 为 20 个隔离 tracker、100,000 个伤害事件、历史上限/过期。500 次 DeathBox 逻辑淘汰和 500 个 OfflineBody 超时/重连只处理一次。100 个重叠购买点击只触发一次扣款与解锁。这些数字不是实际在线人数或 TPS。
+- **Database**：SQLite 1,000 份 durable outbox，10 次注入事务故障，重开、每份重复重放并检查准确场次；5,000 checkpoint 修订合并到最新，最大排队 1。真实 MySQL 8.4 写入 1,000 个结果、重复重试和周期榜查询。中间一轮 SQLite 24,681 ms、MySQL 31,742 ms，仅为本机总耗时。
+- **Paper**：20 轮 × 5 个并发房间，总计 100 场真实克隆/比赛/回收。每轮断言 Session、实体、恢复队列、BossBar 等资源清空；周期性断线/重连。
+- **Real client/protocol**：上述 soak 使用 10 个 Mineflayer 1.21.8 协议客户端。没有人工视觉验收，也没有声称测试 80 个真实客户端。
+
+## 实测性能
+
+原始数据：.run/paper-m9-soak-1790087606262/observations.json。模板 3,497,891 bytes；机器同时承担测试工作，数据不是跨硬件性能保证。
+
+- 100 次世界复制：平均 **345.452 ms**，最大 **460.321 ms**。
+- 100 次世界清理：平均 **265.941 ms**，最大 **349.412 ms**。
+- Zone tick：4,263 次，最后 **0.0196 ms**，最近 128 次平均 **0.0249 ms**，历史最大 **78.941 ms**。
+- Loot：100 次，平均 **49.258 ms**，最大 **109.459 ms**。
+- Checkpoint：387 次，最近 128 次平均 **18.083 ms**，最大 **37.724 ms**。
+- Recovery bootstrap：1 次 **567.524 ms**，不是复杂崩溃恢复的分位延迟保证。
+- 最终 sessions/players/spectators、entries/draining/deathboxes/offlineBodies/bossbars、pendingRestore/resultOutboxPending/DB queue 均为 0；插件任务数 5，最大 DB queue 10。
+
+该 soak 当时 DB_WRITE 统计全部存储操作（1,525 次，历史最大 320.533 ms）；最终版本已拆分 DB_OPERATION（全部操作）与 DB_WRITE（checkpoint/正式结果写事务），不能把旧采样当最终纯写入指标。计时最多保留 128 个样本；count/max 为进程累计，average 为滚动平均。预生成最终 save/unload 仍在 Paper 主线程，可能出现停顿。
+
+## 真实 Paper 证据
+
+所有脚本复制已停止源服到忽略的 .run，绑定 127.0.0.1，探针 JAR 独立于生产包。SIGKILL 测试的 ECONNRESET 是预期断线，不能据此判断插件失败；以 results.json 断言及服务器日志为准。
+
+- .run/paper-m9-1790089249205：EDITOR clone、PDC 区域/容器/地面工具、LootTable GUI、8 种 GUI 滥用事件拦截、观战点、原子保存 revision 1、非法保存拒绝、不变模板哈希、Discard/断线清理；正在运行的比赛保留 revision 0，下一局使用 revision 2。深度校验指出模板非容器。无版本配置迁移与备份、权限拒绝、diagnose/perf/worlds/config validate/support ZIP（含 EDITOR 所有权后台扫描）。取消预生成不改模板；9 chunk 小图真实预生成、显式确认目录替换、旧模板完整备份、seed/generator 不变、远端 region 存在。
+- .run/paper-m9-soak-1790087606262：上述 100 场真实 Paper soak 全通过。
+- .run/paper-m7-1790088109010：SQLite 完整恢复矩阵；RUNNING/ENDING 强杀，暂停圈/身体/展示计时，原生背包、部分 Loot、DeathBox/世界方块、generation 确认、checksum 损坏与保留孤儿、不可用 DB 启动保护。
+- .run/paper-m7-1790089033175：同一完整恢复矩阵在真实 MySQL 8.4 通过，两房间重启恢复。
+- .run/paper-m8-recovery-1790088778975：Duo 已死亡胜队队员仍有 win/placement 1/+40；金色 DeathBox 局内撤销仍冻结；结果 INSERT 故障保留 durable outbox，世界清理后强杀，重启完整结算；再次重复 outbox 不重复统计。
+- .run/paper-m9-editor-crash-1790088405820：未保存编辑器内强杀；重启清理自有维护孤儿、管理员原始末影箱/经验等恢复并回大厅、草稿不保存、模板不变、锁释放。
+- .run/paper-m9-edge-fresh-1790088109213：首次无模板启动成功，核心/Profile/SQLite 可用，地图不可开局。
+- .run/paper-m9-edge-future-1790088109387：config-version 999 拒绝加载，不改配置字节，不对其他文件先行迁移。
+- .run/paper-m9-edge-incompatible-1790088364688：Java 21 实际拒绝加载 ExcellentEconomy 2.8.0（Java 25 字节码），auto-priority 继续选择 Vault 1.7.3（CoinsEngine 2.7.0 后端）；比赛正常。
+- .run/paper-m8-1790086889305：没有可选经济插件时，大厅/Profile/排行榜/免费外观、Solo/tie/管理员终止正常。
+
+- .run/paper-m8-1790089259512：当前 M9 JAR，Java 21 / CoinsEngine 2.7.0，真实购买只扣 100 并持久解锁；完整 Solo/tie、44 Profile GUI 分页和 Shift/数字键/drop 拦截通过。
+- .run/paper-m8-1790089270072：当前 M9 JAR，Java 25 / ExcellentEconomy 2.8.0 / nightcore 2.16.2，同一完整经济/比赛矩阵通过。
+
+- .run/paper-m8-1790089401036：当前 M9 JAR / Java 21 / Vault 1.7.3，实际购买与全部 M8 比赛/GUI 断言通过。
+- .run/paper-m4-1790089411343：原生物品与 Loadout GUI、共享编辑锁、物资、跨房间隔离、在线/离线恢复、失败回滚、禁用清理通过。
+- .run/paper-m6-edges-1790089421677：5 人 Squad 3/2 分队、STARTING 断线、友伤/自然伤害、离线身体重连/死亡、最终 tie、单 Team 与禁用清理通过。
+
+- .run/paper-smoke-1790089777301：最终交付 JAR，无可选插件，验证首次启动、help/version/alias/debug、错误房间 reload 保留旧配置、成功 reload，以及错误配置重启禁用。该测试使用的 JAR 与最终交付 SHA-256 相同。
+
+## 回归中发现并修复
+
+首次 M7 回归 .run/paper-m7-1790087606369 暴露 async chunk 已完成、下一 tick 已卸载的出生准备竞态。现在在 Paper async chunk 的主线程完成回调内立即持有 chunk ticket，并阻止释放后回调重新加票；随后 SQLite/MySQL 完整矩阵均通过。早期 M9 脚本的 CRLF 配置 fixture 去版本正则也已修正；最终基础冒烟脚本另修正了遗留的 0.1.0-SNAPSHOT 版本断言，修正后完整通过。这些失败运行不计作通过。
+
+## 交付检查与边界
+
+JAR 仅包含生产类、默认配置、JDBC/Gson 运行依赖和 build metadata；Paper/Vault/NightExpress API 为 provided，探针/JUnit 不进入生产包。运行依赖锁定到 gradle.lockfile；Paper 仍为官方 1.21.8 provided SNAPSHOT，锁文件不使上游 SNAPSHOT 不可变。Git commit 字段标识构建所在基线，工作区改动未自动提交。
+
+配置迁移按文件原子写入并备份/失败回滚，但整套多文件迁移不宣称 ACID；SQL/world/playerdata/outbox 也不是跨存储 ACID。外部经济扣款状态不确定进入 MANUAL_REVIEW。死亡归属受 Bukkit 可观测事件限制；OfflineBody 为实体替身而非玩家皮肤。深度 LootArea 校验是有界采样，不能证明每个方块；预生成保存可能暂停，旧模板备份由管理员归档。超时或不能证明安全的维护操作保留自有文件供下次启动检查，不任意删除。未验证长期生产负载或所有插件组合。Seasons、MMR 技能匹配、Party、NPC、网络同步等不属于本次发布。
+
+---
+
+# M8 历史验证记录
 
 2026-09-22，Windows / Java 21.0.8 / Gradle 8.14 / Paper 1.21.8 build 60。当前 M8，下一步 M9。下方旧章节保留历史证据，涉及当前功能范围时以本节为准。
 

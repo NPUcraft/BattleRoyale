@@ -1,3 +1,4 @@
+config-version: 2
 # Recovery and permanent progression share the versioned SQLite/MySQL database.
 debug: false
 disconnect:
@@ -55,3 +56,8 @@ zone-ui:
     height-below-player: 3
     height-above-player: 6
     max-particles-per-player: 300
+
+# Async chunk generation is bounded per maintenance operation.
+map-maintenance:
+  pregeneration:
+    max-concurrent-chunks: 8

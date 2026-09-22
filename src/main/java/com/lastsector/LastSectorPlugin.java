@@ -23,10 +23,13 @@ public final class LastSectorPlugin extends JavaPlugin {
     @Override public void onEnable() {
         messages = new MessageService(getLogger());
         try {
-            for (String file : new String[]{"config.yml", "rooms.yml", "maps.yml", "zones.yml", "loadouts.yml", "loot-tables.yml", "map-data/city/loot.yml", "map-data/desert/loot.yml"}) {
+            for (String file : new String[]{"lobby.yml", "ranking.yml", "cosmetics.yml", "config.yml", "rooms.yml", "maps.yml", "zones.yml", "loadouts.yml", "loot-tables.yml", "map-data/city/loot.yml", "map-data/desert/loot.yml"}) {
                 if (!Files.exists(getDataFolder().toPath().resolve(file))) saveResource(file, false);
             }
-            var loader = new ConfigurationLoader(getDataFolder().toPath());
+            var migrated=new com.lastsector.config.ConfigMigrationService(getDataFolder().toPath()).migrate();
+            if(!migrated.isEmpty())getLogger().info("Configuration migration v1 -> v2 backed up: "+migrated);
+            reloadConfig();
+            var loader = new ConfigurationLoader(getDataFolder().toPath(),true);
             foundation = new FoundationService(loader::load, new SessionManager());
             runtime = new PluginRuntime(this, foundation, messages);
             runtime.reload();
