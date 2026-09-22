@@ -21,6 +21,13 @@ public final class WorldSanitizer implements Listener {
         if(worlds.putIfAbsent(world.getUID(),new Registration(session,failed))!=null) throw new IllegalStateException("World already registered");
         for(Chunk chunk:world.getLoadedChunks()) ensure(chunk);
     }
+    public void recover(World world,UUID session,Set<Long> blocks,Set<Long> entities,Consumer<Throwable> failed) {
+        var registration=new Registration(session,failed);registration.ledger.restore(blocks,entities);
+        if(worlds.putIfAbsent(world.getUID(),registration)!=null)throw new IllegalStateException("World already registered");
+        for(Chunk chunk:world.getLoadedChunks())ensure(chunk);
+    }
+    public Set<Long> blockKeys(UUID world){var r=worlds.get(world);return r==null?Set.of():r.ledger.blockKeys();}
+    public Set<Long> entityKeys(UUID world){var r=worlds.get(world);return r==null?Set.of():r.ledger.entityKeys();}
     public boolean active(UUID world) { return worlds.containsKey(world); }
     public int chunks(UUID world) { Registration r=worlds.get(world); return r==null?0:r.ledger.chunks(); }
     public void remove(UUID world) { worlds.remove(world); }

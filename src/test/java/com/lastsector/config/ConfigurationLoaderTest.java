@@ -22,6 +22,17 @@ class ConfigurationLoaderTest {
         Path path = directory.resolve(file);
         Files.writeString(path, Files.readString(path).replace(from, to));
     }
+    @Test void recoveryDefaultsAndCredentialsAreNotRendered(){var settings=load().settings();assertEquals(5,settings.recovery().checkpoint().toSeconds());assertEquals(60,settings.recovery().orphanAge().toMinutes());assertEquals(directory.resolve("data/lastsector.db"),settings.database().sqliteFile());assertTrue(settings.database().toString().contains("redacted"));}
+    @ParameterizedTest @CsvSource(delimiter='|',value={
+        "checkpoint-seconds: 5|checkpoint-seconds: 0",
+        "orphan-delete-after-minutes: 60|orphan-delete-after-minutes: 0",
+        "checkpoint-seconds: 5|checkpoint-seconds: 301",
+        "file: data/lastsector.db|file: ../outside.db",
+        "port: 3306|port: 65536",
+        "127.0.0.1|localhost/?password=secret",
+        "database: lastsector|database: db?param=secret",
+        "connection-timeout-ms: 5000|connection-timeout-ms: 60001"
+    }) void rejectsUnsafeRecoverySettings(String from,String to)throws Exception{replace("config.yml",from,to);assertThrows(ConfigurationException.class,this::load);}
     @Test void loadsEveryDefault() {
         var result = load();
         assertEquals(2, result.rooms().size()); assertEquals(2, result.maps().size());

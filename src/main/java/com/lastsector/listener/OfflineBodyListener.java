@@ -11,7 +11,7 @@ public final class OfflineBodyListener implements Listener {
     public OfflineBodyListener(PluginRuntime runtime){this.runtime=runtime;}
     @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true) public void protect(EntityDamageEvent event){
         for(var entry:runtime.matches().combatEntries()){var body=entry.offline.entity(event.getEntity());if(body==null)continue;
-            if(!body.active() || !event.getEntity().getUniqueId().equals(body.representation()) || entry.session.state()!=com.lastsector.session.GameState.RUNNING || runtime.matches().blocks(entry,runtime.provenance().attacker(event,entry),body.player()))event.setCancelled(true);return;}
+            if(!runtime.recoveryReady() || !body.active() || !event.getEntity().getUniqueId().equals(body.representation()) || entry.session.state()!=com.lastsector.session.GameState.RUNNING || runtime.matches().blocks(entry,runtime.provenance().attacker(event,entry),body.player()))event.setCancelled(true);return;}
     }
     @SuppressWarnings("deprecation")
     @EventHandler(priority=EventPriority.MONITOR,ignoreCancelled=true) public void damage(EntityDamageEvent event){

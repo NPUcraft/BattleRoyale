@@ -1,6 +1,58 @@
-# M6 验证记录
+# M7 验证记录
 
-2026-09-21，Windows / Java 21.0.8 / Gradle 8.14 / Paper 1.21.8。当前 M6，下一步 M7 数据库与进程恢复。以下 M5/M4/M3 章节保留为当时证据，其临时断线/死亡/队伍行为已由本节覆盖。
+2026-09-21–22，Windows / Java 21.0.8 / Gradle 8.14 / Paper 1.21.8 build 60。当前 M7，下一步 M8。以下先记录 M7 实测，后保留 M6 与更早阶段历史证据；历史限制若与 M7 冲突，以本节为准。
+
+## 自动测试
+
+最终执行 `.\gradlew.bat clean test build`：**BUILD SUCCESSFUL，6 tasks executed**。JUnit XML 汇总 **381 tests，0 failures，0 errors，0 skipped**，保留 M1–M6 的 334 项并新增 47 项；该次构建设置真实 MySQL 测试端口，包含 MySQL contract。生产 JAR 为 15,341,733 bytes，核实含 SQLite/MySQL/Gson、无 probe/JUnit 类。新增真实 SQLite 文件事务/迁移、陈旧 revision 与并发写、租约抢占、非 owner 退休拒绝、整批 originals 回滚、generation 条件删除、命名有界 executor/主线程回调、合并写与退休栅栏、恢复启动时钟暂停、连接失败脱敏、DTO/checksum/canonical roundtrip、提交前不修改玩家与取消/失败补偿、暂停归因和缩圈计时、孤儿一小时边界/重启不重置/加载引用保护、重复 Room/world 分组和配置校验。
+
+MySQL 使用实际 Docker `mysql:8.4`，仅发布 `127.0.0.1` 随机端口，独立 `lastsector_test` 库与账号。设置 `LASTSECTOR_MYSQL_TEST_PORT` 后运行 `MySqlRecoveryContractTest`，测试真实连接、重复迁移、revision、claim、事务和恢复 generation；未设置该变量时 Gradle 排除 mysql tag，不把空运行冒充集成通过。完整 Paper/MySQL 还见下文。
+
+临时 MySQL 环境复现（仅本机、一次性测试凭据；测试结束后停止并移除该容器）：
+
+```powershell
+docker run -d --name lastsector-m7-mysql --label lastsector.test=m7 -p 127.0.0.1::3306 -e MYSQL_ROOT_PASSWORD=lastsector-isolated-root -e MYSQL_DATABASE=lastsector_test -e MYSQL_USER=lastsector_test -e MYSQL_PASSWORD=lastsector-isolated-test mysql:8.4
+docker port lastsector-m7-mysql 3306
+# 将上一步随机端口填入下面两个变量，等待 MySQL ready for connections。
+$env:LASTSECTOR_MYSQL_TEST_PORT='<port>'
+$env:M7_MYSQL_PORT='<port>'
+.\gradlew.bat test build paperProbeJar
+node scripts/paper-m7.mjs <stopped-paper-directory> <mineflayer-package-directory>
+```
+
+## 真实强杀与恢复：SQLite 和 MySQL
+
+可复现脚本：`scripts/paper-m7.mjs <stopped-paper-directory> <mineflayer-package-directory>`。SQLite 默认；MySQL 设置 `M7_MYSQL_PORT`，脚本连接本次创建的 `lastsector-m7-mysql` 测试容器。脚本只复制源服到 `.run` 并绑定 127.0.0.1。探针 `paperProbeJar` 独立安装，不含在生产 JAR。
+
+- SQLite 全场景目录：`.run/paper-m7-1790006855014`，退出码 0。
+- MySQL 全场景目录：`.run/paper-m7-1790006865295`，退出码 0。
+- 每个目录保存 `before.json`、`results.json` 和 `console-1.log` 至后续进程日志。已停止的成功测试目录保留供检查。
+
+两个 provider 均真实创建两房间比赛，并以 Node 子进程句柄 `kill('SIGKILL')` 终止自己启动的 Java；没有使用 `/stop` 代替崩溃。在 RUNNING 中准备局内物品、部分取走的 DeathBox、既有离线身体和 mid-shrink 圈，再强杀并原目录重启。验证同一 Session/world/Team、圈不消耗停机时间、已离线身体保留剩余窗口、ALIVE 变完整 120 秒身体、重连背包/光标/XP/最大生命、DeathBox 内容且只有一个可交互载体。另一 Room 同时恢复并独立清理。死者与外部观众恢复原 Lobby 状态（原生物品解码为完整 NBT 比较，避免复合标签序列化顺序误报）。
+
+在 runtime 写入方块、箱内物品和地面物品；测试 fixture 通过一次 `save-all flush` 明确建立世界文件持久基线，然后强杀。重启后保留三类数据、sanitizer ledger 和 Loot COMPLETE；生产检查点没有强制整世界保存，也没有重新 roll Loot。这验证已保存世界与恢复 metadata 的复用，不声称两套存储 ACID。
+
+恢复比赛后继续淘汰敌人决出赢家；在 ENDING 再次强杀。恢复同一 outcome 与剩余 showcase，离线胜者收到 WINNER、玩家原状态恢复，结束后 runtime 世界删除、所有 original 恢复记录确认删除。
+
+第三场比赛再强杀，故意只破坏数据库 payload 而不更新 checksum。重启拒绝该局，将其 ABANDONED；玩家原状态正常恢复，Room 可再加入；世界 marker 变 ORPHANED 并持久带 orphanedAt，默认等待期内保留目录。额外模拟 playerdata 已存 generation、SQL 仍 ORIGINAL/ACTIVE 的确认窗口，强杀重启后登录安全结束冲突会话，原 Lobby 背包不被旧比赛快照覆盖。正常停服后检查没有 ACTIVE/RECOVERING 行。最后把 SQLite 文件配置指向目录（MySQL 改为不可用端口），重启确认插件因 DB 不可用禁用，孤儿 marker 内容和世界目录完全未改变。
+
+强杀时机器人连接的 ECONNRESET 是预期进程终止信号；插件没有事件处理/任务异常。默认一小时保留期由自动测试的固定 Instant 覆盖 3599/3600 秒边界，无需真实等待一小时。
+
+## M1–M6 回归
+
+原有 334 项测试全部保留。M6 边界 Paper 脚本 `.run/paper-m6-edges-1790005838398` 退出码 0：STARTING 断线、两房身体隔离、真实火/岩浆/mob 与圈淘汰、同 tick Team tie、观战跨世界拒绝、carrier 丢失、单 Team 首 tick 结算、禁用清理均通过。M6 主流程 `.run/paper-m6-1790006296317` 退出码 0，实际等待默认 120 秒身体超时、离线胜者通知、失败重连后重试与完整装备恢复均通过。M4 `.run/paper-m4-1790006569154` 退出码 0，涵盖原生物品/编辑器、隔离、Loot、sanitizer、落地失败回滚和空闲 reload 后离线恢复。回归脚本只更新 M7 banner、异步 bootstrap 与 reload gate 等待，保留原业务断言。
+
+## 交付范围与限制
+
+SQLite/MySQL 驱动包含在安装 JAR；没有 NMS、第三方 NPC 或把测试探针打入生产。永久玩家档案/累计 kills/wins、Rating、排行榜、CoinsEngine/Vault、自动备份、第三方 Party/provider、网络服迁移均未实现。M6 已记录的 source-less/混合环境 provenance、身体外观与部分怪物主动攻击限制继续保留。
+
+SQL 恢复 metadata、playerdata、region/entity 文件不是同一事务。最近检查点之后的进度和 autosave 尚未保存的世界变化可能回退；generation 防止常规恢复重入，但不覆盖存储设备损坏或多份备份分别回滚。MySQL 测试是本机真实 MySQL 8.4，不是跨区域延迟/断网压测。未开展大世界、高并发长时间 soak；管理员仍应只允许插件拥有 runtime 目录。
+
+---
+
+# M6 历史验证记录
+
+2026-09-21，Windows / Java 21.0.8 / Gradle 8.14 / Paper 1.21.8。这是 M6 完成时的历史记录；当前阶段见上方 M7。以下 M5/M4/M3 章节保留为当时证据，其临时断线/死亡/队伍行为已由本节覆盖。
 
 ## 自动测试与构建
 

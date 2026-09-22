@@ -124,8 +124,8 @@ async function startSolo(a,b) {
 }
 async function endSolo() {await consoleCommand('ls debug end solo','End requested');await state('solo','WAITING');}
 try {
-  await until(()=>output.includes('Done ('),'Paper startup',120000);
-  assert.match(output,/Milestone 6 initialized/);assert.doesNotMatch(output,/ERROR|Exception/);
+  await until(()=>(output.includes('Done (') && output.includes('Recovery bootstrap complete')),'Paper startup',120000);
+  assert.match(output,/Milestone 7 initialized/);assert.doesNotMatch(output,/ERROR|Exception/);
   const a=await connect('LSAlice',port),b=await connect('LSBob',port),c=await connect('LSCarol',port),d=await connect('LSDan',port),e=await connect('LSEve',port),f=await connect('LSFrank',port);
   for(const bot of bots)await probe('lsprobe m4seed '+bot.username,'M4 seeded');
   for(const bot of [a,b,c])await chat(bot,'/ls join solo','Joined room solo');

@@ -64,7 +64,17 @@ public final class ConfigurationLoader {
             try {disconnect=new DisconnectSettings(Duration.ofSeconds(node.integer("reconnect-seconds",0)),aggro,radius,interval);}
             catch(IllegalArgumentException error){throw node.error("",error.getMessage());}
         }
-        PluginSettings settings = new PluginSettings(config.bool("debug"), storage, economy, runtime, lobbyWorld, ui,combat,disconnect);
+        var database=com.lastsector.storage.StorageSettings.defaults(storage,directory);Node storageNode=config.section("storage");
+        Path sqlite=database.sqliteFile();String host=database.host(),db=database.database(),username=database.username(),password=database.password();int port=database.port(),timeout=database.timeoutMillis();
+        if(storageNode.values().containsKey("sqlite"))sqlite=storageNode.section("sqlite").relativePath("file",directory);
+        if(storageNode.values().containsKey("mysql")) {
+            Node mysql=storageNode.section("mysql");host=mysql.text("host");db=mysql.text("database");username=mysql.text("username");port=mysql.integer("port",1);timeout=mysql.integer("connection-timeout-ms",100);
+            Object secret=mysql.values().get("password");if(!(secret instanceof String))throw new ConfigurationException("config.yml","storage.mysql.password","<redacted>","must be a string");password=(String)secret;
+        }
+        try{database=new com.lastsector.storage.StorageSettings(storage,sqlite,host,port,db,username,password,timeout);}catch(IllegalArgumentException error){throw new ConfigurationException("config.yml","storage","<redacted>","invalid storage settings");}
+        var recovery=com.lastsector.recovery.RecoverySettings.DEFAULT;
+        if(config.values().containsKey("recovery")){Node r=config.section("recovery");try{recovery=new com.lastsector.recovery.RecoverySettings(r.bool("enabled"),Duration.ofSeconds(r.integer("checkpoint-seconds",1)),Duration.ofMinutes(r.integer("orphan-delete-after-minutes",1)));}catch(IllegalArgumentException error){throw r.error("",error.getMessage());}}
+        PluginSettings settings = new PluginSettings(config.bool("debug"), storage, economy, runtime, lobbyWorld, ui,combat,disconnect,database,recovery);
 
         Node mapsNode = read("maps.yml").section("maps");
         List<MapTemplate> maps = new ArrayList<>();

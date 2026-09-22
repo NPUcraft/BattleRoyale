@@ -39,6 +39,18 @@ public final class PaperDeathBoxes implements AutoCloseable {
                 .appendNewline().append(Component.text("T+%02d:%02d".formatted(seconds/60,seconds%60)));
         view.visuals=visuals.spawn(box,label); view.visuals.forEach(id->entities.put(id,view));
     }
+    public java.util.List<com.lastsector.recovery.SessionRecoverySnapshot.Box> snapshot(){
+        var result=new java.util.ArrayList<com.lastsector.recovery.SessionRecoverySnapshot.Box>();for(var view:boxes.values()){
+            var b=view.box;var contents=new HashMap<Integer,com.lastsector.loadout.StoredItem>();for(int slot=0;slot<54;slot++){var item=serializer.store(view.inventory.getItem(slot));if(item!=null)contents.put(slot,item);}
+            result.add(new com.lastsector.recovery.SessionRecoverySnapshot.Box(b.id(),b.deceased(),b.deceasedName(),b.location().x(),b.location().y(),b.location().z(),b.elapsedNanos(),b.reason().origin().name(),b.reason().killer().orElse(null),b.reason().assists(),b.reason().direct(),contents));
+        }return java.util.List.copyOf(result);
+    }
+    public void recover(java.util.List<com.lastsector.recovery.SessionRecoverySnapshot.Box> saved,Function<UUID,String> names) {
+        for(var b:saved){var reason=new com.lastsector.combat.DeathReason(com.lastsector.combat.DamageOrigin.valueOf(b.cause()),Optional.ofNullable(b.killer()),b.assists(),b.direct());
+            var box=new DeathBox(b.id(),session.sessionId(),b.deceased(),b.name(),new DeathPosition(worldId,b.x(),b.y(),b.z()),b.elapsedNanos(),-1,reason,List.of(),0);
+            create(box,names);var view=boxes.get(b.id());for(var item:b.inventory().entrySet()){if(item.getKey()<0 || item.getKey()>=54)throw new IllegalArgumentException("Invalid deathbox slot");view.inventory.setItem(item.getKey(),serializer.item(item.getValue()));}
+        }
+    }
     public View visual(Entity entity) {
         View view=entities.get(entity.getUniqueId()); return view!=null && visuals.marked(entity,view.box)?view:null;
     }

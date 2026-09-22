@@ -11,6 +11,7 @@ class CombatTrackerTest {
     CombatTracker tracker=new CombatTracker(members,CombatSettings.DEFAULT,()->now);
     void hit(UUID attacker,double amount) {tracker.record(victim,attacker,amount,DamageOrigin.PLAYER_MELEE,true);}
     DeathReason death(UUID direct,DamageOrigin origin) {return tracker.resolve(victim,direct,origin,members::contains);}
+    @Test void recoveredAttributionPausesAcrossDowntimeAndStillExpires(){hit(a,4);now=10_000_000_000L;var saved=tracker.snapshot();now=1_000_000_000_000L;var restored=new CombatTracker(members,CombatSettings.DEFAULT,()->now);restored.restore(saved);assertEquals(Optional.of(a),restored.resolve(victim,null,DamageOrigin.FALL,members::contains).killer());now+=5_000_000_000L;assertEquals(Optional.of(a),restored.resolve(victim,null,DamageOrigin.FALL,members::contains).killer());now++;assertTrue(restored.resolve(victim,null,DamageOrigin.FALL,members::contains).killer().isEmpty());}
     @ParameterizedTest @CsvSource({"14999000000,true","15000000000,true","15000000001,false","16000000000,false"})
     void inclusiveMonotonicWindow(long time,boolean credit) {hit(a,4);now=time;assertEquals(credit,death(null,DamageOrigin.FALL).killer().isPresent());}
     @ParameterizedTest @EnumSource(value=DamageOrigin.class,names={"PLAYER_MELEE","PROJECTILE","EXPLOSION","MAGIC"})

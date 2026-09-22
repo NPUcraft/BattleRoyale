@@ -51,8 +51,12 @@ public final class DeathBoxListener implements Listener {
             if(left==0) view.inventory.setItem(slot,null); else { ItemStack rest=item.clone();rest.setAmount(left);view.inventory.setItem(slot,rest); }
             player.setItemOnCursor(result);
         }
+        var entry=runtime.matches().entry(view.box.sessionId());if(entry!=null)entry.changed();
     }
     @EventHandler(priority=EventPriority.HIGHEST) public void drag(InventoryDragEvent event) {
         if(event.getView().getTopInventory().getHolder() instanceof PaperDeathBoxes.View) event.setCancelled(true);
+    }
+    @EventHandler public void close(org.bukkit.event.inventory.InventoryCloseEvent event) {
+        if(event.getInventory().getHolder() instanceof PaperDeathBoxes.View view){var entry=runtime.matches().entry(view.box.sessionId());if(entry!=null)entry.changed();}
     }
 }

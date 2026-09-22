@@ -16,6 +16,13 @@ class ZoneRuntimeTest {
     }
     @ParameterizedTest @CsvSource({"1,500","8,500","9,750","16,750","17,1000","32,1000"})
     void initialBucketsUseActualCount(int count,double half) { assertEquals(half,profile().initialHalfSize(count)); }
+    @Test void recoveryPausesDowntimeDuringShrink() {
+        var live=new ZoneRuntime(new Zone(0,0,500),profile(),new Random(1),0);live.update(8_000_000_000L);var saved=live.snapshot();
+        var restored=ZoneRuntime.restore(saved,profile(),new Random(2),999_000_000_000L);
+        assertEquals(saved.current(),restored.current());assertEquals(7,restored.remainingSeconds());assertEquals(ZonePhase.SHRINKING,restored.phase());
+        restored.update(1_000_000_000_000L);assertEquals(6,restored.remainingSeconds());assertEquals(saved.next(),restored.next());
+    }
+    @Test void recoveryRetainsFinalZone(){var live=new ZoneRuntime(new Zone(0,0,500),profile(),new Random(1),0);live.update(100_000_000_000L);var restored=ZoneRuntime.restore(live.snapshot(),profile(),new Random(2),0);assertEquals(ZonePhase.FINAL,restored.phase());assertEquals(live.current(),restored.current());assertNull(restored.next());}
     @Test void outOfCoverageRejected() {
         assertThrows(IllegalArgumentException.class,()->profile().initialHalfSize(0));
         assertThrows(IllegalArgumentException.class,()->profile().initialHalfSize(33));

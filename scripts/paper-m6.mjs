@@ -124,7 +124,7 @@ async function startSolo(a,b) {
 }
 async function endSolo() {await consoleCommand('ls debug end solo','End requested');await state('solo','WAITING');}
 try {
-  await until(()=>output.includes('Done ('),'Paper startup',120000);
+  await until(()=>(output.includes('Done (') && output.includes('Recovery bootstrap complete')),'Paper startup',120000);
   const clients=new Map();for(const name of ['LSAlice','LSBob','LSCarol','LSDan','LSEve','LSFrank','LSGrace']){const bot=await connect(name,port);clients.set(name,bot);await probe('lsprobe m4seed '+name,'M4 seeded');}
   for(const name of ['LSAlice','LSBob','LSCarol','LSDan'])await chat(clients.get(name),'/ls join solo','Joined room solo');
   for(const name of ['LSFrank','LSGrace'])await chat(clients.get(name),'/ls join squad','Joined room squad');

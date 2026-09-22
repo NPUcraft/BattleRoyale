@@ -123,7 +123,7 @@ async function startSolo(a,b) {
 }
 async function endSolo() {await consoleCommand('ls debug end solo','End requested');await state('solo','WAITING');}
 try {
-  await until(()=>output.includes('Done ('),'Paper startup',120000);
+  await until(()=>(output.includes('Done (') && output.includes('Recovery bootstrap complete')),'Paper startup',120000);
   const a=await connect('LSAlice',port),b=await connect('LSBob',port);
   for(const bot of [a,b])await probe('lsprobe m4seed '+bot.username,'M4 seeded');
   await startSolo(a,b);await probe('lsprobe m5stored LSAlice','M5 stored=347');await sleep(200);

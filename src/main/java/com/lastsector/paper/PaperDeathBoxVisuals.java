@@ -23,7 +23,7 @@ public final class PaperDeathBoxVisuals implements DeathBoxVisualFactory {
     }
     private void mark(Entity entity,DeathBox box) {
         entity.setGravity(false); entity.setInvulnerable(true); entity.setPersistent(true); entity.setSilent(true);
-        entity.getPersistentDataContainer().set(boxKey,PersistentDataType.STRING,box.id().toString());
+        RecoveryEntityCleaner.mark(entity);entity.getPersistentDataContainer().set(boxKey,PersistentDataType.STRING,box.id().toString());
         entity.getPersistentDataContainer().set(sessionKey,PersistentDataType.STRING,box.sessionId().toString());
     }
     public boolean marked(Entity entity,DeathBox box) {

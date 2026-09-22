@@ -33,6 +33,7 @@ public final class TestProbe extends JavaPlugin implements Listener {
         getServer().getPluginManager().registerEvents(m6,this);
         getCommand("lsprobe").setExecutor((sender,command,label,args)-> {
             try {
+                if(args[0].startsWith("m7")){M7Probe.command(this,sender,args);return true;}
                 if(args[0].startsWith("m4")) { m4.command(sender,args); return true; }
                 if(args[0].startsWith("m5")) { m5.command(sender,args); return true; }
                 if(args[0].startsWith("m6")) { m6.command(sender,args); return true; }

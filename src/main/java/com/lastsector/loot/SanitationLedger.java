@@ -9,5 +9,8 @@ public final class SanitationLedger {
         if(done.contains(key) || !inspecting.add(key)) return;
         try { work.run(); done.add(key); } finally { inspecting.remove(key); }
     }
+    public Set<Long> blockKeys(){return Set.copyOf(blocks);}
+    public Set<Long> entityKeys(){return Set.copyOf(entities);}
+    public void restore(Set<Long> blockKeys,Set<Long> entityKeys){if(!blocks.isEmpty() || !entities.isEmpty())throw new IllegalStateException("Already sanitized");blocks.addAll(blockKeys);entities.addAll(entityKeys);}
     public int chunks() { return blocks.size(); }
 }

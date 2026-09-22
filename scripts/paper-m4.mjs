@@ -171,8 +171,8 @@ async function probe(command, expected) {
   return text;
 }
 try {
-  await until(() => output.includes('Done ('), 'Paper startup', 120000);
-  assert.match(output, /Milestone 6 initialized/); assert.doesNotMatch(output, /ERROR|Exception/);
+  await until(() => (output.includes('Done (') && output.includes('Recovery bootstrap complete')), 'Paper startup', 120000);
+  assert.match(output, /Milestone 7 initialized/); assert.doesNotMatch(output, /ERROR|Exception/);
   await probe('lsprobe m4roundtrip','M4 roundtrip=true');
   const a=await connect('LSAlice',port), b=await connect('LSBob',port), c=await connect('LSCarol',port), d=await connect('LSDan',port);
   await consoleCommand('op LSAlice','Made LSAlice');
@@ -217,7 +217,8 @@ try {
   await probe('lsprobe m4match LSCarol','M4 match=true');
   await consoleCommand('ls debug end squad','End requested'); await state('squad','WAITING');
   await until(async()=> (await dirs()).length===0,'Runtime worlds removed');
-  await consoleCommand('ls reload','Configuration reloaded successfully');
+  const reloadOffset=output.length;await consoleCommand('ls reload','Configuration reloaded successfully');
+  await until(()=>output.slice(reloadOffset).includes('Recovery bootstrap complete'),'Reload recovery gate');
   const rejoined=await connect('LSBob',port); await probe('lsprobe m4original LSBob','M4 original=true world=world');
   await probe('lsprobe m4portal LSAlice','active=false');
   results.push('Online restoration discards match loot/XP; offline snapshot survives retired session plus full idle reload and restores on join. Second room continues independently. All runtime directories cleaned.');

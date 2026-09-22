@@ -1,4 +1,25 @@
-# Architecture — M6
+# Architecture — M7
+
+
+## M7 恢复边界
+
+`storage` 只拥有 `lastsector_schema`、`recovery_sessions`、`pending_player_restores`；没有复用恢复表保存永久胜负/统计/经济。`StorageProvider` 创建 JDBC 连接；`DatabaseExecutor` 是命名的单线程、有界 128 队列，拒绝时不会 caller-runs。`JdbcRecoveryRepository` 只处理准备语句和事务，不触碰 Bukkit。`RecoveryStorage` 把完成回调排回 server-thread pump，合并每局最新检查点并维护健康和退休栅栏。记录退休后，迟到的 revision 不能使该局复活。
+
+V1 migration 按版本执行；SQLite DDL 事务化，MySQL DDL 会隐式提交，因此 V1 CREATE IF NOT EXISTS 可重入、版本最后更新。未来 migration 需继续显式增加版本；新于程序的 schema 会失败关闭。SQLite 使用 WAL、FULL synchronous、busy timeout；MySQL 使用成熟 JDBC driver、连接/读超时，凭据经 Properties 传递，日志只报告失败类型。驱动打入生产 JAR，探针为独立 sourceSet。
+
+`SessionRecoverySnapshot` 和 `LobbySnapshot` 是不可变纯 DTO。编码规范化 JSON object key 和 Set 顺序，保存格式版本、UTF-8 SHA-256 与最大 32 MiB 上限；嵌套物品保留 M4 Paper 原生 Base64。读取先校验版本/checksum，再构造与验证 DTO；主线程解码 Bukkit 物品/药水，未知药水 key 明确警告并跳过，非法原状态保留阻止玩家操作。原生 NBT 的再次编码顺序可能不同，语义比较应解码后进行。
+
+`PaperDurablePlayers` 为 `PlayerIsolation` 实现提交屏障和恢复 gateway：读取原状态 → 异步整批事务提交 ORIGINAL → 主线程应用装备。外部观众同样经过屏障。取消/提交失败不应用比赛状态；提交后取消则恢复已提交原状态。待恢复按 UUID + generation 定位，恢复同一个 generation 时替换一次；Player PDC generation 与 playerdata 在恢复的同一 tick 保存，之后 SQL APPLIED + 条件删除。数据库删除失败仍冻结物品操作，并在后续周期重试。若 playerdata 已带同一 generation，而旧 ACTIVE 会话尚未来得及完成，登录时安全结束冲突会话，绝不把已确认恢复的 Lobby 玩家接回旧比赛。pending 先于重连/新 join；不能让一个延迟删除清除新 generation。
+
+`PaperRecoveryCoordinator` 在 join gate 打开前读取全部恢复行与原状态。owner UUID + 30 秒 wall-clock lease 使用条件 UPDATE 抢占，启动遇到尚未过期租约最多等待约 40 秒；运行中每 5 秒续租。重复 Room/world 行全部放弃，单条非法快照不阻断其他会话。验证 DB 元数据、配置指纹、重新推导的安全 leaf、marker Session/Room/Map/worldName、level.dat、无符号链接/重解析点、未加载状态后才加载世界。DB read 失败不启动 orphan 扫描。
+
+重建顺序：加载原世界 → 清理旧 PDC 身体/展示载体 → 恢复 sanitizer ledger → Session/Team → Zone/保护期 → Combat/DeathBox → bodies 或 ENDING showcase → Room 注册 → 路由原状态 → 打开 join gate。实体清理监听后续 EntitiesLoadEvent，只删除旧 epoch 的 LastSector 载体，不删除普通地面物品；新载体有本进程 epoch。清理世界时移除监听注册。
+
+`RecoveryClock` 在整批 Room 恢复期间保持暂停；身体先注册逻辑 RESERVED 状态，原状态路由完成后统一生成实体并启动展示，避免恢复其他 Room 消耗首个 Room 的重连窗口。圈、保护、归因记录 age、身体 remaining、showcase remaining 和比赛 elapsed 均重新锚定当前单调时钟；从不保存 nanoTime 起点，也不用停机 wall-clock 推演比赛。房间/地图/圈配置指纹不符保守放弃。ENDING 只继续展示/清理，归因 tracker 不继续战斗；离线胜者回 Lobby 后收到胜者提示。在线状态在断电后按身体恢复，已断线身体保留剩余窗口；已死亡与所有观众只恢复原状态。
+
+世界文件由 `WorldFiles` 维持 M2 的路径/marker/NOFOLLOW 检查。只有直接子目录的有效 marker 才可纳入 orphan；第一次 ORPHANED 时间原子写入并保留，重复发现不重置。发现候选后回主线程重新取得未加载确认，再在工作线程重读数据库引用和 marker、检查年龄后有限重试删除。由插件新建的世界使用新 UUID，正常运行不会复用被清理身份。外部工具不应主动加载/改写插件拥有的目录。
+
+正常结束先清理/恢复玩家并释放世界，再将会话完成；删世界失败则持久标为 ORPHANED 后完成。正常 onDisable 关闭 gameplay 后排队提交 pending/COMPLETED，专用线程排空已接受 IO。异常进程终止不执行这条链，ACTIVE 行会被下一进程按 lease 恢复。数据库与 playerdata/region 仍无分布式事务：generation 缩小重入窗口，不能保证存储设备损坏或跨文件回滚时绝对原子。
 
 ## M6 组成与所有权
 
@@ -14,7 +35,7 @@
 
 断线交易：捕获比赛状态 → 注册 RESERVED → Session DISCONNECTED + active 标记 → 清空旧 playerdata 可携带状态 → RUNNING 创建实体。准备阶段保留初始 Loadout 快照，计时从断线开始，落地时写入规划位置；超时早于开局则 RUNNING 第一批统一淘汰。spawn 失败或载体失效用 DISCONNECT_BODY_FAILURE 统一淘汰，无永久不可见存活者。任何生成的部分实体都会清理。
 
-重连交易：PlayerJoin LOWEST 隔离旧状态 → 校验 Session / 单调 deadline / live representation → 捕获实体当前位置、vitals 和当前装备 → claim RESTORING → 解码和恢复 → Session ALIVE → RECONNECTED → 删除实体与注册。期间不再次应用 Loadout，提交前不删除替身。失败清空客户端可携带状态、回到 LIVE、踢出重试；超时/死亡则从 M4 原快照回 Lobby。pending 原状态恢复失败期间同样冻结物品操作；不会先给玩家一个可操作的旧 playerdata tick。M6 仅同 JVM 内保存恢复数据。
+重连交易：PlayerJoin LOWEST 隔离旧状态 → 校验 Session / 单调 deadline / live representation → 捕获实体当前位置、vitals 和当前装备 → claim RESTORING → 解码和恢复 → Session ALIVE → RECONNECTED → 删除实体与注册。期间不再次应用 Loadout，提交前不删除替身。失败清空客户端可携带状态、回到 LIVE、踢出重试；超时/死亡则从 M4 原快照回 Lobby。pending 原状态恢复失败期间同样冻结物品操作；不会先给玩家一个可操作的旧 playerdata tick。M7 在此基础上增加下述 JDBC 持久恢复。
 
 body health/timeout/zone/elimination 均在服务器线程，state claim 与 EliminationService 幂等提交是竞争线性化点，保证一份 carried payload/XP 和一次 stats/通知。伤害记录以原玩家 UUID 入 M5 CombatTracker，DISCONNECT_TIMEOUT 保留 15 秒最近有效来源归因；没有近期来源就无人击杀。死亡时读取实际载体位置/装备，死亡盒使用同一 M5 管线。毒圈走同 Session DamagePulse 和 ZoneDamage 公式，不经过护甲或吸收。
 
@@ -24,7 +45,7 @@ body health/timeout/zone/elimination 均在服务器线程，state claim 与 Eli
 
 ENDING 固化 Outcome 后停止 Session loop/伤害/箱子访问，退休剩余 body（不生成新盒、不算死亡）、原快照入 pending；winner UUID 集合不随实体退休变化。离线赢家登录可收到 WINNER/TIE 队伍结果；死亡观战者、已回 Lobby 队友也收到展示。外部观众可继续观看，debug end/自然结束/disable 都移除 presence、UI、body、ticket，再恢复玩家和卸载世界。跨房间 registries 和 world UUID 隔离。
 
-M7：持久化和进程崩溃恢复、孤儿世界；第三方 Party、经济、排名和外观仍不在 M6。既有 provenance 不可观测边界继续适用，下文详细列出。
+M7 已补齐持久化和进程崩溃恢复、孤儿世界；第三方 Party、经济、排名和外观留待 M8。既有 provenance 不可观测边界继续适用，下文详细列出。
 
 
 ## M4 composition and transaction boundaries
@@ -35,7 +56,7 @@ LoadoutEditor 的 View 以 InventoryHolder 身份识别，UUID 定位管理员�
 
 PaperMatches 在 PREPARING 建立 Entry，PlayerIsolation 先捕获冻结 roster 全部原状态，再 journal 快照、应用 Loadout 并冻结物品操作。STARTING 按冻结人数生成不可变 InitialZone，按实际 World UUID 注册 sanitizer 并同步清理已加载 chunks。SpawnPreparation 保留 M3 出生区块 ticket 与取消 drain 语义，beforeLanding future 等待 PaperLootRuntime。Loot 完成后同 tick 传送在线成员；DISCONNECTED 成员仍占自己的规划出生点，RUNNING 创建替身。任何部分失败沿原有 abort/end 路径恢复原状态。纯事务 Gateway 允许注入 capture/apply/restore 故障测试。
 
-PaperPlayerIsolation 保存原生 item payload、经验、模式、健康/饥饿/药水等，同时隔离末影箱和光标。结束时 PlayerIsolation 把 session 快照转入 UUID pending map，在线恢复并回大厅，成功才删除；离线/死亡/恢复异常保留。PlayerJoin 和原版 respawn 后重试，pending 阻止新 join。该服务不随普通 reload 重建；插件关闭/进程终止的离线恢复未持久化（M7）。M6 在线淘汰保留原快照并登记待观战重生；respawn 在 runtime world，下一 tick 进入 SPECTATOR。观众离开/退出/结束才 defer 和恢复；离线替身淘汰直接 defer。成功后移除原快照，结束不覆盖已经恢复的 Lobby 物品。
+PaperPlayerIsolation 保存原生 item payload、经验、模式、健康/饥饿/药水等，同时隔离末影箱和光标。结束时 PlayerIsolation 把 session 快照转入 UUID pending map，在线恢复并回大厅，成功才删除；离线/死亡/恢复异常保留。PlayerJoin 和原版 respawn 后重试，pending 阻止新 join。该服务不随普通 reload 重建；M7 已持久化关闭/进程终止后的待恢复原状态。M6 在线淘汰保留原快照并登记待观战重生；respawn 在 runtime world，下一 tick 进入 SPECTATOR。观众离开/退出/结束才 defer 和恢复；离线替身淘汰直接 defer。成功后移除原快照，结束不覆盖已经恢复的 Lobby 物品。
 
 WorldSanitizer 使用每个 World UUID 的 SanitationLedger，分别记录 blocks/entities 首次完成，失败不标记；ChunkLoad 与 EntitiesLoad 独立处理。准备物资前 ensure 强制获得该候选 chunk 的实体集合，防止先放物资再执行迟到的首次实体清理。方块只枚举 tile entities，Chest.getBlockInventory 清理物理半箱；Lootable 表先置空，随后清 inventory。村民在 Mob 分类删除之前保留；仅当前 session 的 PDC ground marker 可豁免迟到实体检查。没有全图扫描、定期清扫或自然生物事件禁令。
 
@@ -212,7 +233,7 @@ disable 先关闭 MatchLifecycle，停止所有运行/出生任务、移除 UI�
 
 Session、membership、timer、token、loaded-world registry 仅由 server thread 修改。Player/World、传送、WorldCreator、load/unload 只在 Paper 适配器内且有主线程断言。复制/删除/源树遍历/NBT 校验位于专用 worker；只传递不可变 GameWorld、原子计数和受锁队列。Future 在运行期间由 server-thread pump 完成；关闭后的完成回调不会修改 Session。
 
-经济、Party、RatingCalculator 继续保持接口边界。ItemSerializer 已有 NativeItemSerializer 实现，LootItemResolver 提供原生 minecraft 命名空间。组队/观战/OfflineBody 已在 M6 实现；数据库/进程恢复（M7）、第三方 Party 和物品 Provider 尚未实现。
+经济、Party、RatingCalculator 继续保持接口边界。ItemSerializer 已有 NativeItemSerializer 实现，LootItemResolver 提供原生 minecraft 命名空间。组队/观战/OfflineBody 已在 M6 实现；数据库/进程恢复已在 M7 实现，第三方 Party 和物品 Provider 尚未实现。
 
 公共 API 参考：[异步区块](https://jd.papermc.io/paper/1.21.8/org/bukkit/World.html)、[DamageSource](https://jd.papermc.io/paper/1.21.8/org/bukkit/damage/DamageSource.html)、[喷溅药水](https://jd.papermc.io/paper/1.21.8/org/bukkit/event/entity/PotionSplashEvent.html)、[滞留云](https://jd.papermc.io/paper/1.21.8/org/bukkit/event/entity/AreaEffectCloudApplyEvent.html)。
 

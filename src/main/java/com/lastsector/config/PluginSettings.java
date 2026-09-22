@@ -2,7 +2,10 @@ package com.lastsector.config;
 import java.nio.file.Path;
 import java.util.Objects;
 /** Settings only; storage and economy selection do not initialize integrations in M1. */
-public record PluginSettings(boolean debug, String storageType, String economyProvider, Path runtimeDirectory, String lobbyWorld, ZoneUiSettings zoneUi, CombatSettings combat,DisconnectSettings disconnect) {
+public record PluginSettings(boolean debug, String storageType, String economyProvider, Path runtimeDirectory, String lobbyWorld, ZoneUiSettings zoneUi, CombatSettings combat,DisconnectSettings disconnect,com.lastsector.storage.StorageSettings database,com.lastsector.recovery.RecoverySettings recovery) {
+    public PluginSettings(boolean debug,String storageType,String economyProvider,Path runtimeDirectory,String lobbyWorld,ZoneUiSettings zoneUi,CombatSettings combat,DisconnectSettings disconnect) {
+        this(debug,storageType,economyProvider,runtimeDirectory,lobbyWorld,zoneUi,combat,disconnect,com.lastsector.storage.StorageSettings.defaults(storageType,runtimeDirectory.toAbsolutePath().getParent()),com.lastsector.recovery.RecoverySettings.DEFAULT);
+    }
     public PluginSettings(boolean debug,String storageType,String economyProvider,Path runtimeDirectory,String lobbyWorld,ZoneUiSettings zoneUi,CombatSettings combat) {
         this(debug,storageType,economyProvider,runtimeDirectory,lobbyWorld,zoneUi,combat,DisconnectSettings.DEFAULT);
     }

@@ -80,6 +80,43 @@ public final class WorldFiles {
             throw failure;
         }
     }
+    public Path runtimeRoot(){return runtimeRoot;}
+    public record OwnedRuntime(GameWorld world,String status,Instant orphanedAt) {}
+    /** Only direct children with a fully validated marker are returned. Unmarked data is never adopted. */
+    public List<OwnedRuntime> ownedChildren(java.util.function.Consumer<String> warning)throws IOException {
+        if(Files.notExists(runtimeRoot,LinkOption.NOFOLLOW_LINKS))return List.of();noLinks(runtimeRoot);var result=new ArrayList<OwnedRuntime>();
+        try(var children=Files.list(runtimeRoot)){for(Path path:children.toList())try {
+            noLinks(path);if(!Files.isDirectory(path,LinkOption.NOFOLLOW_LINKS))continue;Path marker=path.resolve(MARKER);noLinks(marker);
+            if(!Files.isRegularFile(marker,LinkOption.NOFOLLOW_LINKS) || Files.size(marker)>16384){warning.accept("Unmarked/invalid runtime directory retained: "+path.getFileName());continue;}
+            var properties=new Properties();try(var input=Files.newInputStream(marker)){properties.load(input);}
+            UUID id=UUID.fromString(properties.getProperty("sessionId"));String room=properties.getProperty("roomId"),map=properties.getProperty("mapId");
+            var template=new MapTemplate(map,map,dataRoot.resolve("recovery-template-identity"),new PlayableArea(-1,1,-1,1));
+            var world=new GameWorld(id,room,properties.getProperty("worldName"),path,template);validateTarget(world);validateMarker(world);
+            String status=properties.getProperty("status","ACTIVE");if(!Set.of("ACTIVE","ORPHANED").contains(status))throw new IOException("Invalid runtime marker status");
+            Instant orphan=status.equals("ORPHANED")?Instant.parse(properties.getProperty("orphanedAt")):null;result.add(new OwnedRuntime(world,status,orphan));
+        }catch(Exception error){warning.accept("Unsafe runtime candidate retained: "+path.getFileName()+" ("+error.getClass().getSimpleName()+")");}}return List.copyOf(result);
+    }
+    public GameWorld recovery(UUID id,String room,MapTemplate template,String name,String relative)throws IOException {
+        var expected=descriptor(id,room,template);
+        if(!expected.worldName().equals(name) || !expected.runtimePath().getFileName().toString().equals(relative))throw new IOException("Recovery path identity mismatch");
+        validateLoad(expected);checkTree(expected.runtimePath());
+        var properties=marker(expected);if(!properties.getProperty("status","ACTIVE").equals("ACTIVE"))throw new IOException("World is not ACTIVE");
+        return new GameWorld(id,room,name,expected.runtimePath(),template,LevelData.validate(expected.runtimePath().resolve("level.dat")));
+    }
+    private Properties marker(GameWorld world)throws IOException {validateTarget(world);validateMarker(world);var p=new Properties();try(var input=Files.newInputStream(world.runtimePath().resolve(MARKER))){p.load(input);}return p;}
+    public void orphan(GameWorld world,Instant now,String reason)throws IOException {
+        var p=marker(world);if(p.getProperty("status","ACTIVE").equals("ORPHANED"))return;
+        p.setProperty("status","ORPHANED");p.setProperty("orphanedAt",now.toString());p.setProperty("reason",reason);
+        Path temporary=world.runtimePath().resolve(MARKER+".tmp-"+UUID.randomUUID());noLinks(temporary);
+        try(var out=java.nio.channels.FileChannel.open(temporary,StandardOpenOption.CREATE_NEW,StandardOpenOption.WRITE)) {var bytes=new java.io.ByteArrayOutputStream();p.store(bytes,"LastSector owned runtime world");out.write(java.nio.ByteBuffer.wrap(bytes.toByteArray()));out.force(true);}
+        try{Files.move(temporary,world.runtimePath().resolve(MARKER),StandardCopyOption.ATOMIC_MOVE,StandardCopyOption.REPLACE_EXISTING);}finally{Files.deleteIfExists(temporary);}
+    }
+    public boolean deleteOrphan(OwnedRuntime candidate,Instant now,java.time.Duration minimumAge,Set<Path> loaded,Set<UUID> referenced)throws IOException {
+        var world=candidate.world();if(loaded.contains(world.runtimePath()) || referenced.contains(world.sessionId()))return false;
+        var p=marker(world);if(!"ORPHANED".equals(p.getProperty("status")))return false;
+        Instant since=Instant.parse(p.getProperty("orphanedAt"));if(!since.equals(candidate.orphanedAt()) || now.isBefore(since.plus(minimumAge)))return false;
+        delete(world,true);return true;
+    }
     private boolean excluded(Path relative) {
         String name = relative.getFileName().toString();
         return Set.of("session.lock", "uid.dat", "playerdata", "stats", "advancements", MARKER).contains(name);
@@ -104,6 +141,7 @@ public final class WorldFiles {
         Path target = world.runtimePath();
         if (Files.notExists(target, LinkOption.NOFOLLOW_LINKS)) return;
         validateMarker(world);
+        byte[] retainedMarker=Files.readAllBytes(target.resolve(MARKER));
         checkTree(target); // All-or-refuse link preflight before deleting any content.
         IOException failure = null;
         for (int attempt = 0; attempt < 3; attempt++) {
@@ -128,7 +166,7 @@ public final class WorldFiles {
                 // Marker is last; restore it if the final directory delete fails.
                 Files.delete(target.resolve(MARKER));
                 try { Files.delete(target); }
-                catch (IOException error) { writeMarker(world); throw error; }
+                catch (IOException error) { Files.write(target.resolve(MARKER),retainedMarker,StandardOpenOption.CREATE_NEW); throw error; }
                 return;
             } catch (IOException error) {
                 failure = error;
@@ -178,7 +216,7 @@ public final class WorldFiles {
         Properties properties = new Properties();
         properties.setProperty("sessionId", world.sessionId().toString()); properties.setProperty("roomId", world.roomId());
         properties.setProperty("mapId", world.template().id()); properties.setProperty("worldName", world.worldName());
-        properties.setProperty("createdAt", Instant.now().toString());
+        properties.setProperty("createdAt", Instant.now().toString());properties.setProperty("status","ACTIVE");
         try (var output = Files.newOutputStream(world.runtimePath().resolve(MARKER), StandardOpenOption.CREATE_NEW)) {
             properties.store(output, "LastSector owned runtime world");
         }

@@ -36,6 +36,7 @@ public final class LastSectorPlugin extends JavaPlugin {
             command.setTabCompleter(handler);
             getServer().getPluginManager().registerEvents(new PlayerConnectionListener(runtime), this);
             getServer().getPluginManager().registerEvents(new com.lastsector.listener.PvPProtectionListener(runtime), this);
+            runtime.beginRecovery();
             messages.loaded(foundation.state().configuration());
         } catch (Exception exception) {
             messages.startupFailed(exception);

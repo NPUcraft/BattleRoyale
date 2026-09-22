@@ -8,13 +8,14 @@ import java.util.function.Consumer;
 public final class EliminationService {
     private final GameSession session;
     private final CombatTracker combat;
-    private final long started;
+    private long started;
     private final Consumer<DeathBox> committed;
     private final Map<UUID,DeathBox> boxes=new LinkedHashMap<>();
     private final Map<UUID,Long> ticks=new HashMap<>();
     public EliminationService(GameSession session,CombatTracker combat,long started,Consumer<DeathBox> committed) {
         this.session=session; this.combat=combat; this.started=started; this.committed=committed;
     }
+    public void recoveredElapsed(long elapsed,long now){if(!boxes.isEmpty())throw new IllegalStateException("Already started");started=now-elapsed;}
     public Optional<DeathBox> eliminate(EliminationRequest request) {
         var victim=session.players().get(request.victim());
         if(session.state()!=GameState.RUNNING || victim==null || !session.combatActive(request.victim())) return Optional.empty();

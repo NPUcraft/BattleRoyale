@@ -24,5 +24,6 @@ public final class WinnerShowcase implements AutoCloseable {
         if(rounds<12 && now-lastEffect>=5_000_000_000L) {lastEffect=now;rounds++;effect.run();}
         } catch(RuntimeException error) {close();failed.accept(error);}
     }
+    public long remainingNanos(){return Math.max(0,duration-(clock.nanoTime()-began));}
     @Override public void close() { if(!closed) {closed=true;task.cancel();} }
 }

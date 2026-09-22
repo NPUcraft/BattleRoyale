@@ -24,6 +24,20 @@ class WorldFilesTest {
         map = TestSupport.map(template); id = UUID.randomUUID();
         files = new WorldFiles(data, runtime, root, List.of(template), List.of(lobby));
     }
+    @Test void orphanAgeSurvivesRestartAndCannotDeleteReferencedOrLoadedWorld() throws Exception {
+        var world=files.copy(id,"solo",map);var time=java.time.Instant.parse("2026-01-01T00:00:00Z");files.orphan(world,time,"test");files.orphan(world,time.plusSeconds(999),"again");
+        var restarted=new WorldFiles(data,runtime,root,List.of(template),List.of(lobby));var candidate=restarted.ownedChildren(message->{}).getFirst();assertEquals(time,candidate.orphanedAt());
+        assertFalse(restarted.deleteOrphan(candidate,time.plusSeconds(3599),java.time.Duration.ofHours(1),Set.of(),Set.of()));
+        assertFalse(restarted.deleteOrphan(candidate,time.plusSeconds(3600),java.time.Duration.ofHours(1),Set.of(world.runtimePath()),Set.of()));
+        assertFalse(restarted.deleteOrphan(candidate,time.plusSeconds(3600),java.time.Duration.ofHours(1),Set.of(),Set.of(id)));
+        assertTrue(restarted.deleteOrphan(candidate,time.plusSeconds(3600),java.time.Duration.ofHours(1),Set.of(),Set.of()));assertFalse(Files.exists(world.runtimePath()));
+    }
+    @Test void recoveryUsesReDerivedPathAndRequiresActiveMarker() throws Exception {
+        var world=files.copy(id,"solo",map);assertEquals(world.runtimePath(),files.recovery(id,"solo",map,world.worldName(),world.runtimePath().getFileName().toString()).runtimePath());
+        assertThrows(IOException.class,()->files.recovery(id,"solo",map,world.worldName(),"../world"));files.orphan(world,java.time.Instant.now(),"test");
+        assertThrows(IOException.class,()->files.recovery(id,"solo",map,world.worldName(),world.runtimePath().getFileName().toString()));
+    }
+    @Test void scannerKeepsUnmarkedAndMalformedChildren()throws Exception{Files.createDirectories(runtime.resolve("unmarked"));var world=files.copy(id,"solo",map);Files.writeString(world.runtimePath().resolve(WorldFiles.MARKER),"bad");assertTrue(files.ownedChildren(message->{}).isEmpty());assertTrue(Files.exists(runtime.resolve("unmarked")));}
     @Test void copiesWorldDataPreservingSeedAndSourceWithExplicitExclusions() throws Exception {
         byte[] original = Files.readAllBytes(template.resolve("level.dat"));
         GameWorld world = files.copy(id, "solo", map);

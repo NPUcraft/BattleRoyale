@@ -17,6 +17,19 @@ public final class ZoneRuntime {
         next=ZoneGeometry.next(initial, stage().targetHalfSize(), random);
         update(started);
     }
+    public com.lastsector.recovery.SessionRecoverySnapshot.ZoneState snapshot() {
+        return new com.lastsector.recovery.SessionRecoverySnapshot.ZoneState(initial,current,from,next,stageIndex,phase,Math.max(0,Math.round(remainingSeconds*1e9)));
+    }
+    public static ZoneRuntime restore(com.lastsector.recovery.SessionRecoverySnapshot.ZoneState saved,ZoneProfile profile,RandomGenerator random,long now) {
+        if(saved.stage()<0 || saved.stage()>=profile.stages().size() || saved.remainingNanos()<0)throw new IllegalArgumentException("Invalid zone snapshot");
+        if(saved.phase()==ZonePhase.FINAL && saved.stage()!=profile.stages().size()-1)throw new IllegalArgumentException("Premature final zone");
+        var zone=new ZoneRuntime(saved.initial(),profile,random,now);zone.stageIndex=saved.stage();zone.phase=saved.phase();zone.from=saved.from();zone.current=saved.current();zone.next=saved.next();
+        long duration=(zone.phase==ZonePhase.WAITING?zone.stage().waitDuration():zone.stage().shrinkDuration()).toNanos();
+        if(zone.phase!=ZonePhase.FINAL && (saved.remainingNanos()>duration || zone.next==null))throw new IllegalArgumentException("Invalid phase remaining");
+        zone.phaseStart=now-(duration-saved.remainingNanos());zone.update(now);
+        if(Math.abs(zone.current.centerX()-saved.current().centerX())>1e-5 || Math.abs(zone.current.centerZ()-saved.current().centerZ())>1e-5 || Math.abs(zone.current.halfSize()-saved.current().halfSize())>1e-5)throw new IllegalArgumentException("Zone interpolation mismatch");
+        return zone;
+    }
     public void update(long now) {
         if (now-started < 0) throw new IllegalArgumentException("Clock moved backwards");
         while (phase != ZonePhase.FINAL) {

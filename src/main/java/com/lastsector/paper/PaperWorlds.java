@@ -33,6 +33,7 @@ public final class PaperWorlds implements WorldGateway {
         if (loaded == null || !loaded.getWorldFolder().toPath().toAbsolutePath().normalize().equals(actual)
                 || !loaded.getName().equals(descriptor.worldName()))
             throw new IllegalStateException("Paper did not load the expected runtime world");
+        loaded.setAutoSave(true);
         if (loaded.getSeed() != descriptor.expectedSeed()) throw new IllegalStateException("Clone seed differs from template");
     }
     @Override public void unload(GameWorld descriptor) {
@@ -45,7 +46,7 @@ public final class PaperWorlds implements WorldGateway {
                 throw new IllegalStateException("Refusing unload: world identity or lobby mismatch");
             if (!players.toLobby(world.getPlayers().stream().map(org.bukkit.entity.Player::getUniqueId).toList())
                     || !world.getPlayers().isEmpty()) throw new IllegalStateException("Players remain in runtime world");
-            // M7 must revisit autosave/recovery policy. This disposable M2 world is about to be deleted.
+            // Normal termination is destructive cleanup; crash recovery relies on enabled vanilla autosave.
             if (!server.unloadWorld(world, false)) throw new IllegalStateException("Paper refused to unload " + world.getName());
         }
         for (World world : server.getWorlds())

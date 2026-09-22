@@ -126,7 +126,7 @@ async function hit(kind, expectedHealth, detail) {
   return text;
 }
 try {
-  await until(() => output.includes('Done ('), 'Paper startup', 120000);
+  await until(() => (output.includes('Done (') && output.includes('Recovery bootstrap complete')), 'Paper startup', 120000);
   assert.match(output, /Paper version 1\.21\.8/); assert.doesNotMatch(output, /ERROR|Exception/);
   await consoleCommand('gamerule naturalRegeneration false', 'naturalRegeneration');
   const a = await connect('LSAlice', port), b = await connect('LSBob', port), c = await connect('LSCarol', port), d = await connect('LSDan', port);

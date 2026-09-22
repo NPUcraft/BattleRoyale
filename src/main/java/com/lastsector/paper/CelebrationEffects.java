@@ -30,7 +30,7 @@ public final class CelebrationEffects {
             Player p=plugin.getServer().getPlayer(winner);
             Location at=p!=null && p.getWorld().getUID().equals(world.getUID())?p.getLocation().add(0,2,0):world.getSpawnLocation().add(0,2,0);
             Firework firework=world.spawn(at,Firework.class,entity->{
-                entity.getPersistentDataContainer().set(marker,PersistentDataType.STRING,session.sessionId().toString());
+                RecoveryEntityCleaner.mark(entity);entity.getPersistentDataContainer().set(marker,PersistentDataType.STRING,session.sessionId().toString());
                 var meta=entity.getFireworkMeta();meta.setPower(0);meta.addEffect(FireworkEffect.builder().with(FireworkEffect.Type.BALL).withColor(Color.WHITE,Color.YELLOW).trail(true).build());
                 entity.setFireworkMeta(meta);entity.setInvulnerable(true);
             });ids.add(firework.getUniqueId());

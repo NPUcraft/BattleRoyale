@@ -53,6 +53,7 @@ public final class LastSectorCommand implements CommandExecutor, TabCompleter {
                     messages.team(sender,session,team);
                 }
                 case "spectate" -> {
+                    if(!runtime.recoveryReady())throw new IllegalStateException("LastSector is still recovering sessions.");
                     if(!(sender instanceof Player player))throw new IllegalArgumentException("This command requires a player");
                     if(args.length!=2)throw new IllegalArgumentException("Usage: /ls spectate <room>");
                     if(rooms.participant(player.getUniqueId()).isPresent())throw new IllegalStateException("Already participating in a room");
@@ -66,7 +67,9 @@ public final class LastSectorCommand implements CommandExecutor, TabCompleter {
                     else messages.unknown(sender);
                 }
                 case "debug" -> {
-                    if (args.length == 2 && args[1].equalsIgnoreCase("rooms")) {
+                    if(args.length==2 && args[1].equalsIgnoreCase("storage")){messages.send(sender,runtime.storageDiagnostics());}
+                    else if(args.length==2 && args[1].equalsIgnoreCase("recovery")){messages.send(sender,runtime.recoveryDiagnostics());}
+                    else if (args.length == 2 && args[1].equalsIgnoreCase("rooms")) {
                         var definitions = foundation.state().rooms().all();
                         messages.count(sender, "Rooms", definitions.size()); definitions.forEach(room -> messages.room(sender, room));
                     } else if (args.length == 2 && args[1].equalsIgnoreCase("maps")) {
@@ -87,14 +90,14 @@ public final class LastSectorCommand implements CommandExecutor, TabCompleter {
                             case "zone", "protection" -> {
                                 if (rooms.rooms().stream().noneMatch(r -> r.id().equals(args[2]))) throw new IllegalArgumentException("Room does not exist: " + args[2]);
                                 var session = rooms.session(args[2]);
-                                if (session.isPresent()) messages.zone(sender, session.orElseThrow());
+                                if (session.isPresent()) messages.zone(sender, session.orElseThrow(),runtime.matches().now());
                                 else messages.send(sender, "room=" + args[2] + " session=N/A state=WAITING phase=N/A stage=N/A initial=N/A current=N/A next=N/A protection=N/A");
                             }
                             case "start" -> { rooms.debugStart(args[2]); messages.send(sender, "Start requested for " + args[2]); }
                             case "end" -> { rooms.debugEnd(args[2]); messages.send(sender, "End requested for " + args[2]); }
                             case "session" -> {
                                 var session = rooms.session(args[2]);
-                                if (session.isPresent()) messages.session(sender, session.orElseThrow(), rooms.remaining(session.orElseThrow()));
+                                if (session.isPresent()){messages.session(sender, session.orElseThrow(), rooms.remaining(session.orElseThrow()),runtime.matches().now());messages.send(sender,runtime.recoverySession(session.orElseThrow().sessionId()));}
                                 else {
                                     var room = rooms.rooms().stream().filter(r -> r.id().equals(args[2])).findFirst()
                                             .orElseThrow(() -> new IllegalArgumentException("Room does not exist: " + args[2]));
@@ -119,7 +122,7 @@ public final class LastSectorCommand implements CommandExecutor, TabCompleter {
             if (sender.hasPermission("lastsector.play")) choices.addAll(List.of("rooms", "join", "autojoin", "leave", "team", "spectate"));
             if (sender.hasPermission("lastsector.admin")) choices.addAll(List.of("reload", "debug", "admin"));
         } else if (args.length == 2 && args[0].equalsIgnoreCase("debug") && sender.hasPermission("lastsector.admin"))
-            choices.addAll(List.of("rooms", "maps", "session", "zone", "protection", "loot", "deathboxes", "teams", "offline", "start", "end"));
+            choices.addAll(List.of("storage", "recovery", "rooms", "maps", "session", "zone", "protection", "loot", "deathboxes", "teams", "offline", "start", "end"));
         else if(args[0].equalsIgnoreCase("admin") && sender.hasPermission("lastsector.admin")) {
             if(args.length==2) choices.add("loadout");
             else if(args.length==3 && args[1].equalsIgnoreCase("loadout")) choices.add("edit");

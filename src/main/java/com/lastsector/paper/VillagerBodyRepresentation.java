@@ -13,7 +13,7 @@ public final class VillagerBodyRepresentation implements OfflineBodyRepresentati
     private record Visual(UUID carrier,UUID equipment,int chunkX,int chunkZ,UUID world) {}
     private final Map<UUID,Visual> visuals=new HashMap<>();
     public VillagerBodyRepresentation(JavaPlugin plugin,PaperBodySnapshots snapshots){this.plugin=plugin;this.snapshots=snapshots;owner=new NamespacedKey(plugin,"offline_player");session=new NamespacedKey(plugin,"offline_session");}
-    private void mark(Entity entity,OfflineBody body){entity.getPersistentDataContainer().set(owner,PersistentDataType.STRING,body.player().toString());entity.getPersistentDataContainer().set(session,PersistentDataType.STRING,body.session().toString());entity.setPersistent(true);}
+    private void mark(Entity entity,OfflineBody body){RecoveryEntityCleaner.mark(entity);entity.getPersistentDataContainer().set(owner,PersistentDataType.STRING,body.player().toString());entity.getPersistentDataContainer().set(session,PersistentDataType.STRING,body.session().toString());entity.setPersistent(true);}
     @Override public UUID spawn(OfflineBody body) {
         Location at=PaperBodySnapshots.location(body.snapshot().position());World world=at.getWorld();List<Entity> made=new ArrayList<>();
         try {

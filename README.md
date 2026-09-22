@@ -1,6 +1,6 @@
 # LastSector
 
-LastSector 是 **Java 21 / Paper 1.21.8** 的多人 Battle Royale 插件。M1–M5 已完成；当前为 **M6 — Teams, Spectators & OfflineBody**：统一队伍、全程友伤保护、队伍胜负、死亡/外部观战、可受伤的离线替身和默认 120 秒比赛重连。下一里程碑为 M7 数据库与进程恢复。
+LastSector 是 **Java 21 / Paper 1.21.8** 的多人 Battle Royale 插件。M1–M6 已完成；当前为 **M7 — Storage & Crash Recovery**：异步 SQLite/MySQL、版本化会话快照、持久化玩家原状态、RUNNING/ENDING 崩溃恢复与延迟孤儿世界清理。下一里程碑为 M8 大厅、经济、外观与排名。
 
 ## 构建
 
@@ -119,9 +119,9 @@ M4 实服验证脚本：`node scripts/paper-m4.mjs <stopped-paper-directory> [mi
 ## 当前边界
 
 - 淘汰后原版重生进入本局 SPECTATOR；保留 Lobby 原快照直到 /ls leave、退出或结束，Team 历史不变。
-- 活动断线保存独立比赛快照并创建可攻击的 OfflineBody；到期/死亡统一淘汰，重连从替身恢复。进程崩溃恢复属于 M7。
-- 离线待恢复快照只存在本插件实例内存中，跨正常空闲 reload 保留；插件禁用、崩溃和进程重启后的持久恢复属于 M7。第三方物品 Provider、Team 胜负和永久统计仍未实现。
-- 崩溃/强杀、异常生成器停滞、文件锁可能保留带 marker 的目录；不自动扫描删除（M7）。
+- 活动断线保存独立比赛快照并创建可攻击的 OfflineBody；到期/死亡统一淘汰，重连从替身恢复。M7 另提供进程崩溃恢复。
+- 原状态已持久化，跨正常停服、禁用与崩溃恢复；Team 胜负已实现。永久统计和第三方物品 Provider 后续实现。
+- 崩溃/强杀、文件锁可能保留带 marker 的目录；M7 只处理有效所有权标记的直接子目录，无标记、链接与身份不匹配的目录保留人工检查。
 - 匿名红石/发射器、无来源的 TNT 矿车、第三方直接修改方块或制造 source-less 伤害，以及多来源混合火/岩浆，不能可靠还原玩家来源。见架构文档的具体限制。
 
 [架构](docs/ARCHITECTURE.md) · [路线图](docs/ROADMAP.md) · [验证记录](docs/VERIFICATION.md)
@@ -153,4 +153,44 @@ DeathBox 是 **54 格共享库存**，以 BARREL BlockDisplay、Interaction 与 
 
 实服复现：`paperProbeJar` 后运行 `scripts/paper-m6-candidate.mjs`、`scripts/paper-m6.mjs`、`scripts/paper-m6-edges.mjs`，参数同 M3–M5 脚本。细节及公开 API fixture 边界见 [验证记录](docs/VERIFICATION.md)。
 
-M7 将处理数据库、进程崩溃恢复和孤儿世界。第三方 Party、永久统计/排名、经济与外观商店尚未实现。匿名/第三方 source-less 伤害、红石责任链、混合火/岩浆来源等仍受 Paper 可观测来源限制，见 [架构](docs/ARCHITECTURE.md)。
+M7 已实现数据库、进程崩溃恢复和孤儿世界管理。第三方 Party、永久统计/排名、经济与外观商店尚未实现。匿名/第三方 source-less 伤害、红石责任链、混合火/岩浆来源等仍受 Paper 可观测来源限制，见 [架构](docs/ARCHITECTURE.md)。
+
+## M7 存储与恢复
+
+安装包已包含 SQLite JDBC 3.53.4.0、MySQL Connector/J 9.4.0 和 Gson 2.13.2，无需额外下载驱动。默认配置：
+
+```yaml
+storage:
+  type: sqlite
+  sqlite:
+    file: data/lastsector.db
+  mysql:
+    host: 127.0.0.1
+    port: 3306
+    database: lastsector
+    username: lastsector
+    password: ""
+    connection-timeout-ms: 5000
+recovery:
+  enabled: true
+  checkpoint-seconds: 5
+  orphan-delete-after-minutes: 60
+```
+
+SQLite 路径相对 `plugins/LastSector`；不得穿越目录或指向链接。MySQL 需事先创建数据库与专用账号，授予该库建表及读写权限；把 `storage.type` 改为 `mysql` 并填写凭据。数据库设置变更必须重启服务器。不要让不相关服务器共享同一个恢复数据库。迁移只创建/升级恢复表，不自动重置或删除现有数据库；遇到更新版本的 schema 会拒绝启动。
+
+插件加载后异步完成迁移、读取、租约与恢复，日志出现 `Recovery bootstrap complete` 后才接受玩家进入。数据库不可用时插件禁用并保留 runtime 目录；运行中故障会显示 DEGRADED、重试并合并检查点，已有比赛继续，新比赛被阻止。`recovery.enabled: false` 只关闭续局恢复，原 Lobby 状态持久化仍为必须步骤。
+
+- `/ls debug storage`：provider、连接健康、schema、队列、合并等待数、最近成功检查点、脱敏失败类型。
+- `/ls debug recovery`：启动状态、恢复/放弃数量、孤儿世界、持久玩家记录数（包含比赛中的原状态）。
+- `/ls debug session <room>`：增加当前 revision、已落盘 revision 和 degraded 状态。
+
+原 Lobby 背包、末影箱、光标、经验、模式、vitals/药水等先在数据库提交，再应用 Loadout 或外部观战状态。成功恢复后保存玩家 generation 标记与 playerdata，再异步确认和删除恢复记录；删除失败期间冻结物品操作并重试，避免重复注入。损坏的原状态记录不会被静默丢弃，保留给管理员修复。
+
+每局使用完整 V1 DTO、SHA-256 与递增 revision；正常每 5 秒检查点，关键阶段/淘汰/离线/重连/DeathBox 变化优先。可配置间隔最少 1 秒。只恢复 RUNNING 和 ENDING；不完整准备、Loot 未完成或配置/文件校验不符则放弃该局，原状态转待恢复。战斗快照保留 Team、击杀助攻、当前背包、身体、近期归因、圈、保护期、Loot 完成标记与 sanitizer 集合。所有比赛计时保存剩余/已过时长，停机不消耗比赛时间。崩溃时 ALIVE 变为完整重连窗口的身体；已离线者续用原剩余时间。死亡/外部观众回 Lobby，不恢复镜头目标。
+
+恢复加载原 runtime 世界，不复制模板、不重新生成 Loot。启用原版 autosave，检查点不调用整世界 `save()`。**数据库与 region/entity 文件不是同一事务，属于尽力恢复；强杀可能回退最近几秒的比赛状态，世界文件可能比数据库更旧。** 不提供跨数据库/世界文件的 exactly-once 保证。请在服务器停止或一致备份流程下同时备份数据库与 runtime 数据；本阶段没有自动备份系统。
+
+正常 `/stop` 或禁用是结束比赛：在线玩家恢复、离线玩家保留待恢复记录、正常删除世界并完成会话。只有非正常进程终止续局。无法恢复或无引用的有效标记世界持久写入 ORPHANED 和首次发现 UTC 时间，默认至少保留 60 分钟；启动及每 5 分钟检查。删除前复核路径、marker、时间、数据库引用和加载状态；Windows 文件占用仅有限重试。不要通过其他插件或后台手工加载 LastSector runtime 目录。
+
+详细设计、测试证据和限制见 [架构](docs/ARCHITECTURE.md)、[验证](docs/VERIFICATION.md)。永久玩家档案、累计统计、Rating、经济和 Party 集成仍留待 M8。

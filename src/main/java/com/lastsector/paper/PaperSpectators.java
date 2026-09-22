@@ -40,9 +40,11 @@ public final class PaperSpectators {
         if(!session.room().allowExternalSpectators())throw new IllegalStateException("External spectators are disabled");
         if(!visible(session))throw new IllegalStateException("Only RUNNING or ENDING sessions may be watched");
         if(registry.find(player.getUniqueId()).isPresent() || pending.containsKey(player.getUniqueId()) || matches.get().participant(player.getUniqueId())!=null || isolation.blocked(player.getUniqueId()))throw new IllegalStateException("Leave your current match or spectator session first");
-        UUID token=UUID.randomUUID();isolation.apply(token,List.of(player.getUniqueId()),new LoadoutDefinition("spectator",Map.of(),0));
-        try{var entry=Objects.requireNonNull(matches.get().entry(session.sessionId()));enter(player,entry,SpectatorRegistry.Kind.EXTERNAL,token,safe(entry,null));}
-        catch(RuntimeException error){registry.remove(player.getUniqueId());isolation.end(token);throw error;}
+        UUID token=UUID.randomUUID();isolation.applyAsync(token,List.of(player.getUniqueId()),new LoadoutDefinition("spectator",Map.of(),0),()->player.isOnline() && visible(session)).whenComplete((ignored,error)->{
+            if(error!=null){messages.send(player,"Spectator entry failed; original state retained.");return;}
+            try{var entry=Objects.requireNonNull(matches.get().entry(session.sessionId()));enter(player,entry,SpectatorRegistry.Kind.EXTERNAL,token,safe(entry,null));}
+            catch(RuntimeException failure){registry.remove(player.getUniqueId());isolation.end(token);messages.send(player,"Spectator entry failed; returning to Lobby.");}
+        });
     }
     private boolean visible(GameSession session){return session.state()==GameState.RUNNING || session.state()==GameState.ENDING;}
     private Location safe(PaperMatches.Entry entry,Location requested) {

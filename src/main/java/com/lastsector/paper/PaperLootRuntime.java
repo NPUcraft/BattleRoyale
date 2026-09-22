@@ -37,6 +37,7 @@ public final class PaperLootRuntime {
     private Runnable inspect;
     private GameScheduler.Task task;
     private State state=State.NOT_STARTED;
+    public State state(){return state;}
     private boolean cancelled;
     private int activePoints,skippedPoints,activeAreas,skippedAreas,groundItems,missedSpawns;
     public PaperLootRuntime(JavaPlugin plugin,GameSession session,WorldSanitizer sanitizer,MatchContent content,NativeLootItems items,

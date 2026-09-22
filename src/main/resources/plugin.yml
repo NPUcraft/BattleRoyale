@@ -2,7 +2,7 @@ name: LastSector
 version: '${version}'
 main: com.lastsector.LastSectorPlugin
 api-version: '1.21.8'
-description: Multiplayer battle royale safe spawns and zone lifecycle - Milestone 3
+description: Multiplayer battle royale safe spawns and zone lifecycle - Milestone 7
 load: POSTWORLD
 commands:
   lastsector:

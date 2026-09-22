@@ -6,7 +6,9 @@ import java.util.function.Consumer;
 public interface MatchLifecycle extends AutoCloseable {
     default void onFinished(Consumer<GameSession> finished) {}
     default void checkJoin(UUID player) {}
+    default void checkStart() {}
     default void restore(GameSession session) {}
+    default java.util.concurrent.CompletionStage<Void> prepareDurably(com.lastsector.session.GameSession session){preparing(session);return java.util.concurrent.CompletableFuture.completedFuture(null);}
     default void preparing(GameSession session) {}
     void start(GameSession session, Runnable ready, Consumer<Throwable> failed);
     void running(GameSession session, Consumer<Throwable> failed);

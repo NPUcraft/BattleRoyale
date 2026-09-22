@@ -20,6 +20,11 @@ public final class PaperOfflineBodies {
     public PaperOfflineBodies(JavaPlugin plugin,PaperMatches.Entry entry,DisconnectSettings settings,GameClock clock,PaperBodySnapshots snapshots,MessageService messages,Consumer<UUID> restoreLobby) {
         this.plugin=plugin;this.entry=entry;this.settings=settings;this.clock=clock;this.snapshots=snapshots;this.messages=messages;this.restoreLobby=restoreLobby;representation=new VillagerBodyRepresentation(plugin,snapshots);
     }
+    public java.util.Map<UUID,OfflineBody> snapshotBodies(){for(var body:bodies.values())if(body.active() && representation.valid(body))body.snapshot(representation.capture(body));return java.util.Map.copyOf(bodies);}
+    public void recover(UUID player,String name,BodySnapshot state,long remainingNanos){
+        var participant=entry.session.players().get(player);var body=new OfflineBody(player,entry.session.sessionId(),participant.teamId().orElseThrow(),name,state,clock.nanoTime(),java.time.Duration.ofNanos(remainingNanos));
+        if(bodies.putIfAbsent(player,body)!=null)throw new IllegalStateException("Duplicate body");entry.session.disconnected(player);entry.session.offlineCombatant(player,true); // Spawn only after all rooms and durable originals are ready.
+    }
     public OfflineBody find(UUID player){return bodies.get(player);}
     public OfflineBody entity(Entity entity){UUID id=entities.get(entity.getUniqueId());var body=bodies.get(id);return body!=null && representation.marked(entity,body)?body:null;}
     public LivingEntity carrier(UUID player){var body=bodies.get(player);return body==null?null:representation.carrier(body);}
@@ -28,7 +33,7 @@ public final class PaperOfflineBodies {
         if(participant==null || !Set.of(PlayerState.ALIVE,PlayerState.WAITING).contains(participant.state()) || bodies.containsKey(p.getUniqueId()))return;
         BodySnapshot captured=snapshots.player(p);
         OfflineBody body=new OfflineBody(p.getUniqueId(),entry.session.sessionId(),participant.teamId().orElseThrow(),p.getName(),captured,clock.nanoTime(),settings.reconnectWindow());
-        bodies.put(p.getUniqueId(),body);entry.session.disconnected(p.getUniqueId());entry.session.offlineCombatant(p.getUniqueId(),true);
+        entry.changed();bodies.put(p.getUniqueId(),body);entry.session.disconnected(p.getUniqueId());entry.session.offlineCombatant(p.getUniqueId(),true);
         // playerdata must not remain another source of carried match items.
         snapshots.quarantine(p);
         if(entry.session.state()==GameState.RUNNING)spawn(body);
@@ -55,7 +60,7 @@ public final class PaperOfflineBodies {
         try {
             snapshots.restore(p,body.snapshot());
             if(!entry.session.reconnect(p.getUniqueId()))throw new IllegalStateException("Reconnect state changed");
-            body.restored();remove(body);messages.event(p,"reconnected");
+            body.restored();entry.changed();remove(body);messages.event(p,"reconnected");
         } catch(RuntimeException error){
             snapshots.quarantine(p);if(body.state()==OfflineBody.State.RESTORING)body.restoreFailed();
             messages.runtimeError("Reconnect restore failed; body retained for "+p.getUniqueId(),error);
@@ -89,7 +94,7 @@ public final class PaperOfflineBodies {
     public void eliminate(OfflineBody body,DamageOrigin cause,UUID attacker) {
         if(!body.active() || entry.session.state()!=GameState.RUNNING)return;
         if(representation.valid(body))body.snapshot(representation.capture(body));
-        if(!body.eliminate())return;
+        if(!body.eliminate())return;entry.changed();
         messages.offlineResult(body.player(),cause==DamageOrigin.DISCONNECT_TIMEOUT);
         if(cause==DamageOrigin.DISCONNECT_TIMEOUT)for(UUID id:entry.session.players().keySet()){Player viewer=plugin.getServer().getPlayer(id);if(viewer!=null)messages.event(viewer,"offline-timeout",body.name());}
         var state=body.snapshot();var at=state.position();var world=plugin.getServer().getWorld(at.world());

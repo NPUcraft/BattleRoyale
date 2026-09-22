@@ -21,11 +21,12 @@ public final class PaperCombatSession implements AutoCloseable {
     private final Map<UUID,String> names=new HashMap<>();
     private final Set<UUID> zoneDamage=new HashSet<>();
     private final Consumer<Throwable> failed;
+    private long began;
     private long dirtyTick=Long.MIN_VALUE;
     private boolean initialOutcomeCheck=true;
     public PaperCombatSession(JavaPlugin plugin,GameSession session,CombatSettings settings,GameClock clock,
             NativeItemSerializer serializer,StoredExperienceBottles bottles,Consumer<UUID> eliminated,Consumer<Throwable> failed) {
-        this.plugin=plugin;this.session=session;this.clock=clock;this.failed=failed;
+        this.plugin=plugin;this.session=session;this.clock=clock;this.failed=failed;began=clock.nanoTime();
         session.players().keySet().forEach(id->{var p=plugin.getServer().getPlayer(id);String name=p==null?plugin.getServer().getOfflinePlayer(id).getName():p.getName();names.put(id,name==null?id.toString():name);});
         tracker=new CombatTracker(session.players().keySet(),settings,clock);
         boxes=new PaperDeathBoxes(plugin,session,settings.boxReach(),serializer,bottles);
@@ -36,9 +37,12 @@ public final class PaperCombatSession implements AutoCloseable {
             for(UUID id:session.players().keySet()) {var player=plugin.getServer().getPlayer(id);if(player!=null) player.sendMessage(feed);}
         });
     }
+    public long elapsedNanos(){return Math.max(0,clock.nanoTime()-began);}
+    public void recoveredElapsed(long elapsed){began=clock.nanoTime()-elapsed;eliminations.recoveredElapsed(elapsed,clock.nanoTime());}
     public CombatTracker tracker() { return tracker; }
     public long now() { return clock.nanoTime(); }
     public PaperDeathBoxes boxes() { return boxes; }
+    public void recoveredName(UUID id,String name){if(!session.players().containsKey(id))throw new IllegalArgumentException("Unknown participant");names.put(id,Objects.requireNonNull(name));}
     public String name(UUID id) { return names.getOrDefault(id,id.toString()); }
     public void eliminate(EliminationRequest request) { eliminations.eliminate(request); }
     public void fail(Throwable error) { failed.accept(error); }

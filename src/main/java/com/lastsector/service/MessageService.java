@@ -21,10 +21,10 @@ public final class MessageService {
     public void help(CommandSender sender) {
         send(sender, "/lastsector help | version");
         if (sender.hasPermission("lastsector.play")) send(sender, "/lastsector rooms | join <room> | autojoin | leave | team | spectate <room>");
-        if (sender.hasPermission("lastsector.admin")) send(sender, "/lastsector reload | admin loadout edit <room> | debug rooms/maps | debug session/zone/protection/loot/deathboxes/teams/offline/start/end <room>");
+        if (sender.hasPermission("lastsector.admin")) send(sender, "/lastsector reload | admin loadout edit <room> | debug storage/recovery/rooms/maps | debug session/zone/protection/loot/deathboxes/teams/offline/start/end <room>");
     }
     public void denied(CommandSender sender) { send(sender, "You do not have permission to use this command."); }
-    public void version(CommandSender sender, String version) { send(sender, "Version " + version + " (Milestone 6 Teams, Spectators & Reconnect)"); }
+    public void version(CommandSender sender, String version) { send(sender, "Version " + version + " (Milestone 7 Storage & Crash Recovery)"); }
     public void reloaded(CommandSender sender) { send(sender, "Configuration reloaded successfully."); }
     public void reloadFailed(CommandSender sender, String reason) { send(sender, "Reload failed; previous configuration retained. " + reason); }
     public void unknown(CommandSender sender) { send(sender, "Unknown command. Use /lastsector help."); }
@@ -40,7 +40,7 @@ public final class MessageService {
         // JavaPlugin's logger already supplies [LastSector].
         logger.info("Loaded " + snapshot.rooms().size() + " rooms.");
         logger.info("Loaded " + snapshot.maps().size() + " map templates.");
-        logger.info("Milestone 6 initialized. Teams, spectators and offline bodies ready.");
+        logger.info("Milestone 7 initialized. Recovery bootstrap started; joins remain gated.");
         if (snapshot.settings().debug()) logger.info("Debug enabled. Runtime directory: " + snapshot.settings().runtimeDirectory());
     }
     public void startupFailed(Exception error) { logger.log(java.util.logging.Level.SEVERE, "Startup failed; disabling LastSector. " + error.getMessage(), error); }
@@ -49,6 +49,7 @@ public final class MessageService {
     public void runtimeError(String context, Throwable error) { logger.log(java.util.logging.Level.SEVERE, context + ": " + error.getMessage(), error); }
     public void event(CommandSender sender, String event, Object... args) {
         String pattern = switch (event) {
+            case "start-blocked" -> "%s";
             case "teams-assigned" -> "Assigned %s balanced teams.";
             case "disconnected" -> "%s disconnected. Reconnect window: %s seconds.";
             case "reconnected" -> "Reconnected: your current match state has been restored.";
@@ -76,7 +77,7 @@ public final class MessageService {
         send(sender, room.id() + " state=" + (session == null ? "WAITING" : session.state())
                 + " players=" + (session == null ? 0 : session.players().size()) + "/" + room.maxPlayers());
     }
-    public void session(CommandSender sender, com.lastsector.session.GameSession session, int remaining) {
+    public void session(CommandSender sender, com.lastsector.session.GameSession session, int remaining,long now) {
         send(sender, "room=" + session.room().id() + " session=" + session.sessionId() + " state=" + session.state()
                 + " players=" + session.players().keySet() + " min/max=" + session.room().minPlayers() + "/" + session.room().maxPlayers()
                 + " map=" + session.selectedMap().map(MapTemplate::id).orElse("N/A")
@@ -84,19 +85,19 @@ public final class MessageService {
                 + " path=" + session.gameWorld().map(world -> world.runtimePath().toString()).orElse("N/A")
                 + " countdown=" + (remaining < 0 ? "N/A" : remaining)
                 + " stats=" + session.players().values() + " outcome=" + session.outcome().map(Object::toString).orElse("N/A"));
-        zone(sender, session);
+        zone(sender, session,now);
     }
     public void team(CommandSender sender,com.lastsector.session.GameSession session,com.lastsector.team.GameTeam team) {
         send(sender,"Team "+team.displayIndex()+" id="+team.teamId()+" active="+team.playerIds().stream().filter(session::combatActive).count()+" members="+
                 team.playerIds().stream().sorted().map(id->{var player=org.bukkit.Bukkit.getOfflinePlayer(id);return (player.getName()==null?id.toString():player.getName())+"="+session.players().get(id).state();}).toList());
     }
-    public void zone(CommandSender sender, com.lastsector.session.GameSession session) {
+    public void zone(CommandSender sender, com.lastsector.session.GameSession session,long now) {
         var zone = session.zone().orElse(null);
         send(sender, "room=" + session.room().id() + " session=" + session.sessionId() + " state=" + session.state()
                 + " phase=" + (zone == null ? "N/A" : zone.phase()) + " stage=" + (zone == null ? "N/A" : zone.stageIndex()+1)
                 + " initial=" + session.initialZone().map(Object::toString).orElse("N/A")
                 + " current=" + (zone == null ? "N/A" : zone.current()) + " next=" + (zone == null || zone.next()==null ? "N/A" : zone.next())
                 + " remainingSeconds=" + (zone == null ? "N/A" : zone.remainingSeconds())
-                + " protectionSeconds=" + session.protection().map(p -> String.valueOf(p.remaining(System.nanoTime()))).orElse("N/A"));
+                + " protectionSeconds=" + session.protection().map(p -> String.valueOf(p.remaining(now))).orElse("N/A"));
     }
 }

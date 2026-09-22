@@ -30,6 +30,11 @@ public final class RoomRuntimeService implements AutoCloseable {
         this.matches = matches;
         matches.onFinished(session->{if(!closed && sessions.find(session.sessionId()).orElse(null)==session && session.state()==GameState.ENDING) end(session);});
     }
+    public void recover(GameSession session) {
+        if(sessions.findByRoom(session.room().id()).isPresent())throw new IllegalStateException("Duplicate recovered Room");
+        for(UUID id:session.players().keySet())if(memberships.containsKey(id))throw new IllegalStateException("Duplicate recovered participant");
+        sessions.register(session);session.players().keySet().forEach(id->memberships.put(id,session.sessionId()));
+    }
     public List<RoomDefinition> rooms() { return configuration.get().rooms(); }
     public Optional<GameSession> session(String room) { return sessions.findByRoom(room); }
     public Optional<GameSession> participant(UUID id){return Optional.ofNullable(memberships.get(id)).flatMap(sessions::find);}
@@ -129,13 +134,16 @@ public final class RoomRuntimeService implements AutoCloseable {
         prepare(session);
     }
     private void prepare(GameSession session) {
+        try{matches.checkStart();}catch(IllegalStateException blocked){cancelCountdown(session);if(session.state()==GameState.COUNTDOWN)session.transition(GameState.WAITING);players.notify(session.players().keySet(),"start-blocked",blocked.getMessage());return;}
         cancelCountdown(session);
         UUID token = UUID.randomUUID();
         operations.put(session.sessionId(), token);
         try {
             session.prepare(selector.select(session.room(), configuration.get().maps()));
-            matches.preparing(session);
-            players.notify(session.players().keySet(), "preparing", session.selectedMap().orElseThrow().id());
+            matches.prepareDurably(session).whenComplete((barrier,barrierError)->{
+            if(!current(session,token)){matches.restore(session);finish(session,null);return;}
+            if(barrierError!=null){abort(session,barrierError);return;}
+            try { players.notify(session.players().keySet(), "preparing", session.selectedMap().orElseThrow().id());
             worlds.prepare(session.sessionId(), session.room().id(), session.selectedMap().orElseThrow(),
                     () -> current(session, token)).whenComplete((world, error) -> {
                 if (closed) return; // Provider owns shutdown cleanup; no off-thread session mutation.
@@ -156,6 +164,8 @@ public final class RoomRuntimeService implements AutoCloseable {
                         } catch (Exception failure) { abort(session, failure); }
                     }, failure -> { if (!closed && (session.state() == GameState.STARTING || session.state() == GameState.RUNNING)) abort(session, failure); });
                 } catch (Exception failure) { abort(session, failure); }
+            });
+            }catch(Exception failure){abort(session,failure);}
             });
         } catch (Exception error) { abort(session, error); }
     }

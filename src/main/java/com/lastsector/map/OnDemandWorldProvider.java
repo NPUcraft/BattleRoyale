@@ -79,6 +79,12 @@ public final class OnDemandWorldProvider implements WorldProvider {
         });
         return result;
     }
+    /** Caller already validated marker/tree off-thread. Recovery failure never deletes the candidate. */
+    public void recover(GameWorld world)throws Exception {
+        if(isClosed())throw new IllegalStateException("Provider closed");files.validateLoad(world);
+        try{gateway.load(world);loaded.put(world.sessionId(),world);}catch(Exception failure){try{gateway.unload(world);}catch(Exception unload){failure.addSuppressed(unload);}throw failure;}
+    }
+    public void preserve(GameWorld world)throws Exception {gateway.unload(world);loaded.remove(world.sessionId());}
     private boolean isClosed() { synchronized (gate) { return closed; } }
     private void discard(GameWorld copy, CompletableFuture<GameWorld> result) {
         deleteAsync(copy).whenComplete((ignored, error) -> {

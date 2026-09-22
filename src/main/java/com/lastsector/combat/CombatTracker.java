@@ -42,6 +42,15 @@ public final class CombatTracker {
         long now=clock.nanoTime(),window=settings.attributionWindow().toNanos();
         while(!records.isEmpty() && now-records.getFirst().nanoTime()>window) records.removeFirst();
     }
+    public java.util.List<com.lastsector.recovery.SessionRecoverySnapshot.Hit> snapshot() {
+        var result=new java.util.ArrayList<com.lastsector.recovery.SessionRecoverySnapshot.Hit>();
+        history.values().forEach(this::expire);for(var records:history.values())for(var r:records)result.add(new com.lastsector.recovery.SessionRecoverySnapshot.Hit(r.victim(),r.attacker(),r.amount(),r.origin().name(),Math.max(0,clock.nanoTime()-r.nanoTime()),r.direct()));return java.util.List.copyOf(result);
+    }
+    public void restore(java.util.List<com.lastsector.recovery.SessionRecoverySnapshot.Hit> hits) {
+        if(!history.isEmpty())throw new IllegalStateException("Combat already initialized");
+        for(var hit:hits){if(!valid(hit.victim(),hit.attacker()) || hit.ageNanos()<0 || hit.ageNanos()>settings.attributionWindow().toNanos())throw new IllegalArgumentException("Invalid recovered combat record");
+            var records=history.computeIfAbsent(hit.victim(),id->new ArrayDeque<>());if(records.size()>=MAX_RECORDS_PER_VICTIM)throw new IllegalArgumentException("Too many combat records");records.add(new DamageRecord(hit.victim(),hit.attacker(),hit.amount(),DamageOrigin.valueOf(hit.origin()),clock.nanoTime()-hit.ageNanos(),hit.direct()));}
+    }
     public void forget(UUID victim) { history.remove(victim); }
     public void clear() { history.clear(); }
     public int size(UUID victim) { return history.getOrDefault(victim,new ArrayDeque<>()).size(); }

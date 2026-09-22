@@ -68,6 +68,14 @@ public final class GameSession {
         this.createdAt = Objects.requireNonNull(createdAt);
     }
     public static GameSession waiting(UUID id, RoomDefinition room, Instant createdAt) { return new GameSession(id, room, createdAt); }
+    public static GameSession recovered(com.lastsector.recovery.SessionRecoverySnapshot saved,RoomDefinition room,GameWorld world) {
+        var s=new GameSession(saved.sessionId(),room,Instant.now());s.selectedMap=world.template();s.gameWorld=world;s.state=GameState.valueOf(saved.gameState());
+        if(s.state!=GameState.RUNNING && s.state!=GameState.ENDING)throw new IllegalArgumentException("Unrecoverable session phase");
+        for(var t:saved.teams())s.teams.put(t.id(),new GameTeam(t.id(),t.members(),t.index()));
+        for(var p:saved.participants()){var state=PlayerState.valueOf(p.state());if(state==PlayerState.ALIVE)state=PlayerState.DISCONNECTED;if(state==PlayerState.SPECTATING)state=PlayerState.ELIMINATED;s.players.put(p.id(),new GamePlayer(p.id(),state,Optional.of(p.team()),p.kills(),p.assists()));}
+        s.initialZone=saved.zone().initial();var o=saved.outcome();if(o!=null)s.outcome=new MatchOutcome(o.players(),o.tie(),o.reason(),0,o.tick(),o.teams());return s;
+    }
+    public void recoveredZone(com.lastsector.zone.ZoneRuntime zone,com.lastsector.combat.ProtectionWindow protection){if(this.zone!=null || !zone.initial().equals(initialZone))throw new IllegalStateException("Already initialized");this.zone=zone;this.protection=protection;}
     public UUID sessionId() { return sessionId; }
     public RoomDefinition room() { return room; }
     public Instant createdAt() { return createdAt; }
