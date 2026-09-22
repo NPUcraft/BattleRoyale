@@ -25,6 +25,8 @@ public final class PaperDeathBoxes implements AutoCloseable {
         this.plugin=plugin; this.session=session; this.reach=reach; this.serializer=serializer; this.experience=experience; visuals=new PaperDeathBoxVisuals(plugin);
         worldId=Objects.requireNonNull(plugin.getServer().getWorld(session.gameWorld().orElseThrow().worldName())).getUID();
     }
+    private Function<UUID,Material> skin=id->Material.BARREL;
+    public void skin(Function<UUID,Material> value){skin=value;}
     public void create(DeathBox box,Function<UUID,String> names) {
         if(boxes.containsKey(box.id())) return;
         List<ItemStack> items=new ArrayList<>(); box.contents().forEach(i->items.add(serializer.item(i)));
@@ -37,7 +39,7 @@ public final class PaperDeathBoxes implements AutoCloseable {
         long seconds=box.elapsedNanos()/1_000_000_000L;
         Component label=Component.text(box.deceasedName()).appendNewline().append(DeathReasonRenderer.render(box.reason(),names))
                 .appendNewline().append(Component.text("T+%02d:%02d".formatted(seconds/60,seconds%60)));
-        view.visuals=visuals.spawn(box,label); view.visuals.forEach(id->entities.put(id,view));
+        view.visuals=visuals.spawn(box,label,skin.apply(box.deceased())); view.visuals.forEach(id->entities.put(id,view));
     }
     public java.util.List<com.lastsector.recovery.SessionRecoverySnapshot.Box> snapshot(){
         var result=new java.util.ArrayList<com.lastsector.recovery.SessionRecoverySnapshot.Box>();for(var view:boxes.values()){

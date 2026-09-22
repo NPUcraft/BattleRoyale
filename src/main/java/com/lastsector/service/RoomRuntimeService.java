@@ -177,10 +177,11 @@ public final class RoomRuntimeService implements AutoCloseable {
         GameSession session = session(room).orElseThrow(() -> new IllegalArgumentException("No session for room: " + room));
         if (!Set.of(GameState.PREPARING, GameState.STARTING, GameState.RUNNING, GameState.ENDING).contains(session.state()))
             throw new IllegalStateException("Only preparing, starting, running or ending sessions may be ended");
-        end(session);
+        matches.abortReason(session,true);end(session);
     }
     private void abort(GameSession session, Throwable error) {
         if (closed || session.state() == GameState.CLEANUP) return;
+        matches.abortReason(session,false);
         players.error("Session preparation failed: " + session.sessionId(), error);
         players.notify(session.players().keySet(), "preparation-failed", error.getMessage());
         end(session);

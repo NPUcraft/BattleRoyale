@@ -2,7 +2,7 @@ name: LastSector
 version: '${version}'
 main: com.lastsector.LastSectorPlugin
 api-version: '1.21.8'
-description: Multiplayer battle royale safe spawns and zone lifecycle - Milestone 7
+description: Multiplayer battle royale with permanent progression and cosmetic Lobby - Milestone 8
 load: POSTWORLD
 commands:
   lastsector:
@@ -22,3 +22,5 @@ permissions:
   lastsector.play:
     description: List, join and leave waiting rooms
     default: true
+
+softdepend: [CoinsEngine, ExcellentEconomy, Vault]

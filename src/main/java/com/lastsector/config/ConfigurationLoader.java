@@ -22,7 +22,7 @@ public final class ConfigurationLoader {
     public ConfigurationSnapshot load() {
         Node config = read("config.yml");
         String storage = config.section("storage").choice("type", Set.of("sqlite", "mysql"));
-        String economy = config.section("economy").choice("provider", Set.of("auto", "coinsengine", "vault", "none"));
+        String economy = config.section("economy").choice("provider", Set.of("auto", "coinsengine", "excellenteconomy", "vault", "none"));
         Path runtime = config.section("runtime-worlds").relativePath("directory", directory);
         String lobbyWorld = "world";
         if (config.values().containsKey("lobby")) {

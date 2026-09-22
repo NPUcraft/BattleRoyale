@@ -4,6 +4,7 @@ import java.util.UUID;
 import java.util.function.Consumer;
 /** All callbacks occur on the server thread. stop drains pending start work before releasing the world. */
 public interface MatchLifecycle extends AutoCloseable {
+    default void abortReason(GameSession session,boolean admin) {}
     default void onFinished(Consumer<GameSession> finished) {}
     default void checkJoin(UUID player) {}
     default void checkStart() {}

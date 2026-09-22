@@ -29,6 +29,10 @@ public final class PaperMatches implements MatchLifecycle {
     private final Map<UUID,Entry> entries=new HashMap<>();
     private final Set<Entry> draining=new HashSet<>();
     private boolean closed;
+    private PaperProgression progression;
+    private PaperCosmeticEffects cosmeticEffects;
+    public void progression(PaperProgression value){progression=value;cosmeticEffects=new PaperCosmeticEffects(plugin,value.config());}
+    private void cosmeticHooks(Entry entry){if(cosmeticEffects!=null){entry.combat.boxes().skin(id->cosmeticEffects.skin(entry,id));entry.combat.cosmetics(box->cosmeticEffects.kill(entry,box));}}
     private java.util.function.BooleanSupplier recoveryReady=()->true,storageHealthy=()->true;
     private java.util.function.Predicate<UUID> durableBlocked=id->false;
     public void recoveryAccess(java.util.function.BooleanSupplier ready,java.util.function.BooleanSupplier healthy,java.util.function.Predicate<UUID> blocked){recoveryReady=ready;storageHealthy=healthy;durableBlocked=blocked;}
@@ -52,6 +56,7 @@ public final class PaperMatches implements MatchLifecycle {
     @Override public java.util.concurrent.CompletionStage<Void> prepareDurably(GameSession session) {
         var profile=configuration.zoneProfiles().stream().filter(p->p.id().equals(session.room().zoneProfileId())).findFirst().orElseThrow();
         Entry entry=new Entry(session,profile,new PaperZoneUi(plugin.getServer(),configuration.settings().zoneUi()));entries.put(session.sessionId(),entry);
+        if(progression!=null)entry.progress=new com.lastsector.progression.SessionProgress(session.teams().keySet(),progression.freeze(session.players().keySet()));
         entry.offline=new PaperOfflineBodies(plugin,entry,configuration.settings().disconnect(),clock,bodySnapshots,messages,id->{isolation.defer(session.sessionId(),id);isolation.retry(id);});
         return isolation.applyAsync(session.sessionId(),List.copyOf(session.players().keySet()),loadouts.definition(session.room().loadoutId()),()->session.state()==GameState.PREPARING && entries.get(session.sessionId())==entry).thenRun(()->players.notify(session.players().keySet(),"teams-assigned",session.teams().size()));
     }
@@ -80,6 +85,8 @@ public final class PaperMatches implements MatchLifecycle {
         entry.combat=new PaperCombatSession(plugin,session,configuration.settings().combat(),clock,itemSerializer,bottles,id->{
             entry.changed();if(entry.offline.find(id)!=null)isolation.defer(session.sessionId(),id);else spectators.eliminated(session,id);entry.ui.detach(id);entry.hazards.burning(id,null);
         },failed);
+        cosmeticHooks(entry);
+        if(entry.progress!=null){entry.progress.started();entry.combat.progress(entry.progress);}
         entry.offline.started();entry.changed();
         entry.task=new SessionLoop(scheduler,()->tick(entry),failed);
     }
@@ -138,6 +145,8 @@ public final class PaperMatches implements MatchLifecycle {
         entry.protectionExpired=saved.protectionRemainingNanos()==0;entry.damagePulse=new DamagePulse(now);
         entry.offline=new PaperOfflineBodies(plugin,entry,configuration.settings().disconnect(),clock,bodySnapshots,messages,id->{isolation.defer(session.sessionId(),id);isolation.retry(id);});
         entry.combat=new PaperCombatSession(plugin,session,configuration.settings().combat(),clock,itemSerializer,bottles,id->{entry.changed();if(entry.offline.find(id)!=null)isolation.defer(session.sessionId(),id);else spectators.eliminated(session,id);entry.ui.detach(id);entry.hazards.burning(id,null);},failed);
+        if(saved.progression()!=null){entry.progress=new com.lastsector.progression.SessionProgress(saved.progression());entry.combat.progress(entry.progress);if(saved.progression().result()!=null && progression!=null)entry.resultDurable=progression.submit(saved.progression().result());}
+        cosmeticHooks(entry);
         saved.participants().forEach(p->entry.combat.recoveredName(p.id(),p.name()));
         if(saved.outcome()!=null)for(UUID winner:saved.outcome().players())messages.offlineWinner(winner,saved.outcome().tie());
         entry.combat.recoveredElapsed(saved.elapsedNanos());entry.combat.tracker().restore(saved.hits());entry.combat.boxes().recover(saved.boxes(),entry.combat::name);
@@ -149,7 +158,7 @@ public final class PaperMatches implements MatchLifecycle {
             entry.recoveryStart=entry.offline::started;
             entry.task=new SessionLoop(scheduler,()->tick(entry),failed);
         }else{
-            entry.combat.ending();entry.recoveryStart=()->{entry.showcase=new WinnerShowcase(scheduler,clock,java.time.Duration.ofNanos(saved.showcaseRemainingNanos()),()->celebrations.title(session,entry.combat::name),()->celebrations.fire(session),()->finished.accept(session),failed);};
+            entry.combat.ending();entry.recoveryStart=()->{entry.showcase=new WinnerShowcase(scheduler,clock,java.time.Duration.ofNanos(saved.showcaseRemainingNanos()),()->celebrations.title(session,entry.combat::name),()->{if(cosmeticEffects==null)celebrations.fire(session);else cosmeticEffects.win(entry,celebrations);},()->finished.accept(session),failed);};
         }
     }
     public Collection<Entry> runningEntries() { return entries.values().stream().filter(e->e.session.state()==GameState.RUNNING).toList(); }
@@ -163,10 +172,11 @@ public final class PaperMatches implements MatchLifecycle {
         for(Entry entry:List.copyOf(entries.values())) if(entry.combat!=null && entry.session.state()==GameState.RUNNING) {
             try {entry.combat.endTick(tick).ifPresent(outcome->{
                 entry.session.outcome(outcome);entry.changed();
+                if(entry.progress!=null && progression!=null)entry.resultDurable=progression.submit(entry.progress.finish(entry.session,entry.combat.elapsedNanos(),progression.config().ranking(),entry.combat::name));
                 for(UUID winner:outcome.winnerIds())if(plugin.getServer().getPlayer(winner)==null)messages.offlineWinner(winner,outcome.tie());
                 entry.stopLoop();entry.combat.ending();entry.offline.ending();
                 entry.showcase=new WinnerShowcase(scheduler,clock,configuration.settings().combat().showcaseDuration(),
-                        ()->celebrations.title(entry.session,entry.combat::name),()->celebrations.fire(entry.session),
+                        ()->celebrations.title(entry.session,entry.combat::name),()->{if(cosmeticEffects==null)celebrations.fire(entry.session);else cosmeticEffects.win(entry,celebrations);},
                         ()->finished.accept(entry.session),entry.combat::fail);
             });} catch(RuntimeException error) {entry.combat.fail(error);}
         }
@@ -204,6 +214,7 @@ public final class PaperMatches implements MatchLifecycle {
     public boolean frozen(UUID player){if(durableBlocked.test(player) || isolation.blocked(player))return true;var entry=participant(player);return entry!=null && (entry.session.state()==GameState.PREPARING || entry.session.state()==GameState.STARTING || entry.session.players().get(player).state()==PlayerState.DISCONNECTED && entry.offline.find(player)!=null);}
     public String offline(UUID session){var entry=entries.get(session);return entry==null?"offline=none":entry.offline.diagnostics();}
     @Override public void checkJoin(UUID player) {
+        if(progression!=null)progression.check(player);
         if(!recoveryReady.getAsBoolean())throw new IllegalStateException("LastSector is still recovering sessions");
         if(durableBlocked.test(player))throw new IllegalStateException("Your durable player restore must finish before joining");
         if(spectators.registry().find(player).isPresent())throw new IllegalStateException("Leave spectating first");
@@ -211,11 +222,16 @@ public final class PaperMatches implements MatchLifecycle {
     }
     @Override public void restore(GameSession session) { spectators.cleanup(session);var entry=entries.get(session.sessionId());if(entry!=null && entry.offline!=null)entry.offline.close();isolation.end(session.sessionId()); }
     public String loot(UUID session) { Entry entry=entries.get(session); return entry==null ? "loot=N/A" : entry.recoveredLootComplete?"loot=COMPLETE (recovered; no regeneration)":entry.loot==null?"loot=N/A":entry.loot.diagnostics(); }
+    @Override public void abortReason(GameSession session,boolean admin){var entry=entries.get(session.sessionId());if(entry!=null)entry.abortReason=admin?com.lastsector.progression.MatchResult.CompletionReason.ADMIN_END:com.lastsector.progression.MatchResult.CompletionReason.INTERNAL_ABORT;}
+    private void abortedResult(Entry entry){if(entry.progress!=null && entry.combat!=null && progression!=null && entry.resultDurable==null)entry.resultDurable=progression.submit(entry.progress.abort(entry.session,entry.combat.elapsedNanos(),progression.config().ranking(),entry.combat::name,entry.abortReason));}
     @Override public void stop(GameSession session,Runnable drained) {
+        Entry waiting=entries.get(session.sessionId());
+        if(waiting!=null)abortedResult(waiting);
+        if(waiting!=null && waiting.resultDurable!=null && !waiting.resultDurable.isDone()){waiting.resultDurable.thenRun(()->stop(session,drained));return;}
         Entry entry=entries.remove(session.sessionId());
         if(entry==null) { drained.run(); return; }
         entry.stopLoop();
-        entry.closeCombat();celebrations.close(session.sessionId());
+        entry.closeCombat();celebrations.close(session.sessionId());if(cosmeticEffects!=null)cosmeticEffects.close(session.sessionId());
         draining.add(entry);
         if(entry.loot!=null) entry.loot.stop();
         Runnable completed=()-> {
@@ -227,8 +243,9 @@ public final class PaperMatches implements MatchLifecycle {
     @Override public void close() {
         closed=true;
         for(Entry entry:List.copyOf(entries.values())) {
+            abortedResult(entry);
             spectators.cleanup(entry.session);if(entry.offline!=null)entry.offline.close();
-            entry.closeCombat();celebrations.close(entry.session.sessionId());
+            entry.closeCombat();celebrations.close(entry.session.sessionId());if(cosmeticEffects!=null)cosmeticEffects.close(entry.session.sessionId());
             isolation.end(entry.session.sessionId());
             if(entry.loot!=null) entry.loot.close();
             if(entry.worldId!=null) sanitizer.remove(entry.worldId);
@@ -244,6 +261,9 @@ public final class PaperMatches implements MatchLifecycle {
     }
     public static final class Entry {
         public final GameSession session;
+        public com.lastsector.progression.SessionProgress progress;
+        com.lastsector.progression.MatchResult.CompletionReason abortReason=com.lastsector.progression.MatchResult.CompletionReason.INTERNAL_ABORT;
+        public java.util.concurrent.CompletableFuture<Void> resultDurable;
         public boolean priorityCheckpoint=true;
         public void changed(){priorityCheckpoint=true;}
         public final PvPHazardTracker hazards=new PvPHazardTracker();

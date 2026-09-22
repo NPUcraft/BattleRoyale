@@ -1,0 +1,18 @@
+ranking:
+  rating:
+    initial: 1000
+    minimum: 0
+    placement-bands:
+      - { max-percentile: 0.05, delta: 40 }
+      - { max-percentile: 0.15, delta: 30 }
+      - { max-percentile: 0.30, delta: 20 }
+      - { max-percentile: 0.50, delta: 5 }
+      - { max-percentile: 0.75, delta: -5 }
+      - { max-percentile: 1.00, delta: -15 }
+  kill-score:
+    points-per-kill: 10
+    points-per-assist: 3
+statistics:
+  period-time-zone: UTC
+leaderboards:
+  cache-seconds: 30

@@ -19,12 +19,14 @@ public final class MessageService {
         sender.sendMessage(Component.text("[LastSector] " + message));
     }
     public void help(CommandSender sender) {
+        if(sender.hasPermission("lastsector.play"))send(sender,"/ls lobby | profile | leaderboard [rating|kill_score|wins|kills|assists|damage] | shop | cosmetics");
+        if(sender.hasPermission("lastsector.admin"))send(sender,"/ls admin cosmetic grant|revoke <player> <id> | /ls admin purchases | /ls debug economy | /ls debug stats <player>");
         send(sender, "/lastsector help | version");
         if (sender.hasPermission("lastsector.play")) send(sender, "/lastsector rooms | join <room> | autojoin | leave | team | spectate <room>");
         if (sender.hasPermission("lastsector.admin")) send(sender, "/lastsector reload | admin loadout edit <room> | debug storage/recovery/rooms/maps | debug session/zone/protection/loot/deathboxes/teams/offline/start/end <room>");
     }
     public void denied(CommandSender sender) { send(sender, "You do not have permission to use this command."); }
-    public void version(CommandSender sender, String version) { send(sender, "Version " + version + " (Milestone 7 Storage & Crash Recovery)"); }
+    public void version(CommandSender sender, String version) { send(sender, "Version " + version + " (Milestone 8 Lobby & Permanent Progression)"); }
     public void reloaded(CommandSender sender) { send(sender, "Configuration reloaded successfully."); }
     public void reloadFailed(CommandSender sender, String reason) { send(sender, "Reload failed; previous configuration retained. " + reason); }
     public void unknown(CommandSender sender) { send(sender, "Unknown command. Use /lastsector help."); }
@@ -40,7 +42,7 @@ public final class MessageService {
         // JavaPlugin's logger already supplies [LastSector].
         logger.info("Loaded " + snapshot.rooms().size() + " rooms.");
         logger.info("Loaded " + snapshot.maps().size() + " map templates.");
-        logger.info("Milestone 7 initialized. Recovery bootstrap started; joins remain gated.");
+        logger.info("Milestone 8 initialized. Recovery bootstrap started; joins remain gated.");
         if (snapshot.settings().debug()) logger.info("Debug enabled. Runtime directory: " + snapshot.settings().runtimeDirectory());
     }
     public void startupFailed(Exception error) { logger.log(java.util.logging.Level.SEVERE, "Startup failed; disabling LastSector. " + error.getMessage(), error); }

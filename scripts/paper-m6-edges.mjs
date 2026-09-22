@@ -80,6 +80,7 @@ async function connect(name, port, respawn=true) {
   bot.on('spawn', () => { bot.spawned = true; bot.physicsEnabled = false; });
   bots.push(bot);
   await until(() => bot.spawned, 'Bot spawn ' + name);
+  await sleep(2300); // Await M8 profile/canonical Lobby before seeding M4 originals.
   return bot;
 }
 async function chat(bot, command, expected) {

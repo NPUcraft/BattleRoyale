@@ -8,10 +8,10 @@ import org.junit.jupiter.api.io.TempDir;
 import static org.junit.jupiter.api.Assertions.*;
 class RecoveryRepositoryTest {
  @TempDir Path root; JdbcStorageProvider provider; JdbcRecoveryRepository repo; UUID owner=UUID.randomUUID(),session=UUID.randomUUID();
- @BeforeEach void setup()throws Exception{provider=new JdbcStorageProvider(StorageSettings.defaults("sqlite",root));repo=new JdbcRecoveryRepository(provider);assertEquals(1,repo.migrate());}
+ @BeforeEach void setup()throws Exception{provider=new JdbcStorageProvider(StorageSettings.defaults("sqlite",root));repo=new JdbcRecoveryRepository(provider);assertEquals(SchemaMigrations.VERSION,repo.migrate());}
  RecoveryRepository.Row row(long revision){return new RecoveryRepository.Row(session,"solo","city","safe-world","RUNNING",revision,1,"{}",SnapshotCodec.hash("{}"),123,"ACTIVE");}
  RecoveryRepository.Restore original(UUID player,UUID generation){return new RecoveryRepository.Restore(player,session,generation,1,"{}",SnapshotCodec.hash("{}"),"ORIGINAL",123);}
- @Test void migrationIsRepeatableAndPreservesRows()throws Exception{repo.save(row(1),owner,100);assertEquals(1,repo.migrate());assertEquals(1,repo.sessions().size());}
+ @Test void migrationIsRepeatableAndPreservesRows()throws Exception{repo.save(row(1),owner,100);assertEquals(SchemaMigrations.VERSION,repo.migrate());assertEquals(1,repo.sessions().size());}
  @org.junit.jupiter.params.ParameterizedTest @org.junit.jupiter.params.provider.ValueSource(ints={-1,999}) void refusesUnsupportedSchemaWithoutResettingData(int version)throws Exception{repo.save(row(1),owner,100);try(var c=provider.connect();var s=c.createStatement()){s.executeUpdate("UPDATE lastsector_schema SET version="+version);}assertThrows(Exception.class,repo::migrate);assertEquals(1,repo.sessions().size());}
  @Test void delayedAndDuplicateRevisionsCannotOverwrite()throws Exception{assertTrue(repo.save(row(10),owner,100));assertFalse(repo.save(row(9),owner,100));assertFalse(repo.save(row(10),owner,100));assertEquals(10,repo.sessions().getFirst().revision());}
  @Test void concurrentWritersKeepHighestRevision()throws Exception{repo.save(row(1),owner,100);try(var pool=Executors.newFixedThreadPool(2)){var a=pool.submit(()->repo.save(row(20),owner,100));var b=pool.submit(()->repo.save(row(10),owner,100));a.get();b.get();}assertEquals(20,repo.sessions().getFirst().revision());}

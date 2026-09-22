@@ -4,7 +4,8 @@ import com.lastsector.loadout.StoredItem;
 import com.lastsector.zone.*;
 import java.util.*;
 /** Version 1 wire DTO. All times are durations/elapsed values, never persisted nanoTime origins. */
-public record SessionRecoverySnapshot(int snapshotVersion,UUID sessionId,String roomId,String mapId,String worldName,String relativePath,String gameState,long revision,long elapsedNanos,String rulesHash,List<Team> teams,List<Participant> participants,ZoneState zone,long protectionRemainingNanos,List<Hit> hits,List<Box> boxes,Set<Long> sanitizedBlocks,Set<Long> sanitizedEntities,String lootState,Outcome outcome,long showcaseRemainingNanos) {
+public record SessionRecoverySnapshot(int snapshotVersion,UUID sessionId,String roomId,String mapId,String worldName,String relativePath,String gameState,long revision,long elapsedNanos,String rulesHash,List<Team> teams,List<Participant> participants,ZoneState zone,long protectionRemainingNanos,List<Hit> hits,List<Box> boxes,Set<Long> sanitizedBlocks,Set<Long> sanitizedEntities,String lootState,Outcome outcome,long showcaseRemainingNanos,com.lastsector.progression.SessionProgress.Snapshot progression) {
+    public SessionRecoverySnapshot(int snapshotVersion,UUID sessionId,String roomId,String mapId,String worldName,String relativePath,String gameState,long revision,long elapsedNanos,String rulesHash,List<Team> teams,List<Participant> participants,ZoneState zone,long protectionRemainingNanos,List<Hit> hits,List<Box> boxes,Set<Long> sanitizedBlocks,Set<Long> sanitizedEntities,String lootState,Outcome outcome,long showcaseRemainingNanos) { this(snapshotVersion,sessionId,roomId,mapId,worldName,relativePath,gameState,revision,elapsedNanos,rulesHash,teams,participants,zone,protectionRemainingNanos,hits,boxes,sanitizedBlocks,sanitizedEntities,lootState,outcome,showcaseRemainingNanos,null); }
     public record Team(UUID id,int index,Set<UUID> members){public Team{members=Set.copyOf(members);}}
     public record Participant(UUID id,String name,String state,UUID team,int kills,int assists,LobbySnapshot lobby,BodySnapshot current,long reconnectRemainingNanos) {}
     public record ZoneState(Zone initial,Zone current,Zone from,Zone next,int stage,ZonePhase phase,long remainingNanos) {public ZoneState{Objects.requireNonNull(initial);Objects.requireNonNull(current);Objects.requireNonNull(from);Objects.requireNonNull(phase);if(stage<0 || remainingNanos<0 || phase!=ZonePhase.FINAL && next==null || phase==ZonePhase.FINAL && (next!=null || remainingNanos!=0))throw new IllegalArgumentException("Invalid zone phase");}}
@@ -20,6 +21,13 @@ public record SessionRecoverySnapshot(int snapshotVersion,UUID sessionId,String 
         for(var p:participants)if(teams.stream().noneMatch(t->t.id().equals(p.team()) && t.members().contains(p.id())))throw new IllegalArgumentException("Participant Team mismatch");
         if(gameState.equals("RUNNING") || gameState.equals("ENDING")){if(zone==null || !lootState.equals("COMPLETE"))throw new IllegalArgumentException("Incomplete gameplay snapshot");if(gameState.equals("ENDING") && outcome==null)throw new IllegalArgumentException("Missing outcome");}
         if(outcome!=null && (!ids.containsAll(outcome.players()) || !teamIds.containsAll(outcome.teams())))throw new IllegalArgumentException("Invalid outcome identities");
+        if(progression!=null) {
+            if(!progression.frozen().keySet().equals(ids))throw new IllegalArgumentException("Progression roster mismatch");
+            var placementTeams=new HashSet<>(progression.placements().unresolved());placementTeams.addAll(progression.placements().assigned().keySet());
+            if(!placementTeams.equals(teamIds))throw new IllegalArgumentException("Progression Team mismatch");
+            if(progression.result()!=null && !progression.result().sessionId().equals(sessionId))throw new IllegalArgumentException("Result session mismatch");
+            new com.lastsector.progression.SessionProgress(progression);
+        }
         if(boxes.stream().map(Box::id).distinct().count()!=boxes.size())throw new IllegalArgumentException("Duplicate deathbox");
     }
 }

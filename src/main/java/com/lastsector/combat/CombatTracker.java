@@ -15,11 +15,14 @@ public final class CombatTracker {
     public CombatTracker(Set<UUID> participants,CombatSettings settings,GameClock clock) {
         this.participants=Set.copyOf(participants); this.settings=settings; this.clock=clock;
     }
+    private java.util.function.Consumer<DamageRecord> damageObserver=record->{};
+    public void damageObserver(java.util.function.Consumer<DamageRecord> observer){damageObserver=Objects.requireNonNull(observer);}
     public void record(UUID victim,UUID attacker,double amount,DamageOrigin origin,boolean direct) {
         if(!valid(victim,attacker) || !Double.isFinite(amount) || amount<=0) return;
         var records=history.computeIfAbsent(victim,ignored->new ArrayDeque<>()); expire(records);
         if(records.size()==MAX_RECORDS_PER_VICTIM) records.removeFirst();
         records.addLast(new DamageRecord(victim,attacker,amount,origin,clock.nanoTime(),direct));
+        damageObserver.accept(records.getLast());
     }
     public DeathReason resolve(UUID victim,UUID directAttacker,DamageOrigin cause,Predicate<UUID> stillParticipant) {
         var records=history.getOrDefault(victim,new ArrayDeque<>()); expire(records);

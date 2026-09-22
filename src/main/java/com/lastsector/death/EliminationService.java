@@ -28,6 +28,7 @@ public final class EliminationService {
         // A failing visual callback cannot roll back the commit or create a second logical payload.
         committed.accept(box); return Optional.of(box);
     }
+    public void restoreTicks(Map<UUID,Long> saved){if(!ticks.isEmpty())throw new IllegalStateException("Eliminations already initialized");ticks.putAll(saved);}
     public Map<UUID,Long> eliminationTicks() { return Map.copyOf(ticks); }
     public Collection<DeathBox> boxes() { return List.copyOf(boxes.values()); }
     public void clear() { boxes.clear(); ticks.clear(); combat.clear(); }

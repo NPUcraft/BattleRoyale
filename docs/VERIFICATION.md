@@ -1,4 +1,48 @@
-# M7 验证记录
+# M8 验证记录
+
+2026-09-22，Windows / Java 21.0.8 / Gradle 8.14 / Paper 1.21.8 build 60。当前 M8，下一步 M9。下方旧章节保留历史证据，涉及当前功能范围时以本节为准。
+
+## 最终构建与自动测试
+
+设置 `LASTSECTOR_MYSQL_TEST_PORT=10045` 后执行 `.\gradlew.bat clean test build`：**BUILD SUCCESSFUL，6 tasks executed；401 tests，0 failures，0 errors，0 skipped**。未设置 MySQL 环境变量时为 400 项，真实 MySQL contract 被明确排除。生产 `build/libs/lastsector-0.1.0-SNAPSHOT.jar` 为 **15,463,814 bytes**；检查不含 TestProbe、JUnit、NightExpress 或 Vault API 类。Java 21 编译成功；旧 CoinsEngine API 有上游标记的 removal 警告。
+
+新增测试覆盖真实 SQLite V1→V2 迁移、事务回滚、Session 幂等结算、永久/周期统计、Rating 边界、同 tick 名次与恢复、ISO 周年/时区、带 checksum 的 outbox 重开与损坏拒绝、非正式结果不计战绩、分页/历史榜、缓存合并与 TTL、所有权与装备事务、重复购买与异步互斥、免费/余额不足/扣款失败/退款/人工复核、启动隔离不明扣款、金额精度、provider 显式选择与缺失降级。真实 MySQL 8.4 contract 同时覆盖永久结果重试幂等和装备撤销。
+
+## 真实 Paper / 真实经济插件
+
+脚本只复制已停止的源服到 `.run`，绑定 localhost；测试探针为独立 JAR，使用公开 API，不进入生产包。目录中的 `results.json` 与 console 日志保留原始证据。
+
+- `.run/paper-m8-1790082497759`：无经济插件仍可完成大厅、四人 Solo、最终同 tick tie 和管理员终止；付费商店不可用而比赛正常。
+- `.run/paper-m8-1790084272400`：CoinsEngine 2.7.0 + nightcore 2.15.0 + Vault 1.7.3，Java 21。通过真实 API 注入测试余额，确认购买只扣 100 并永久解锁。验证免费大厅外观、装备、加入房间后停止大厅粒子、固定菜单、房间选择/自动加入、Profile、44 档案分页、历史空日与当前日/周/月导航，以及 Shift/数字键/丢弃拦截。击杀视觉雷电未伤害附近存活玩家。四人 Solo 赢家 3 kills、Rating +40、Kill Score +30；最终 tie 双赢家；管理员终止不增加正式场次。
+- `.run/paper-m8-1790083061197`：Vault 1.7.3 适配器，后端由 CoinsEngine 注册；真实余额与购买成功。
+- `.run/paper-m8-1790083867063`：ExcellentEconomy 2.8.0 + nightcore 2.16.2 + Vault 1.7.3，**Java 25**；真实余额、购买和视觉雷电测试成功。上游 2.8.0 JAR 为 Java 25 字节码；LastSector 本身仍编译为 Java 21。因镜像下载连接重置，复用了成功测试服的依赖缓存，未修改上游 JAR。
+
+公开 API 来源：[ExcellentEconomy developer API](https://nightexpressdev.com/excellenteconomy/utility/developer-api/)、[官方 2.7.0 过渡版本](https://modrinth.com/plugin/excellenteconomy/version/2.7.0)、[Vault API](https://github.com/MilkBowl/VaultAPI)。旧适配器验证范围为 CoinsEngine **2.7.x**，不声称支持 2.6.x。CoinsEngine 2.7.0 在本次环境中缺少 Vault 会在其默认货币初始化时报上游类缺失，因此上述真实 CoinsEngine 测试安装了 Vault。
+
+## Duo、冻结外观与结果恢复
+
+`.run/paper-m8-recovery-1790084282663`：四人 Duo，队友先死亡但其队最终获胜，死者仍获得 placement 1、win 及 Rating +40。开局冻结金色 DeathBox，局内撤销永久解锁后，该局实际 BlockDisplay 仍为 GOLD_BLOCK。
+
+通过 SQLite fixture trigger 仅拒绝 result INSERT，验证结算文件已持久化、世界正常清理；随后 SIGKILL，移除故障 trigger 并原目录重启。结果完整进入 lifetime/day/week/month 事务。第二次强杀并放回同一 outbox，重启没有重复加分。此目录验证的是正式结果 outbox；最后补充的 RECOVERY_ABANDONED 审计构造和快照一致性校验已通过最终编译/测试，但没有单独再跑完整 Paper 强杀矩阵。
+
+## M1–M7 回归
+
+- `.run/paper-m7-1790083385783`：SQLite 完整强杀矩阵通过。
+- `.run/paper-m7-1790083385959`：真实 MySQL 完整强杀矩阵通过。
+- `.run/paper-m4-1790083866744`：原生物品、GUI、隔离、Loot、回滚、reload 后离线恢复通过。
+- `.run/paper-m6-edges-1790083866906`：队伍平衡、STARTING 断线、离线身体、伤害保护/来源、最终 tie、单 Team、禁用清理通过。
+
+M7 回归仍保留 RUNNING/ENDING 恢复、圈时间暂停、身体/DeathBox/世界保存状态、generation 确认窗口、坏 checksum、孤儿保留和不可用 DB 启动保护断言。M8 返回大厅的随身背包改为固定五件菜单；测试据此验证精确菜单槽位，末影箱、经验等状态断言保留。恢复 bootstrap 时间采样在机器人等待 Profile 前进行，以免将测试等待误算为崩溃停机时间。
+
+复现入口：`scripts/paper-m8.mjs <stopped-paper-directory> <mineflayer-package-directory>`；`M8_ECONOMY=coinsengine|vault|excellenteconomy` 选择真实插件，JAR 放 `.run/m8-api`，现代版本使用 Java 25。`scripts/paper-m8-recovery.mjs` 运行 SQLite Duo/outbox 场景。先执行 `gradlew.bat build paperProbeJar`；MySQL 回归设置 `M7_MYSQL_PORT`，自动测试设置 `LASTSECTOR_MYSQL_TEST_PORT`。测试 Docker 名称沿用 `lastsector-m7-mysql`，标签为 `lastsector.test=m8`；本轮结束后清理容器及其匿名卷，保留测试日志。
+
+## 边界与延期
+
+数据库事务保证本插件内按 Session 幂等；外部经济与本地数据库不能提供跨插件 ACID。扣款状态不确定时保留 MANUAL_REVIEW，不盲目重扣/退款；提供只读管理诊断，自动/交互式复核解决器延期。旧 M7 快照缺少 M8 数据时不猜测补发历史战绩。大规模并发、跨区域断网和长期 soak 尚未验证；沿用 M7 检查点、世界/playerdata 非原子存储与 M6 来源可观测性限制。Seasons/MMR、Party、NPC 和 M9 管理/编辑工具不在本次范围。
+
+---
+
+# M7 历史验证记录
 
 2026-09-21–22，Windows / Java 21.0.8 / Gradle 8.14 / Paper 1.21.8 build 60。当前 M7，下一步 M8。以下先记录 M7 实测，后保留 M6 与更早阶段历史证据；历史限制若与 M7 冲突，以本节为准。
 

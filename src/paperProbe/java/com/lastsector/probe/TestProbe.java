@@ -33,6 +33,18 @@ public final class TestProbe extends JavaPlugin implements Listener {
         getServer().getPluginManager().registerEvents(m6,this);
         getCommand("lsprobe").setExecutor((sender,command,label,args)-> {
             try {
+                if(args[0].equals("m8visual")){var player=Objects.requireNonNull(getServer().getPlayerExact(args[1]));sender.sendMessage("M8 displays="+player.getWorld().getEntitiesByClass(BlockDisplay.class).stream().map(d->d.getBlock().getMaterial()).toList());return true;}
+                if(args[0].equals("m8money")) {
+                    var player=Objects.requireNonNull(getServer().getPlayerExact(args[1]));
+                    com.lastsector.api.economy.EconomyProvider provider=switch(args[2]) {
+                        case "coinsengine" -> new com.lastsector.economy.LegacyCoinsEngineEconomyProvider(getServer(),"coins");
+                        case "excellenteconomy" -> new com.lastsector.economy.ExcellentEconomyProvider(getServer(),"coins");
+                        case "vault" -> new com.lastsector.economy.VaultEconomyProvider(getServer());
+                        default -> throw new IllegalArgumentException("Unknown provider");
+                    };
+                    if(args.length>3 && !provider.deposit(player.getUniqueId(),new java.math.BigDecimal(args[3])))throw new IllegalStateException("Provider deposit declined");
+                    sender.sendMessage("M8 balance="+provider.getBalance(player.getUniqueId()));return true;
+                }
                 if(args[0].startsWith("m7")){M7Probe.command(this,sender,args);return true;}
                 if(args[0].startsWith("m4")) { m4.command(sender,args); return true; }
                 if(args[0].startsWith("m5")) { m5.command(sender,args); return true; }

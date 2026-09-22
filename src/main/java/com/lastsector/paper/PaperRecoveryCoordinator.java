@@ -45,6 +45,7 @@ public final class PaperRecoveryCoordinator implements AutoCloseable {
             if(duplicates.contains(row.session()))throw new RecoveryPlan.Rejected("DUPLICATE_ROOM_OR_WORLD");
             SessionRecoverySnapshot saved;try{saved=codec.decode(row.version(),row.payload(),row.checksum(),SessionRecoverySnapshot.class);}catch(RuntimeException failure){throw new RecoveryPlan.Rejected("SNAPSHOT_VERSION_CHECKSUM_OR_DTO");}
             if(!saved.sessionId().equals(row.session()) || !saved.roomId().equals(row.room()) || !saved.mapId().equals(row.map()) || !saved.worldName().equals(row.world()) || saved.revision()!=row.revision() || !saved.gameState().equals(row.state()))throw new RecoveryPlan.Rejected("METADATA_MISMATCH");
+            preserveResult(saved);
             if(!config.settings().recovery().enabled() || !Set.of("RUNNING","ENDING").contains(saved.gameState()))throw new RecoveryPlan.Rejected("DISABLED_OR_UNRECOVERABLE_PHASE");
             var room=config.rooms().stream().filter(r->r.id().equals(saved.roomId())).findFirst().orElseThrow();var map=config.maps().stream().filter(m->m.id().equals(saved.mapId())).findFirst().orElseThrow();var zone=config.zoneProfiles().stream().filter(z->z.id().equals(room.zoneProfileId())).findFirst().orElseThrow();
             if(!PaperRecoverySnapshots.rules(room,map,zone).equals(saved.rulesHash()))throw new RecoveryPlan.Rejected("CONFIGURATION_CHANGED");
@@ -65,9 +66,19 @@ public final class PaperRecoveryCoordinator implements AutoCloseable {
             }catch(Exception failure){plugin.getLogger().warning("Runtime reconstruction rejected "+row.session()+": "+failure.getClass().getSimpleName());if(session!=null)matches.discardRecovery(session);try{if(loadedByUs)worlds.preserve(candidate.world());}catch(Exception ignored){plugin.getLogger().warning("Failed recovery world remains loaded; deletion forbidden");}abandon(row,candidate.world(),()->recoverNext(rows,duplicates,index+1));}
         });
     }
+    private void preserveResult(SessionRecoverySnapshot saved)throws java.io.IOException {
+        if(saved.progression()!=null && saved.progression().result()!=null)
+            new com.lastsector.progression.ResultOutbox(plugin.getDataFolder().toPath().resolve("result-outbox")).persist(saved.progression().result());
+    }
     private void abandon(RecoveryRepository.Row row,GameWorld knownWorld,Runnable next){
         abandoned++;plugin.getLogger().severe("Abandoning unsafe recovery session "+row.session()+"; durable originals retained, owned world delayed for orphan cleanup");
         storage.call(()->{
+            SessionRecoverySnapshot decoded=null;
+            try{decoded=codec.decode(row.version(),row.payload(),row.checksum(),SessionRecoverySnapshot.class);}catch(RuntimeException invalid){ /* Invalid snapshots never award statistics. */ }
+            if(decoded!=null && decoded.sessionId().equals(row.session())) {
+                preserveResult(decoded);
+                if(decoded.progression()!=null && decoded.progression().result()==null)new com.lastsector.progression.ResultOutbox(plugin.getDataFolder().toPath().resolve("result-outbox")).persist(com.lastsector.progression.SessionProgress.abandoned(decoded,row.updatedAt()));
+            }
             for(var owned:files.ownedChildren(plugin.getLogger()::warning))if(owned.world().sessionId().equals(row.session()))files.orphan(owned.world(),Instant.now(),"RECOVERY_FAILED");
             storage.repository().retire(row.session(),storage.owner(),"ABANDONED");return null;
         }).whenComplete((ignored,error)->{if(error!=null){fatal("Cannot safely persist abandonment; worlds retained");return;}next.run();});
@@ -90,7 +101,7 @@ public final class PaperRecoveryCoordinator implements AutoCloseable {
         if(now-lastHousekeeping>=300_000_000_000L){lastHousekeeping=now;housekeep();}
     }
     private void complete(SessionRecoverySnapshot saved){
-        storage.call(()->{for(var owned:files.ownedChildren(plugin.getLogger()::warning))if(owned.world().sessionId().equals(saved.sessionId()))files.orphan(owned.world(),Instant.now(),"CLEANUP_RETAINED");return null;})
+        storage.call(()->{preserveResult(saved);for(var owned:files.ownedChildren(plugin.getLogger()::warning))if(owned.world().sessionId().equals(saved.sessionId()))files.orphan(owned.world(),Instant.now(),"CLEANUP_RETAINED");return null;})
             .thenCompose(ignored->storage.retire(saved.sessionId(),"COMPLETED")).whenComplete((ignored,error)->{completing.remove(saved.sessionId());if(error==null){known.remove(saved.sessionId());revisions.remove(saved.sessionId());}});
     }
     private void housekeep(){
@@ -113,7 +124,13 @@ public final class PaperRecoveryCoordinator implements AutoCloseable {
     }
     public String diagnostics(){return "bootstrap="+bootstrap+" active="+known.size()+" recovered="+recovered+" abandoned="+abandoned+" orphanWorlds="+orphans+" pendingPlayerRestores="+players.pendingCount();}
     public String sessionDiagnostics(UUID id){return "recoveryRevision="+revisions.getOrDefault(id,0L)+" lastCheckpointRevision="+storage.written(id)+" degraded="+!storage.healthy();}
-    public void close(){closing=true;pump.cancel();}
+    public void close(){
+        if(ready)for(var entry:matches.allEntries())if(entry.progress!=null && entry.progress.snapshot().result()!=null)try {
+            long revision=revisions.merge(entry.session.sessionId(),1L,Long::sum);var saved=snapshots.capture(entry,revision);var payload=codec.encode(saved);known.put(saved.sessionId(),saved);
+            storage.checkpoint(new RecoveryRepository.Row(saved.sessionId(),saved.roomId(),saved.mapId(),saved.worldName(),saved.gameState(),saved.revision(),payload.version(),payload.json(),payload.checksum(),System.currentTimeMillis(),"ACTIVE"));
+        }catch(RuntimeException failure){plugin.getLogger().severe("Shutdown result checkpoint unavailable; durable outbox remains authoritative");}
+        closing=true;pump.cancel();
+    }
     /** Called after graceful runtime/file cleanup; queued originals were durable before gameplay began. */
-    public void finishClose(){if(ready)for(var saved:List.copyOf(known.values()))storage.call(()->{for(var owned:files.ownedChildren(plugin.getLogger()::warning))if(owned.world().sessionId().equals(saved.sessionId()))files.orphan(owned.world(),Instant.now(),"GRACEFUL_TERMINATION");storage.repository().retire(saved.sessionId(),storage.owner(),"COMPLETED");return null;});storage.close();}
+    public void finishClose(){if(ready)for(var saved:List.copyOf(known.values()))storage.call(()->{preserveResult(saved);for(var owned:files.ownedChildren(plugin.getLogger()::warning))if(owned.world().sessionId().equals(saved.sessionId()))files.orphan(owned.world(),Instant.now(),"GRACEFUL_TERMINATION");storage.repository().retire(saved.sessionId(),storage.owner(),"COMPLETED");return null;});storage.close();}
 }

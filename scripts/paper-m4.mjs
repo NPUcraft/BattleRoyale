@@ -145,6 +145,7 @@ async function connect(name, port) {
   bot.once('spawn', () => { bot.spawned = true; bot.physicsEnabled = false; });
   bots.push(bot);
   await until(() => bot.spawned, 'Bot spawn ' + name);
+  await sleep(2300); // Await M8 profile/canonical Lobby before seeding M4 originals.
   return bot;
 }
 async function chat(bot, command, expected) {
@@ -172,7 +173,7 @@ async function probe(command, expected) {
 }
 try {
   await until(() => (output.includes('Done (') && output.includes('Recovery bootstrap complete')), 'Paper startup', 120000);
-  assert.match(output, /Milestone 7 initialized/); assert.doesNotMatch(output, /ERROR|Exception/);
+  assert.match(output, /Milestone 8 initialized/); assert.doesNotMatch(output, /ERROR|Exception/);
   await probe('lsprobe m4roundtrip','M4 roundtrip=true');
   const a=await connect('LSAlice',port), b=await connect('LSBob',port), c=await connect('LSCarol',port), d=await connect('LSDan',port);
   await consoleCommand('op LSAlice','Made LSAlice');

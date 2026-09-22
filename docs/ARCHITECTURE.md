@@ -1,9 +1,29 @@
-# Architecture — M7
+# Architecture — M8
 
+
+## M8 永久数据与 Lobby
+
+M8 新增 `progression`（纯 DTO、名次/Rating/周期、事务 repository、outbox/cache）、`cosmetic`（定义、冻结 loadout、解锁/装备/购买账本）、`economy`（三种隔离适配器）。PaperProgression 复用 RecoveryStorage 的 bounded worker 和主线程 completion pump；PaperLobby 管理 PDC 控件、holder GUI 和一个大厅特效循环；PaperCosmeticEffects 只连接视觉，不接触战斗规则。
+
+SchemaMigrations V1→V2 保留所有恢复数据。永久结果的 session_id 主键先占位，玩家行、累计/周期统计及 Rating 在同一事务内提交。MySQL 锁定 profile rating 行，SQLite 单工作线程事务写；重复完成或丢失提交确认后读取已保存结果。核心查询均预编译，动态列名只来自封闭 metric enum，分页在 SQL 执行。装备主键为 UUID+category，撤销和解除装备同事务。
+
+PlacementTracker 每个淘汰 tick 末处理 active Team 集合，以 activeAfter+1 给该批淘汰队伍排名；最后一队第 1，最终全灭批次也第 1。SessionProgress 在 roster 冻结时保存 ratingBefore/SessionCosmeticLoadout；RUNNING 开始记录 wall startedAt 与 monotonic elapsed，淘汰截断个人时长。CombatTracker 只有接受了有效 damage record 后才通知累计统计，Paper 层排除同队；恢复历史归因不会再次增加累计伤害。
+
+会话 snapshot wire format 仍为向后兼容 V1，新增可选 progression 字段；旧 M7 null 字段继续恢复游戏而不伪造旧比赛战绩。M8 字段校验玩家/Team 一致性；包含 placement batches、死亡 tick、累计 damage、冻结外观及结果。旧 tick 的最终淘汰批次在重启后仍用于 tie 判断，不与新进程 Bukkit tick 直接比较。
+
+ResultOutbox 在专用 worker 写入 force 后原子移动的版本/checksum JSON，与 DB 可用性独立。正常 stop 等待写入确认；DB 失败保留 outbox，重启按完成时间重试。恢复/退休路径先保全 snapshot 中已产生的结果，避免删除世界后丢失最后可重建结果。可可信解码的放弃恢复记录写 RECOVERY_ABANDONED 审计，不更新正式统计；损坏快照不产生奖励。正常停服仍保留 M7 的结束语义。
+
+Profile 缓存异步加载/刷新，加载中、不可用或上一场结果未完成时 gate join/autojoin/shop。结算与装备后刷新 cache；刷新期间的再次修改合并为后续刷新，防止读取旧永久装备进入下一局。排行榜键为 scope/period/metric/page/size，合并 in-flight 查询，仅成功缓存，TTL 默认 30 秒、结果提交后失效。
+
+Lobby 先遵守 M7 restore/active reconnect 顺序。非活动玩家恢复后应用固定随身菜单，末影箱和其它原状态保持独立。ENDING 期间已回大厅的重连胜者也进行 canonical reconcile；仍在比赛世界展示的赢家不会被大厅 tick 拉走。GUI 按 holder 鉴别，取消全部物品转移，只执行服务动作；普通背包仅保护带 lobby_action 的物品。
+
+PurchaseService 主线程锁定同一玩家的购买，先异步检查 ownership/写 intent，外部扣款在主线程，解锁+COMPLETED 事务在 worker。丢失 DB commit 确认时先查询状态；无法确认不能退款或重扣。已确认未完成时尝试补偿；无法写回补偿状态保留本地待核查并在 DB 恢复后标 MANUAL_REVIEW。启动隔离未完成账本，不自动执行外部副作用。跨插件 exactly-once 明确不成立。
+
+所有经济 API 为 compileOnly，只有对应插件存在/版本兼容才创建 adapter；没有 NMS/reflection。CoinsEngine 2.7 static API、新 ExcellentEconomy service API 与 Vault service 分离。具体实测版本与 Java 25 上游要求见 README / VERIFICATION。
 
 ## M7 恢复边界
 
-`storage` 只拥有 `lastsector_schema`、`recovery_sessions`、`pending_player_restores`；没有复用恢复表保存永久胜负/统计/经济。`StorageProvider` 创建 JDBC 连接；`DatabaseExecutor` 是命名的单线程、有界 128 队列，拒绝时不会 caller-runs。`JdbcRecoveryRepository` 只处理准备语句和事务，不触碰 Bukkit。`RecoveryStorage` 把完成回调排回 server-thread pump，合并每局最新检查点并维护健康和退休栅栏。记录退休后，迟到的 revision 不能使该局复活。
+M7 时 `storage` 只拥有 `lastsector_schema`、`recovery_sessions`、`pending_player_restores`；没有复用恢复表保存永久胜负/统计/经济。`StorageProvider` 创建 JDBC 连接；`DatabaseExecutor` 是命名的单线程、有界 128 队列，拒绝时不会 caller-runs。`JdbcRecoveryRepository` 只处理准备语句和事务，不触碰 Bukkit。`RecoveryStorage` 把完成回调排回 server-thread pump，合并每局最新检查点并维护健康和退休栅栏。记录退休后，迟到的 revision 不能使该局复活。
 
 V1 migration 按版本执行；SQLite DDL 事务化，MySQL DDL 会隐式提交，因此 V1 CREATE IF NOT EXISTS 可重入、版本最后更新。未来 migration 需继续显式增加版本；新于程序的 schema 会失败关闭。SQLite 使用 WAL、FULL synchronous、busy timeout；MySQL 使用成熟 JDBC driver、连接/读超时，凭据经 Properties 传递，日志只报告失败类型。驱动打入生产 JAR，探针为独立 sourceSet。
 
@@ -45,7 +65,7 @@ body health/timeout/zone/elimination 均在服务器线程，state claim 与 Eli
 
 ENDING 固化 Outcome 后停止 Session loop/伤害/箱子访问，退休剩余 body（不生成新盒、不算死亡）、原快照入 pending；winner UUID 集合不随实体退休变化。离线赢家登录可收到 WINNER/TIE 队伍结果；死亡观战者、已回 Lobby 队友也收到展示。外部观众可继续观看，debug end/自然结束/disable 都移除 presence、UI、body、ticket，再恢复玩家和卸载世界。跨房间 registries 和 world UUID 隔离。
 
-M7 已补齐持久化和进程崩溃恢复、孤儿世界；第三方 Party、经济、排名和外观留待 M8。既有 provenance 不可观测边界继续适用，下文详细列出。
+M7 已补齐持久化和进程崩溃恢复、孤儿世界；经济、排名和外观已在 M8 实现；第三方 Party 仍延期。既有 provenance 不可观测边界继续适用，下文详细列出。
 
 
 ## M4 composition and transaction boundaries

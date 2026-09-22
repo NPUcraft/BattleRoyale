@@ -90,7 +90,15 @@ final class M4Probe {
                 sender.sendMessage("M4 seeded=true");
             }
             case "m4original" -> {
-                check(Arrays.equals(originals.get(player.getUniqueId()),player.getInventory().getContents()),"original inventory differs");
+                if(!Arrays.equals(originals.get(player.getUniqueId()),player.getInventory().getContents())) {
+                    // M8 intentionally replaces restored carried Lobby items with canonical controls; all other M4 state checks remain.
+                    var controls=Map.of(0,"rooms",1,"autojoin",4,"profile",7,"leaderboard",8,"shop");
+                    for(int slot=0;slot<player.getInventory().getSize();slot++) {
+                        var item=player.getInventory().getItem(slot);String expected=controls.get(slot);
+                        if(expected==null)check(item==null||item.getType().isAir(),"unexpected noncanonical Lobby item "+slot);
+                        else check(item!=null && expected.equals(item.getItemMeta().getPersistentDataContainer().get(new NamespacedKey("lastsector","lobby_action"),PersistentDataType.STRING)),"canonical Lobby control differs "+slot);
+                    }
+                }
                 check(player.getLevel()==12 && player.getExp()==.25f && player.getTotalExperience()==400,"original XP differs");
                 check(player.getGameMode()==GameMode.CREATIVE && player.getInventory().getHeldItemSlot()==7,"mode/selection differs");
                 check(player.getHealth()==12 && player.getFoodLevel()==14 && player.getSaturation()==3,"original health/food differs: "+player.getHealth()+"/"+player.getFoodLevel()+"/"+player.getSaturation());

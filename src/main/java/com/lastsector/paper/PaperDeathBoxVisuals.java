@@ -11,11 +11,12 @@ public final class PaperDeathBoxVisuals implements DeathBoxVisualFactory {
     private final JavaPlugin plugin;
     private final NamespacedKey boxKey,sessionKey;
     public PaperDeathBoxVisuals(JavaPlugin plugin) { this.plugin=plugin; boxKey=new NamespacedKey(plugin,"deathbox_id"); sessionKey=new NamespacedKey(plugin,"deathbox_session"); }
-    @Override public List<UUID> spawn(DeathBox box,Component text) {
+    @Override public List<UUID> spawn(DeathBox box,Component text) {return spawn(box,text,Material.BARREL);}
+    public List<UUID> spawn(DeathBox box,Component text,Material skin) {
         World world=Objects.requireNonNull(plugin.getServer().getWorld(box.location().world()));
         Location at=new Location(world,box.location().x(),box.location().y(),box.location().z()); List<UUID> created=new ArrayList<>();
         try {
-            BlockDisplay display=world.spawn(at.clone().add(-.5,0,-.5),BlockDisplay.class,e->{ e.setBlock(Material.BARREL.createBlockData()); mark(e,box); }); created.add(display.getUniqueId());
+            BlockDisplay display=world.spawn(at.clone().add(-.5,0,-.5),BlockDisplay.class,e->{ e.setBlock(skin.createBlockData()); mark(e,box); }); created.add(display.getUniqueId());
             Interaction hitbox=world.spawn(at,Interaction.class,e->{e.setInteractionWidth(1.3f);e.setInteractionHeight(1.3f);e.setResponsive(true);mark(e,box);}); created.add(hitbox.getUniqueId());
             TextDisplay label=world.spawn(at.clone().add(0,1.65,0),TextDisplay.class,e->{e.text(text);e.setBillboard(Display.Billboard.CENTER);e.setLineWidth(250);mark(e,box);}); created.add(label.getUniqueId());
             return List.copyOf(created);

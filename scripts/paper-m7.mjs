@@ -78,6 +78,7 @@ async function connect(name, port, respawn=true) {
   bot.on('spawn', () => { bot.spawned = true; bot.physicsEnabled = false; });
   bots.push(bot);
   await until(() => bot.spawned, 'Bot spawn ' + name);
+  await sleep(2300); // M8 async profile/canonical Lobby gate.
   return bot;
 }
 async function chat(bot, command, expected) {
@@ -131,8 +132,8 @@ async function kill(){await fs.writeFile(path.join(root,`console-${epoch}.log`),
 async function checkpoint(test){let row;await until(()=>{row=query("SELECT * FROM recovery_sessions WHERE status='ACTIVE' AND room_id='solo'")[0];return row && test(JSON.parse(row.payload));},'Durable checkpoint');return JSON.parse(row.payload);}
 const originals=new Map();
 async function nativeValues(value){if(value?.format==='paper-native')return nbt.simplify((await nbt.parse(Buffer.from(value.data,'base64'))).parsed);if(Array.isArray(value))return Promise.all(value.map(nativeValues));if(value&&typeof value==='object')return Object.fromEntries(await Promise.all(Object.entries(value).map(async([key,item])=>[key,await nativeValues(item)])));return value;}
-function stableLobby(value){const copy=structuredClone(value);delete copy.effects;delete copy.exhaustion;delete copy.fireTicks;delete copy.fallDistance;return copy;}
-async function restored(name){await until(async()=>{const text=await consoleCommand('lsprobe player '+name,'PROBE player=');return text.includes('world=world ');},'Lobby restore '+name);assert.deepEqual(await nativeValues(stableLobby(await json('lsprobe m7lobby '+name))),await nativeValues(stableLobby(originals.get(name))));}
+function stableLobby(value){const copy=structuredClone(value);delete copy.inventory;delete copy.cursor;delete copy.effects;delete copy.exhaustion;delete copy.fireTicks;delete copy.fallDistance;return copy;}
+async function restored(name){await until(async()=>{const text=await consoleCommand('lsprobe player '+name,'PROBE player=');return text.includes('world=world ');},'Lobby restore '+name);let canonical;await until(async()=>{canonical=await json('lsprobe m7lobby '+name);return JSON.stringify(Object.keys(canonical.inventory).sort())===JSON.stringify(['0','1','4','7','8']);},'Canonical Lobby '+name);assert.deepEqual(Object.keys(canonical.inventory).sort(),['0','1','4','7','8']);assert.deepEqual(await nativeValues(stableLobby(canonical)),await nativeValues(stableLobby(originals.get(name))));}
 try {
  await ready();const clients=new Map();
  for(const name of ['LSAlice','LSBob','LSCarol','LSDan','LSEve','LSFrank','LSGrace']){const bot=await connect(name,port);clients.set(name,bot);await probe('lsprobe m4seed '+name,'M4 seeded');originals.set(name,await json('lsprobe m7lobby '+name));}
@@ -152,12 +153,13 @@ try {
  assert.equal(before.lootState,'COMPLETE');assert.deepEqual(before.boxes[0].inventory,box);assert.equal(query('SELECT * FROM pending_player_restores').length,7);
  await fs.writeFile(path.join(root,'before.json'),JSON.stringify(before,null,2));
  await kill();await sleep(4000);launch();await ready();
- const squad=query("SELECT * FROM recovery_sessions WHERE room_id='squad' AND status='ACTIVE'")[0];assert.ok(squad);assert.match(output,/recovered=2/);
- await consoleCommand('ls debug end squad','End requested');await state('squad','WAITING');
- for(const name of ['LSFrank','LSGrace']){clients.set(name,await connect(name,port));await restored(name);}
  const recovered=await checkpoint(s=>s.revision>before.revision && s.participants.filter(p=>p.state==='DISCONNECTED').length===3);
  assert.equal(recovered.sessionId,before.sessionId);assert.equal(recovered.worldName,before.worldName);assert.deepEqual(recovered.teams,before.teams);assert.deepEqual(recovered.boxes,before.boxes);assert.equal(recovered.zone.phase,'SHRINKING');assert.ok(recovered.zone.remainingNanos>before.zone.remainingNanos-8e9);assert.deepEqual(recovered.sanitizedBlocks,before.sanitizedBlocks);
  const bobBefore=before.participants.find(p=>p.name==='LSBob'),bobAfter=recovered.participants.find(p=>p.name==='LSBob');assert.ok(bobAfter.reconnectRemainingNanos>bobBefore.reconnectRemainingNanos-8e9);assert.ok(recovered.participants.find(p=>p.name==='LSAlice').reconnectRemainingNanos>110e9);
+ const squad=query("SELECT * FROM recovery_sessions WHERE room_id='squad' AND status='ACTIVE'")[0];assert.ok(squad);assert.match(output,/recovered=2/);
+ await consoleCommand('ls debug end squad','End requested');await state('squad','WAITING');
+ for(const name of ['LSFrank','LSGrace']){clients.set(name,await connect(name,port));await restored(name);}
+
  clients.set('LSAlice',await connect('LSAlice',port));const match=await json('lsprobe m7match LSAlice');const saved=before.participants.find(p=>p.name==='LSAlice').current;for(const field of ['inventory','cursor','totalXp','selected','maxHealth'])assert.deepEqual(match[field],saved[field],field);
  assert.deepEqual(await json('lsprobe m7worldcheck LSAlice'),{autosave:true,block:'DIAMOND_BLOCK',chest:17,ground:true});
  assert.deepEqual(await json('lsprobe m7entities LSAlice'),{bodies:2,boxes:1});

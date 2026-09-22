@@ -80,6 +80,7 @@ async function connect(name, port, respawn=true) {
   bot.on('spawn', () => { bot.spawned = true; bot.physicsEnabled = false; });
   bots.push(bot);
   await until(() => bot.spawned, 'Bot spawn ' + name);
+  await sleep(2300); // Await M8 profile/canonical Lobby before seeding M4 originals.
   return bot;
 }
 async function chat(bot, command, expected) {
@@ -125,7 +126,7 @@ async function startSolo(a,b) {
 async function endSolo() {await consoleCommand('ls debug end solo','End requested');await state('solo','WAITING');}
 try {
   await until(()=>(output.includes('Done (') && output.includes('Recovery bootstrap complete')),'Paper startup',120000);
-  assert.match(output,/Milestone 7 initialized/);assert.doesNotMatch(output,/ERROR|Exception/);
+  assert.match(output,/Milestone 8 initialized/);assert.doesNotMatch(output,/ERROR|Exception/);
   const a=await connect('LSAlice',port),b=await connect('LSBob',port),c=await connect('LSCarol',port),d=await connect('LSDan',port),e=await connect('LSEve',port),f=await connect('LSFrank',port);
   for(const bot of bots)await probe('lsprobe m4seed '+bot.username,'M4 seeded');
   for(const bot of [a,b,c])await chat(bot,'/ls join solo','Joined room solo');

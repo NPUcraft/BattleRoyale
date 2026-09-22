@@ -15,6 +15,11 @@ public final class PluginRuntime implements AutoCloseable {
     private final MessageService messages;
     private RoomRuntimeService rooms;
     private PaperMatches matches;
+    private PaperProgression progression;
+    private final PaperLobby lobby;
+    public PaperLobby lobby(){return lobby;}
+    private org.bukkit.scheduler.BukkitTask progressionTask;
+    public PaperProgression progression(){return progression;}
     private OnDemandWorldProvider provider;
     private final NativeItemSerializer itemSerializer=new NativeItemSerializer();
     private final PaperDamageProvenance provenance=new PaperDamageProvenance();
@@ -54,6 +59,7 @@ public final class PluginRuntime implements AutoCloseable {
     public PaperMatches matches() { return matches; }
     public PluginRuntime(JavaPlugin plugin, FoundationService foundation, MessageService messages) {
         this.plugin = plugin; this.foundation = foundation; this.messages = messages;
+        lobby=new PaperLobby(plugin,this);plugin.getServer().getPluginManager().registerEvents(lobby,plugin);
         bottles=new StoredExperienceBottles(plugin);celebrations=new CelebrationEffects(plugin);
         groundMarker=new org.bukkit.NamespacedKey(plugin,"ground_loot_session");
         sanitizer=new WorldSanitizer(groundMarker);
@@ -80,6 +86,7 @@ public final class PluginRuntime implements AutoCloseable {
     public RoomRuntimeService rooms() { return rooms; }
     public void reload() {
         if(recovery!=null && (!recovery.ready() || !recovery.idle() || !durablePlayers.idleForReload()))throw new IllegalStateException("Recovery/checkpoint completion must finish before reload");
+        if(progression!=null && !progression.idle())throw new IllegalStateException("Permanent data operations must finish before reload");
         if(loadouts.busy()) throw new IllegalStateException("Close loadout editors and wait for saves before reload");
         if (rooms != null && !rooms.canReload())
             throw new IllegalStateException("Cannot reload LastSector while rooms or game sessions are active.");
@@ -94,6 +101,8 @@ public final class PluginRuntime implements AutoCloseable {
     private RoomRuntimeService create(ConfigurationSnapshot configuration) {
         if(storageSettings!=null && !storageSettings.equals(configuration.settings().database()))throw new IllegalStateException("Changing database settings requires a server restart");
         if(storage==null){storageSettings=configuration.settings().database();storage=new com.lastsector.storage.RecoveryStorage(new com.lastsector.storage.JdbcStorageProvider(storageSettings),plugin.getLogger()::severe);}
+        var progressionConfig=com.lastsector.config.ProgressionConfig.load(plugin);
+        var nextProgression=new PaperProgression(plugin,storage,new com.lastsector.storage.JdbcStorageProvider(storageSettings),progressionConfig,configuration.settings().economyProvider());
         var content=new com.lastsector.config.MatchContentLoader(plugin.getDataFolder().toPath(),new NativeLootItems(),itemSerializer::item).load(configuration);
         var server = plugin.getServer();
         var players = new PaperPlayers(server, configuration.settings().lobbyWorld(), messages);
@@ -116,6 +125,11 @@ public final class PluginRuntime implements AutoCloseable {
                 loadouts,sanitizer,content,isolation,groundMarker,itemSerializer,bottles,celebrations,spectators,messages);
         var result = new RoomRuntimeService(() -> foundation.state().configuration(), foundation.sessions(),
                 scheduler, MapSelector.random(new java.util.Random()), provider, players, Clock.systemUTC(), matches);
+        if(progression!=null)progression.close();
+        progression=nextProgression;matches.progression(progression);
+        if(progressionTask!=null)progressionTask.cancel();
+        lobby.reset();
+        progressionTask=server.getScheduler().runTaskTimer(plugin,()->{progression.tick(recoveryReady());if(recoveryReady())lobby.tick();},1,20);
         this.matches = matches;
         this.provider = provider;
         recovery=new PaperRecoveryCoordinator(plugin,configuration,storage,durablePlayers,isolation,files,provider,matches,result,foundation.sessions(),sanitizer,recoveryEntities);
@@ -126,6 +140,8 @@ public final class PluginRuntime implements AutoCloseable {
         return result;
     }
     @Override public void close() {
+        if(progressionTask!=null)progressionTask.cancel();
+        if(progression!=null)progression.close();
         if(recovery!=null)recovery.close();
         if (rooms != null) {
             try { rooms.close(); } catch (Exception error) { messages.runtimeError("Runtime shutdown failed", error); }

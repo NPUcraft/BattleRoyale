@@ -1,6 +1,6 @@
 # LastSector
 
-LastSector 是 **Java 21 / Paper 1.21.8** 的多人 Battle Royale 插件。M1–M6 已完成；当前为 **M7 — Storage & Crash Recovery**：异步 SQLite/MySQL、版本化会话快照、持久化玩家原状态、RUNNING/ENDING 崩溃恢复与延迟孤儿世界清理。下一里程碑为 M8 大厅、经济、外观与排名。
+LastSector 是 **Java 21 / Paper 1.21.8** 的多人 Battle Royale 插件。当前为 **M8 — Lobby, Economy, Cosmetics & Ranking**：固定大厅菜单、永久档案与战绩、按队伍名次计算的 Rating、独立 Kill Score、历史排行榜和纯外观商店。M1–M7 的比赛、物品隔离及崩溃恢复继续保留。下一里程碑为 M9 管理工具、地图编辑、诊断、压力测试与发布加固。
 
 ## 构建
 
@@ -21,7 +21,7 @@ Gradle 8.14 Wrapper 已附带，首次构建需要网络。Linux/macOS 使用 `.
 4. 在 playable-area 内提供足够安全地面。模板目录缺失会在准备该局时失败；区域尺寸与圈配置冲突会在启动/reload 时直接拒绝。
 5. 玩家 /ls join solo，人数达标自动倒计时。管理员 /ls debug start solo 可绕过 minPlayers，但必须有在线参与者。
 6. PREPARING 冻结 roster、均衡分队、保存 Lobby 原快照并应用一次 Loadout；准备期间冻结物品操作。STARTING 按冻结人数选初始 halfSize，清理世界、规划出生点、生成一次性 Loot。全部成功后同 tick 传送在线成员，在各自出生点创建断线成员的替身，进入 RUNNING 并开始保护计时。
-7. /ls debug end solo 结束比赛，恢复原始背包/经验/状态、取消任务、移除 UI/临时来源记录、返回大厅、卸载并删除副本。所有模式的正常淘汰在 tick 末按 Team 判断胜负，展示 60 秒后自动清理；debug end 在 RUNNING 直接清理、不生成结果，在 ENDING 跳过剩余展示。
+7. /ls debug end solo 结束比赛，恢复原状态后应用固定大厅菜单、保留末影箱/经验等状态、取消任务、移除 UI/临时来源记录、返回大厅、卸载并删除副本。所有模式的正常淘汰在 tick 末按 Team 判断胜负，展示 60 秒后自动清理；debug end 在 RUNNING 直接清理，仅保存非正式审计结果、不计永久战绩，在 ENDING 跳过剩余展示。
 
 源模板只读，不能使用大厅、运行中的世界、链接目录或被外部进程修改的模板。复制保留 seed / WorldGenSettings；必要的新区块由模板设置生成，不预生成整个地图。
 
@@ -153,7 +153,7 @@ DeathBox 是 **54 格共享库存**，以 BARREL BlockDisplay、Interaction 与 
 
 实服复现：`paperProbeJar` 后运行 `scripts/paper-m6-candidate.mjs`、`scripts/paper-m6.mjs`、`scripts/paper-m6-edges.mjs`，参数同 M3–M5 脚本。细节及公开 API fixture 边界见 [验证记录](docs/VERIFICATION.md)。
 
-M7 已实现数据库、进程崩溃恢复和孤儿世界管理。第三方 Party、永久统计/排名、经济与外观商店尚未实现。匿名/第三方 source-less 伤害、红石责任链、混合火/岩浆来源等仍受 Paper 可观测来源限制，见 [架构](docs/ARCHITECTURE.md)。
+M7 已实现数据库、进程崩溃恢复和孤儿世界管理。永久统计/排名、经济与外观商店已在 M8 实现；第三方 Party 仍未实现。匿名/第三方 source-less 伤害、红石责任链、混合火/岩浆来源等仍受 Paper 可观测来源限制，见 [架构](docs/ARCHITECTURE.md)。
 
 ## M7 存储与恢复
 
@@ -193,4 +193,48 @@ SQLite 路径相对 `plugins/LastSector`；不得穿越目录或指向链接。M
 
 正常 `/stop` 或禁用是结束比赛：在线玩家恢复、离线玩家保留待恢复记录、正常删除世界并完成会话。只有非正常进程终止续局。无法恢复或无引用的有效标记世界持久写入 ORPHANED 和首次发现 UTC 时间，默认至少保留 60 分钟；启动及每 5 分钟检查。删除前复核路径、marker、时间、数据库引用和加载状态；Windows 文件占用仅有限重试。不要通过其他插件或后台手工加载 LastSector runtime 目录。
 
-详细设计、测试证据和限制见 [架构](docs/ARCHITECTURE.md)、[验证](docs/VERIFICATION.md)。永久玩家档案、累计统计、Rating、经济和 Party 集成仍留待 M8。
+详细设计、测试证据和限制见 [架构](docs/ARCHITECTURE.md)、[验证](docs/VERIFICATION.md)。永久档案、累计统计、Rating 与经济外观已在 M8 实现；Party 集成仍延期。
+
+## M8 大厅与永久数据
+
+新增 `lobby.yml`、`ranking.yml`、`cosmetics.yml`，已有文件不会覆盖。大厅默认 0/1/4/7/8 格为房间选择、Auto Join、Profile、Leaderboards、Shop，使用 `lastsector:lobby_action` PDC。大厅登录／返回先完成 M7 pending restore 或比赛重连，再清空随身背包并应用 canonical 菜单；**末影箱不受大厅菜单重置影响**。比赛中的 ALIVE／DISCONNECTED 玩家不能用 `/ls lobby` 逃跑；阵亡观战者先 `/ls leave`。菜单锁只针对 LastSector 控件和 GUI，不全局禁止普通背包操作。
+
+新增玩家命令：`/ls lobby`、`/ls profile`、`/ls leaderboard [rating|kill_score|wins|kills|assists|damage]`、`/ls shop`、`/ls cosmetics`。管理员：`/ls admin cosmetic grant|revoke <player> <id>`、`/ls admin purchases`、`/ls debug economy`、`/ls debug stats <player>`。Grant/revoke 使用服务器缓存中的玩家身份；revoke 同步解除该永久装备，但当前比赛保留冻结外观。购买、装备限定大厅，付费购买有 Confirm/Cancel。
+
+Profile 异步加载；未完成或 DB 失败时不能 join/autojoin/购买。比赛中不按每次击杀或每帧查询永久库。UUID 是身份，名字只用于显示并在登录更新。
+
+### 结算与排名
+
+Schema **V2** 增加永久档案、比赛/玩家结果、周期统计、解锁、装备、购买账本；从 V1 原地迁移并保留恢复表。正式 NORMAL/TIE 结果以 `sessionId` 唯一键做一次事务：结果、累计统计、Rating、Kill Score、日/周/月统计全部成功或全部回滚。ADMIN_END、RECOVERY_ABANDONED、INTERNAL_ABORT 不计正式战绩；无法可信解码的损坏快照不制造战绩。已有正常结果的 ENDING 提前清理不会撤销或重复结算。
+
+队伍最后一位 active combatant 淘汰时按 tick 批次记录名次；四队中两队同 tick 淘汰均为第 3，最终两队同 tick 淘汰均为第 1。所有成员获得相同队伍名次，阵亡/离线冠军队员也完整获得 win +1。
+
+Rating 默认初始 1000、下限 0，按 `(placement-1)/(teamCount-1)` 匹配 `ranking.yml` 分段；单队为 0。最高分永久保存。Kill Score 独立为 kills×10 + assists×3；不替代 kills，也不因死亡扣分。比赛开始冻结 ratingBefore，提交时事务读取当前 Rating 再应用名次变化，以免覆盖后台修改；存在外部改分时历史 ratingBefore 不保证等于 ratingAfter−ratingDelta。
+
+周期按 completedAt 与 `statistics.period-time-zone`（默认 UTC）固化：DAY `YYYY-MM-DD`、WEEK ISO 周一开始的 week-based year `YYYY-Www`、MONTH `YYYY-MM`。后续修改时区不会重新归类历史记录。累计榜使用当前 Rating；周期榜使用该周期 Rating Gained / Kill Score Gained。历史不删除、不按月重置；GUI 支持分页和前期/后期/当前期，空期显示 No data。SQL LIMIT/OFFSET、有稳定 tie-break 和索引；缓存默认 30 秒并合并同一查询。
+
+### 结果 outbox 与恢复
+
+`plugins/LastSector/result-outbox` 保存带版本/checksum 的不可变 JSON，文件 force + 原子 rename 后才允许正常世界清理。DB 写失败会重试；进程重启即使比赛世界已删除，也可独立重放结果。永久事务提交后删除该 outbox 文件；重复提交返回已有结果。M7 快照同时保存名次批次、累计有效敌方伤害、死亡/存活时长、冻结 Rating/外观及未完成结果；停机时间不计存活时长。
+
+M7 V1 老快照仍可恢复游戏，但没有 M8 名次/伤害/冻结档案的历史，**不追溯猜测该旧比赛的永久战绩**。M8 后创建的比赛具有完整记录。DB、文件系统和 Minecraft playerdata/world 仍不构成同一个 ACID 事务；完全未写入任何持久介质的瞬间崩溃仍有检查点窗口。
+
+### 经济提供者
+
+配置 `economy.provider: auto|coinsengine|excellenteconomy|vault|none`，默认 auto-priority `[coinsengine, excellenteconomy, vault]`，`currency: coins`、`shop-enabled: true`。显式提供者不可用时不回退其他提供者；缺失/不兼容时只关闭付费商店并提示，比赛仍能运行。免费外观不调用经济 API。
+
+- **CoinsEngine 2.7.x**：独立 legacy static API adapter；已实测 2.7.0 + nightcore 2.15.0 + Vault 1.7.3，Java 21。不声称支持不同二进制接口的 CoinsEngine 2.6.x。2.7.0 默认货币初始化在无 Vault 的实测环境中发生上游 NoClassDefFoundError，实测组合保留 Vault。
+- **ExcellentEconomy 2.8.0**：独立 ServicesManager API adapter；已实测 2.8.0 + nightcore 2.16.2 + Vault 1.7.3，Paper 1.21.8 / **Java 25**。此上游版本为 Java 25 字节码。LastSector 的 Java 21 编译使用官方 2.7.0 过渡发布包中的新版公共接口，所调用的方法与 2.8.0 一致；不修改上游 JAR，不使用反射。
+- **Vault 1.7.3 / API 1.7.1**：通过 ServicesManager 获取 Economy；实测 CoinsEngine 提供的 Vault service。Vault 使用其默认货币，`economy.currency` 不会伪造多货币选择。
+
+依赖均为 compileOnly/softdepend，不打入 LastSector JAR。第三方经济调用默认 server thread；内部使用 BigDecimal，double 仅在边界转换，不能精确表示、超出范围或违反货币小数位的价格会拒绝，不静默四舍五入。
+
+公开来源：[ExcellentEconomy 开发 API](https://nightexpressdev.com/excellenteconomy/utility/developer-api/)、[CoinsEngine 2.7.0 官方发布](https://modrinth.com/plugin/excellenteconomy/version/2.7.0)、[Vault API](https://github.com/MilkBowl/VaultAPI)、[Vault 1.7.3](https://github.com/MilkBowl/Vault/releases/tag/1.7.3)。
+
+### 购买与纯外观边界
+
+本地账本记录 PENDING → WITHDRAWING → COMPLETED；解锁与完成状态同一 DB 事务。扣款成功但解锁事务失败时，先确认没有已提交结果，再尝试退款；成功记 REFUNDED，失败或无法判定记 MANUAL_REVIEW。启动遇到不明确的 PENDING/WITHDRAWING 不重扣、不猜余额、不自动补发。`/ls admin purchases` 为只读核查；本阶段没有自动解决不明确交易的命令。**外部经济与本库没有跨插件 ACID / exactly-once 购买保证。**
+
+KILL_EFFECT、WIN_EFFECT、DEATHBOX_SKIN、LOBBY_EFFECT 每类最多装备一个；解锁永久保存，缺失定义保留 ownership 并回退默认视觉。提供粒子击杀、无伤闪电、胜利烟花、末影/金色死亡盒和大厅星光示例。比赛 roster 冻结外观，恢复使用本局快照；击杀使用 killer，DeathBox 使用 deceased，Team/tie 所有胜者均有庆祝。大厅效果为单一循环（每玩家 3 粒子/秒、总上限 300/次），加入房间/退出即停止。视觉不改变装备、伤害、碰撞、掉落、拾取距离或游戏优势。
+
+未实现 Seasons、MMR 匹配、Party、NPC/Citizens、PlaceholderAPI 要求或任何付费战斗优势。M5 provenance 与 M6 公共 API 替身的既有限制继续适用。

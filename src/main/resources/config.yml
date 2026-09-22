@@ -1,4 +1,4 @@
-# Recovery storage is required; permanent stats/economy remain deferred.
+# Recovery and permanent progression share the versioned SQLite/MySQL database.
 debug: false
 disconnect:
   reconnect-seconds: 120
@@ -32,6 +32,9 @@ recovery:
   orphan-delete-after-minutes: 60
 economy:
   provider: auto
+  auto-priority: [coinsengine, excellenteconomy, vault]
+  currency: coins
+  shop-enabled: true
 # Relative to plugins/LastSector. Must also be inside Paper's world container.
 runtime-worlds:
   directory: runtime

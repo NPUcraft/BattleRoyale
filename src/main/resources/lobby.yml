@@ -1,0 +1,13 @@
+titles:
+  rooms: Rooms
+  profile: Profile
+  leaderboard: Leaderboards
+  shop: Cosmetic Shop
+  cosmetics: Your Cosmetics
+  confirmation: Confirm Purchase
+items:
+  rooms: { slot: 0, material: COMPASS, name: Rooms, lore: [Choose a room] }
+  autojoin: { slot: 1, material: ENDER_EYE, name: Auto Join, lore: [Join an available room] }
+  profile: { slot: 4, material: PLAYER_HEAD, name: Profile, lore: [Your permanent statistics] }
+  leaderboard: { slot: 7, material: GOLD_INGOT, name: Leaderboards, lore: [Lifetime and historical rankings] }
+  shop: { slot: 8, material: EMERALD, name: Cosmetic Shop, lore: [Permanent visual cosmetics] }

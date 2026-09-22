@@ -21,6 +21,11 @@ public final class PaperCombatSession implements AutoCloseable {
     private final Map<UUID,String> names=new HashMap<>();
     private final Set<UUID> zoneDamage=new HashSet<>();
     private final Consumer<Throwable> failed;
+    private java.util.function.Consumer<com.lastsector.death.DeathBox> cosmetic=box->{};
+    public void cosmetics(java.util.function.Consumer<com.lastsector.death.DeathBox> value){cosmetic=value;}
+    private com.lastsector.progression.SessionProgress progress;
+    public void progress(com.lastsector.progression.SessionProgress value){progress=value;tracker.damageObserver(record->{if(!session.sameTeam(record.attacker(),record.victim()))value.damage(record.attacker(),record.amount());});eliminations.restoreTicks(value.snapshot().eliminationTicks());recoveredBatch=value.snapshot().eliminationTicks().values().stream().max(Long::compare).orElse(null);}
+    private Long recoveredBatch;
     private long began;
     private long dirtyTick=Long.MIN_VALUE;
     private boolean initialOutcomeCheck=true;
@@ -31,8 +36,9 @@ public final class PaperCombatSession implements AutoCloseable {
         tracker=new CombatTracker(session.players().keySet(),settings,clock);
         boxes=new PaperDeathBoxes(plugin,session,settings.boxReach(),serializer,bottles);
         eliminations=new EliminationService(session,tracker,clock.nanoTime(),box->{
+            if(progress!=null)progress.eliminated(box.deceased(),box.elapsedNanos(),box.eliminationTick());
             dirtyTick=box.eliminationTick(); eliminated.accept(box.deceased());
-            boxes.create(box,this::name);
+            boxes.create(box,this::name);cosmetic.accept(box);
             Component feed=Component.text(box.deceasedName()+" — ").append(DeathReasonRenderer.render(box.reason(),this::name));
             for(UUID id:session.players().keySet()) {var player=plugin.getServer().getPlayer(id);if(player!=null) player.sendMessage(feed);}
         });
@@ -52,7 +58,8 @@ public final class PaperCombatSession implements AutoCloseable {
         if(dirtyTick>tick) return Optional.empty();
         if(dirtyTick==Long.MIN_VALUE && !initialOutcomeCheck)return Optional.empty();
         initialOutcomeCheck=false;
-        long batch=dirtyTick==Long.MIN_VALUE?tick:dirtyTick;dirtyTick=Long.MIN_VALUE;
+        long batch=dirtyTick==Long.MIN_VALUE?(recoveredBatch==null?tick:recoveredBatch):dirtyTick;dirtyTick=Long.MIN_VALUE;recoveredBatch=null;
+        if(progress!=null)progress.observe(session,batch);
         // The recorded batch identity, not callback wall time, defines ties.
         return outcomes.resolve(session,eliminations.eliminationTicks(),batch,clock.nanoTime());
     }

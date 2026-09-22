@@ -3,9 +3,15 @@ group = "com.lastsector"
 version = "0.1.0-SNAPSHOT"
 repositories {
     mavenCentral()
+    maven("https://repo.nightexpressdev.com/releases")
+    maven("https://api.modrinth.com/maven")
+    maven("https://jitpack.io")
     maven("https://repo.papermc.io/repository/maven-public/")
 }
 dependencies {
+    compileOnly("maven.modrinth:nightcore:2.15.0") { isTransitive = false }
+    compileOnly("maven.modrinth:excellenteconomy:2.7.0") { isTransitive = false }
+    compileOnly("com.github.MilkBowl:VaultAPI:1.7.1") { isTransitive = false }
     implementation("org.xerial:sqlite-jdbc:3.53.4.0") { exclude(group="org.slf4j") }
     implementation("com.mysql:mysql-connector-j:9.4.0") { exclude(group="com.google.protobuf") }
     implementation("com.google.code.gson:gson:2.13.2")

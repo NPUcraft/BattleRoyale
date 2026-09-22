@@ -23,7 +23,8 @@ public final class CelebrationEffects {
                 Title.Times.times(Duration.ofMillis(300),Duration.ofSeconds(5),Duration.ofMillis(500)));
         for(UUID id:session.players().keySet()) {Player p=plugin.getServer().getPlayer(id);if(p!=null) p.showTitle(title);}
     }
-    public void fire(GameSession session) {
+    public void fire(GameSession session) {fire(session,id->org.bukkit.Color.YELLOW);}
+    public void fire(GameSession session,Function<UUID,Color> colors) {
         World world=plugin.getServer().getWorld(session.gameWorld().orElseThrow().worldName()); if(world==null) return;
         Set<UUID> ids=entities.computeIfAbsent(session.sessionId(),id->new HashSet<>());ids.removeIf(id->plugin.getServer().getEntity(id)==null);
         for(UUID winner:session.outcome().orElseThrow().winnerIds()) {
@@ -31,7 +32,7 @@ public final class CelebrationEffects {
             Location at=p!=null && p.getWorld().getUID().equals(world.getUID())?p.getLocation().add(0,2,0):world.getSpawnLocation().add(0,2,0);
             Firework firework=world.spawn(at,Firework.class,entity->{
                 RecoveryEntityCleaner.mark(entity);entity.getPersistentDataContainer().set(marker,PersistentDataType.STRING,session.sessionId().toString());
-                var meta=entity.getFireworkMeta();meta.setPower(0);meta.addEffect(FireworkEffect.builder().with(FireworkEffect.Type.BALL).withColor(Color.WHITE,Color.YELLOW).trail(true).build());
+                var meta=entity.getFireworkMeta();meta.setPower(0);meta.addEffect(FireworkEffect.builder().with(FireworkEffect.Type.BALL).withColor(Color.WHITE,colors.apply(winner)).trail(true).build());
                 entity.setFireworkMeta(meta);entity.setInvulnerable(true);
             });ids.add(firework.getUniqueId());
         }

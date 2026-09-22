@@ -18,13 +18,24 @@ public final class LastSectorCommand implements CommandExecutor, TabCompleter {
         if (!sender.hasPermission("lastsector.command")) { messages.denied(sender); return true; }
         String action = args.length == 0 ? "help" : args[0].toLowerCase(Locale.ROOT);
         if (Set.of("reload", "debug", "admin").contains(action) && !sender.hasPermission("lastsector.admin")
-                || Set.of("rooms", "join", "autojoin", "leave", "team", "spectate").contains(action) && !sender.hasPermission("lastsector.play")) {
+                || Set.of("rooms", "join", "autojoin", "leave", "team", "spectate", "lobby", "profile", "leaderboard", "shop", "cosmetics").contains(action) && !sender.hasPermission("lastsector.play")) {
             messages.denied(sender); return true;
         }
         try {
             var rooms = runtime.rooms();
             switch (action) {
+                case "lobby", "profile", "leaderboard", "shop", "cosmetics" -> {
+                    if(!(sender instanceof Player player))throw new IllegalArgumentException("This command requires a player");
+                    runtime.lobby().command(player,action,args.length>1?args[1]:null);
+                }
                 case "admin" -> {
+                    if(args.length>=2 && args[1].equalsIgnoreCase("purchases")) {
+                        runtime.progression().purchases().whenComplete((rows,error)->{if(error!=null)messages.send(sender,"Purchase diagnostics unavailable");else if(rows.isEmpty())messages.send(sender,"No MANUAL_REVIEW purchases");else rows.forEach(row->messages.send(sender,row.toString()));});break;
+                    }
+                    if(args.length==5 && args[1].equalsIgnoreCase("cosmetic") && Set.of("grant","revoke").contains(args[2])) {
+                        var target=org.bukkit.Bukkit.getOfflinePlayerIfCached(args[3]);if(target==null)throw new IllegalArgumentException("Unknown cached player; use a player who has joined this server");
+                        runtime.progression().grant(target.getUniqueId(),args[4],args[2].equals("revoke")).whenComplete((value,error)->messages.send(sender,error==null?"Cosmetic updated":"Cosmetic update failed"));break;
+                    }
                     if(args.length!=4 || !args[1].equalsIgnoreCase("loadout") || !args[2].equalsIgnoreCase("edit")) { messages.send(sender,"Usage: /ls admin loadout edit <room>"); break; }
                     if(!(sender instanceof Player player)) throw new IllegalArgumentException("This command requires a player");
                     if(rooms.rooms().stream().map(r->rooms.session(r.id())).flatMap(Optional::stream).anyMatch(s->s.players().containsKey(player.getUniqueId())))
@@ -67,6 +78,8 @@ public final class LastSectorCommand implements CommandExecutor, TabCompleter {
                     else messages.unknown(sender);
                 }
                 case "debug" -> {
+                    if(args.length>=2 && args[1].equalsIgnoreCase("economy")){messages.send(sender,runtime.progression().economy().diagnostics());break;}
+                    if(args.length==3 && args[1].equalsIgnoreCase("stats")){var target=org.bukkit.Bukkit.getPlayerExact(args[2]);if(target==null)throw new IllegalArgumentException("Player must be online");messages.send(sender,String.valueOf(runtime.progression().profile(target.getUniqueId())));break;}
                     if(args.length==2 && args[1].equalsIgnoreCase("storage")){messages.send(sender,runtime.storageDiagnostics());}
                     else if(args.length==2 && args[1].equalsIgnoreCase("recovery")){messages.send(sender,runtime.recoveryDiagnostics());}
                     else if (args.length == 2 && args[1].equalsIgnoreCase("rooms")) {
@@ -119,15 +132,19 @@ public final class LastSectorCommand implements CommandExecutor, TabCompleter {
         List<String> choices = new ArrayList<>();
         if (args.length == 1) {
             choices.addAll(List.of("help", "version"));
-            if (sender.hasPermission("lastsector.play")) choices.addAll(List.of("rooms", "join", "autojoin", "leave", "team", "spectate"));
+            if (sender.hasPermission("lastsector.play")) choices.addAll(List.of("rooms", "join", "autojoin", "leave", "team", "spectate", "lobby", "profile", "leaderboard", "shop", "cosmetics"));
             if (sender.hasPermission("lastsector.admin")) choices.addAll(List.of("reload", "debug", "admin"));
         } else if (args.length == 2 && args[0].equalsIgnoreCase("debug") && sender.hasPermission("lastsector.admin"))
-            choices.addAll(List.of("storage", "recovery", "rooms", "maps", "session", "zone", "protection", "loot", "deathboxes", "teams", "offline", "start", "end"));
+            choices.addAll(List.of("economy", "stats", "storage", "recovery", "rooms", "maps", "session", "zone", "protection", "loot", "deathboxes", "teams", "offline", "start", "end"));
         else if(args[0].equalsIgnoreCase("admin") && sender.hasPermission("lastsector.admin")) {
-            if(args.length==2) choices.add("loadout");
+            if(args.length==2) choices.addAll(List.of("loadout","cosmetic","purchases"));
+            else if(args.length==3 && args[1].equalsIgnoreCase("cosmetic"))choices.addAll(List.of("grant","revoke"));
+            else if(args.length==4 && args[1].equalsIgnoreCase("cosmetic"))org.bukkit.Bukkit.getOnlinePlayers().forEach(p->choices.add(p.getName()));
+            else if(args.length==5 && args[1].equalsIgnoreCase("cosmetic"))choices.addAll(runtime.progression().config().cosmetics().keySet());
             else if(args.length==3 && args[1].equalsIgnoreCase("loadout")) choices.add("edit");
             else if(args.length==4 && args[1].equalsIgnoreCase("loadout") && args[2].equalsIgnoreCase("edit")) runtime.rooms().rooms().forEach(room->choices.add(room.id()));
         }
+        else if(args.length==2 && args[0].equalsIgnoreCase("leaderboard") && sender.hasPermission("lastsector.play"))choices.addAll(List.of("rating","kill_score","wins","kills","assists","damage"));
         else if (args.length == 2 && Set.of("join","spectate").contains(args[0].toLowerCase(Locale.ROOT)) && sender.hasPermission("lastsector.play")
                 || args.length == 3 && args[0].equalsIgnoreCase("debug") && sender.hasPermission("lastsector.admin")
                 && Set.of("session", "zone", "protection", "loot", "deathboxes", "teams", "offline", "start", "end").contains(args[1].toLowerCase(Locale.ROOT)))

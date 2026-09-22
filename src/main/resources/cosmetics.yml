@@ -1,0 +1,48 @@
+cosmetics:
+  kill_particle_burst:
+    category: KILL_EFFECT
+    display-name: Emerald Burst
+    description: [A small particle burst on a credited kill.]
+    icon: EMERALD
+    price: 0
+    effect-type: particle_burst
+    effect-config: { particle: HAPPY_VILLAGER }
+  kill_visual_lightning:
+    category: KILL_EFFECT
+    display-name: Visual Lightning
+    description: [A harmless lightning visual.]
+    icon: LIGHTNING_ROD
+    price: 100
+    effect-type: visual_lightning
+  win_fireworks:
+    category: WIN_EFFECT
+    display-name: Victory Fireworks
+    description: [Celebrate a team victory.]
+    icon: FIREWORK_ROCKET
+    price: 0
+    effect-type: firework_burst
+    effect-config: { color: "55FF55" }
+  deathbox_ender:
+    category: DEATHBOX_SKIN
+    display-name: Ender DeathBox
+    description: [An ender chest display for your DeathBox.]
+    icon: ENDER_CHEST
+    price: 100
+    effect-type: block_display
+    effect-config: { material: ENDER_CHEST }
+  deathbox_gold:
+    category: DEATHBOX_SKIN
+    display-name: Golden DeathBox
+    description: [A golden display for your DeathBox.]
+    icon: GOLD_BLOCK
+    price: 100
+    effect-type: block_display
+    effect-config: { material: GOLD_BLOCK }
+  lobby_sparkle:
+    category: LOBBY_EFFECT
+    display-name: Lobby Sparkle
+    description: [A small particle aura in the lobby.]
+    icon: NETHER_STAR
+    price: 0
+    effect-type: particle_burst
+    effect-config: { particle: END_ROD }

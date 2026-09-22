@@ -25,7 +25,7 @@ public record PluginSettings(boolean debug, String storageType, String economyPr
         Objects.requireNonNull(runtimeDirectory);
         com.lastsector.util.Checks.text(lobbyWorld, "lobbyWorld");
         if (!java.util.Set.of("sqlite", "mysql").contains(storageType)) throw new IllegalArgumentException("storage must be sqlite or mysql");
-        if (!java.util.Set.of("auto", "coinsengine", "vault", "none").contains(economyProvider))
-            throw new IllegalArgumentException("economy provider must be auto, coinsengine, vault or none");
+        if (!java.util.Set.of("auto", "coinsengine", "excellenteconomy", "vault", "none").contains(economyProvider))
+            throw new IllegalArgumentException("economy provider must be auto, coinsengine, excellenteconomy, vault or none");
     }
 }
