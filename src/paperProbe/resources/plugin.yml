@@ -1,6 +1,6 @@
 name: LastSectorTestProbe
 version: '1'
-main: com.lastsector.probe.TestProbe
+main: com.npucraft.lastsector.probe.TestProbe
 api-version: '1.21.8'
 depend: [LastSector]
 commands:

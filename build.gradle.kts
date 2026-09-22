@@ -1,6 +1,6 @@
 import java.security.MessageDigest
 plugins { java }
-group = "com.lastsector"
+group = "com.npucraft.lastsector"
 version = "1.0.0-rc.1"
 repositories {
     mavenCentral()

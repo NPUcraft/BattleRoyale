@@ -1,5 +1,7 @@
 # LastSector
 
+[English](README.md) | [简体中文](README.zh-CN.md)
+
 LastSector is a multi-room Battle Royale plugin for Paper.
 
 > Current version: **1.0.0-rc.1**

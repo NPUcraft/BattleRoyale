@@ -1,6 +1,6 @@
 name: LastSector
 version: '${version}'
-main: com.lastsector.LastSectorPlugin
+main: com.npucraft.lastsector.LastSectorPlugin
 api-version: '1.21.8'
 description: Multiplayer battle royale with safe map authoring and release diagnostics - Milestone 9
 load: POSTWORLD
