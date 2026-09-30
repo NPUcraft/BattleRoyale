@@ -1,2 +1,2 @@
-rootProject.name = "lastsector"
+rootProject.name = "battleroyale"
 

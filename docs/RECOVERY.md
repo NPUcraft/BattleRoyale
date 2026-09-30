@@ -6,6 +6,8 @@ M7–M9 使用 V2 SQLite/MySQL 存储会话和原始玩家状态。恢复包括 
 
 世界 region/entity 文件、playerdata、SQL 和 outbox 不是跨存储 ACID。最近检查点和世界保存之后仍有丢失窗口；不要宣称零损失。坏 checksum/不兼容规则安全弃局，原状态仍保留待恢复。孤儿 GAME 世界默认等待配置时间，只有可信 marker、无加载/引用且满足年龄条件才清理。
 
-EDITOR/MAINTENANCE 使用单独目录和 marker 类型，不参与游戏恢复。编辑器不恢复草稿；未提交预生成不会在启动时自动成为模板。模板替换 journal 在维护孤儿清理前处理；回滚失败时保留并告警。未标记目录、链接或身份不符目录不自动删除。
+Paper 26.2 的 GAME 副本位于 `Server.getLevelDirectory()/dimensions/battleroyale_game/`；EDITOR/MAINTENANCE 使用同级 `battleroyale_maintenance/` 和独立 marker 类型，不参与游戏恢复。marker 还校验 `storageLayout=paper-dimension-v1` 与 namespace，旧布局或外来维度不会被接管。编辑器不恢复草稿；未提交预生成不会在启动时自动成为模板。模板替换 journal 在维护孤儿清理前处理；回滚失败时保留并告警。未标记目录、链接或身份不符目录不自动删除。
+
+从 Paper 1.21.8 升级前须先结束比赛、退出维护并完成原状态恢复；旧 runtime 目录中的进行中比赛不转换为 26.2 恢复会话。旧 `runtime-worlds.directory` 仅作配置兼容，新版本不扫描或删除该目录。保留完整旧服务器备份用于回退，不把 26.2 保存后的世界交给旧版服务器。
 
 断线管理员的原状态使用既有持久恢复通道，因此崩溃不依赖内存中的 editor session。管理员应备份整套数据，并通过 diagnose 检查 pending restore、orphan 和 storage degraded。

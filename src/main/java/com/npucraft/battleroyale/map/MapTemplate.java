@@ -1,0 +1,16 @@
+package com.npucraft.battleroyale.map;
+import com.npucraft.battleroyale.util.Checks;
+import java.nio.file.Path;
+import java.util.Objects;
+/** Metadata for a template; construction performs no filesystem or world operations. */
+public record MapTemplate(String id, String displayName, Path templatePath, PlayableArea playableArea, com.npucraft.battleroyale.admin.MapMetadata metadata, String validationError) {
+    public MapTemplate(String id,String displayName,Path templatePath,PlayableArea playableArea,com.npucraft.battleroyale.admin.MapMetadata metadata){this(id,displayName,templatePath,playableArea,metadata,null);}
+    public MapTemplate invalid(String reason){return new MapTemplate(id,displayName,templatePath,playableArea,metadata,reason);}
+    public MapTemplate(String id,String displayName,Path templatePath,PlayableArea playableArea){this(id,displayName,templatePath,playableArea,null);}
+    public long metadataRevision(){return metadata==null?0:metadata.revision();}
+    public MapTemplate {
+        Checks.text(id, "id"); Checks.text(displayName, "displayName");
+        Objects.requireNonNull(templatePath, "templatePath"); Objects.requireNonNull(playableArea, "playableArea");
+    }
+}
+

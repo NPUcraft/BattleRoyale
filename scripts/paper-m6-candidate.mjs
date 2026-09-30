@@ -13,12 +13,12 @@ const nbt = require('prismarine-nbt');
 const source = path.resolve(process.argv[2]);
 assert.match(await fs.readFile(path.join(source, 'eula.txt'), 'utf8'), /^eula=true\s*$/m);
 const root = path.resolve('.run', 'paper-m6-candidate-' + Date.now());
-const data = path.join(root, 'plugins/LastSector');
+const data = path.join(root, 'plugins/BattleRoyale');
 await fs.mkdir(data, { recursive: true });
 for (const name of ['paper.jar', 'libraries', 'versions', 'cache', 'eula.txt'])
   await fs.cp(path.join(source, name), path.join(root, name), { recursive: true });
-await fs.copyFile('build/libs/lastsector-1.0.0-rc.1.jar', path.join(root, 'plugins/lastsector.jar'));
-await fs.copyFile('build/integration/lastsector-test-probe.jar', path.join(root, 'plugins/probe.jar'));
+await fs.copyFile('build/libs/battleroyale-1.0.0-rc.1.jar', path.join(root, 'plugins/battleroyale.jar'));
+await fs.copyFile('build/integration/battleroyale-test-probe.jar', path.join(root, 'plugins/probe.jar'));
 for (const file of ['config.yml', 'rooms.yml', 'maps.yml', 'zones.yml']) {
   let text = await fs.readFile(path.join('src/main/resources', file), 'utf8');
   if (file === 'rooms.yml') text = text.replaceAll('countdown-seconds: 30', 'countdown-seconds: 30').replace('min-players: 4', 'min-players: 2').replaceAll('pvp-protection-seconds: 60', 'pvp-protection-seconds: 0').replaceAll('max-players: 24', 'max-players: 8').replaceAll('max-players: 32', 'max-players: 8');
@@ -88,7 +88,7 @@ async function chat(bot, command, expected) {
 async function state(room, expected) {
   let answer;
   await until(async () => {
-    answer = await consoleCommand('ls debug session ' + room, 'countdown=');
+    answer = await consoleCommand('br debug session ' + room, 'countdown=');
     return answer.match(/ session=\S+ state=(\w+)/)?.[1] === expected;
   }, 'Session ' + room + ' ' + expected);
   return answer;
@@ -105,33 +105,33 @@ async function probe(command, expected) {
   return text;
 }
 async function kit(bot, full=false) {
-  await probe('lsprobe m5kit '+bot.username+(full?' full':''),'M5 kit=');
-  await consoleCommand('lsprobe position '+bot.username+' 0 -60 0','PROBE positioned=true');
+  await probe('brprobe m5kit '+bot.username+(full?' full':''),'M5 kit=');
+  await consoleCommand('brprobe position '+bot.username+' 0 -60 0','PROBE positioned=true');
 }
 async function openBox(bot) {
-  const line=await probe('lsprobe m5box '+bot.username,'M5 box entity=');
+  const line=await probe('brprobe m5box '+bot.username,'M5 box entity=');
   const id=Number(line.match(/entity=(\d+)/)[1]);
   await until(()=>bot.entities[id],'Interaction entity delivered');
   bot.activateEntity(bot.entities[id]);
   await until(()=>bot.currentWindow?.inventoryStart===54,'DeathBox GUI opens');
 }
 async function close(bot) {if(bot.currentWindow)bot.closeWindow(bot.currentWindow);await sleep(200);}
-async function restore(name) { await until(async()=>{const answer=await probe('lsprobe player '+name,'PROBE player=');return answer.includes('world=world ');},'Lobby respawn '+name); await probe('lsprobe m4original '+name,'M4 original=true world=world'); }
+async function restore(name) { await until(async()=>{const answer=await probe('brprobe player '+name,'PROBE player=');return answer.includes('world=world ');},'Lobby respawn '+name); await probe('brprobe m4original '+name,'M4 original=true world=world'); }
 async function startSolo(a,b) {
-  await chat(a,'/ls join solo','Joined room solo');await chat(b,'/ls join solo','Joined room solo');
-  await consoleCommand('ls debug start solo','Start requested');await state('solo','RUNNING');await kit(a);await kit(b);
+  await chat(a,'/br join solo','Joined room solo');await chat(b,'/br join solo','Joined room solo');
+  await consoleCommand('br debug start solo','Start requested');await state('solo','RUNNING');await kit(a);await kit(b);
 }
-async function endSolo() {await consoleCommand('ls debug end solo','End requested');await state('solo','WAITING');}
+async function endSolo() {await consoleCommand('br debug end solo','End requested');await state('solo','WAITING');}
 try {
   await until(()=>(output.includes('Done (') && output.includes('Recovery bootstrap complete')),'Paper startup',120000);
   const a=await connect('LSAlice',port);
-  await consoleCommand('lsprobe position LSAlice 0 -60 0','PROBE positioned=true');
+  await consoleCommand('brprobe position LSAlice 0 -60 0','PROBE positioned=true');
   for(const cause of ['melee','arrow','explosion','fire','lava','zone','mob']) {
-    await probe('lsprobe m6candidate LSAlice','equipment=true');
-    await probe('lsprobe m6candidatehit LSAlice '+cause,'M6 candidatehit=');
+    await probe('brprobe m6candidate LSAlice','equipment=true');
+    await probe('brprobe m6candidatehit LSAlice '+cause,'M6 candidatehit=');
     let result;
-    await until(async()=>{result=await probe('lsprobe m6candidatestatus LSAlice','M6 candidate health=');return +result.match(/health=([\d.]+)/)[1]<20;},'Candidate damage '+cause,10000);
-    results.push(cause+': '+result.trim());await probe('lsprobe m6candidateclear LSAlice','removed=true');
+    await until(async()=>{result=await probe('brprobe m6candidatestatus LSAlice','M6 candidate health=');return +result.match(/health=([\d.]+)/)[1]<20;},'Candidate damage '+cause,10000);
+    results.push(cause+': '+result.trim());await probe('brprobe m6candidateclear LSAlice','removed=true');
   }
   results.push('AI-disabled persistent villager public API candidate: damage events, equipment API, environment and assisted zombie target verified; reliable remove verified.');
 } catch(error) {results.push('FAILED: '+error.stack);process.exitCode=1;}

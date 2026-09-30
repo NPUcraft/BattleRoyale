@@ -13,12 +13,12 @@ const nbt = require('prismarine-nbt');
 const source = path.resolve(process.argv[2]);
 assert.match(await fs.readFile(path.join(source, 'eula.txt'), 'utf8'), /^eula=true\s*$/m);
 const root = path.resolve('.run', 'paper-m5-edges-' + Date.now());
-const data = path.join(root, 'plugins/LastSector');
+const data = path.join(root, 'plugins/BattleRoyale');
 await fs.mkdir(data, { recursive: true });
 for (const name of ['paper.jar', 'libraries', 'versions', 'cache', 'eula.txt'])
   await fs.cp(path.join(source, name), path.join(root, name), { recursive: true });
-await fs.copyFile('build/libs/lastsector-1.0.0-rc.1.jar', path.join(root, 'plugins/lastsector.jar'));
-await fs.copyFile('build/integration/lastsector-test-probe.jar', path.join(root, 'plugins/probe.jar'));
+await fs.copyFile('build/libs/battleroyale-1.0.0-rc.1.jar', path.join(root, 'plugins/battleroyale.jar'));
+await fs.copyFile('build/integration/battleroyale-test-probe.jar', path.join(root, 'plugins/probe.jar'));
 for (const file of ['config.yml', 'rooms.yml', 'maps.yml', 'zones.yml']) {
   let text = await fs.readFile(path.join('src/main/resources', file), 'utf8');
   if (file === 'rooms.yml') text = text.replaceAll('countdown-seconds: 30', 'countdown-seconds: 30').replace('min-players: 4', 'min-players: 2').replaceAll('pvp-protection-seconds: 60', 'pvp-protection-seconds: 0').replaceAll('max-players: 24', 'max-players: 8').replaceAll('max-players: 32', 'max-players: 8');
@@ -88,7 +88,7 @@ async function chat(bot, command, expected) {
 async function state(room, expected) {
   let answer;
   await until(async () => {
-    answer = await consoleCommand('ls debug session ' + room, 'countdown=');
+    answer = await consoleCommand('br debug session ' + room, 'countdown=');
     return answer.match(/ session=\S+ state=(\w+)/)?.[1] === expected;
   }, 'Session ' + room + ' ' + expected);
   return answer;
@@ -105,40 +105,40 @@ async function probe(command, expected) {
   return text;
 }
 async function kit(bot, full=false) {
-  await probe('lsprobe m5kit '+bot.username+(full?' full':''),'M5 kit=');
-  await consoleCommand('lsprobe position '+bot.username+' 0 -60 0','PROBE positioned=true');
+  await probe('brprobe m5kit '+bot.username+(full?' full':''),'M5 kit=');
+  await consoleCommand('brprobe position '+bot.username+' 0 -60 0','PROBE positioned=true');
 }
 async function openBox(bot) {
-  const line=await probe('lsprobe m5box '+bot.username,'M5 box entity=');
+  const line=await probe('brprobe m5box '+bot.username,'M5 box entity=');
   const id=Number(line.match(/entity=(\d+)/)[1]);
   await until(()=>bot.entities[id],'Interaction entity delivered');
   bot.activateEntity(bot.entities[id]);
   await until(()=>bot.currentWindow?.inventoryStart===54,'DeathBox GUI opens');
 }
 async function close(bot) {if(bot.currentWindow)bot.closeWindow(bot.currentWindow);await sleep(200);}
-async function restore(name) { const current=bots.findLast(b=>b.username===name); const status=await probe("lsprobe m6state "+name,"M6 mode="); if(status.includes("mode=SPECTATOR")){await chat(current,"/ls leave","Spectating ended");} await until(async()=>{const answer=await probe('lsprobe player '+name,'PROBE player=');return answer.includes('world=world ');},'Lobby respawn '+name); await probe('lsprobe m4original '+name,'M4 original=true world=world'); }
+async function restore(name) { const current=bots.findLast(b=>b.username===name); const status=await probe("brprobe m6state "+name,"M6 mode="); if(status.includes("mode=SPECTATOR")){await chat(current,"/br leave","Spectating ended");} await until(async()=>{const answer=await probe('brprobe player '+name,'PROBE player=');return answer.includes('world=world ');},'Lobby respawn '+name); await probe('brprobe m4original '+name,'M4 original=true world=world'); }
 async function startSolo(a,b) {
-  await chat(a,'/ls join solo','Joined room solo');await chat(b,'/ls join solo','Joined room solo');
-  await consoleCommand('ls debug start solo','Start requested');await state('solo','RUNNING');await kit(a);await kit(b);
+  await chat(a,'/br join solo','Joined room solo');await chat(b,'/br join solo','Joined room solo');
+  await consoleCommand('br debug start solo','Start requested');await state('solo','RUNNING');await kit(a);await kit(b);
 }
-async function endSolo() {await consoleCommand('ls debug end solo','End requested');await state('solo','WAITING');}
+async function endSolo() {await consoleCommand('br debug end solo','End requested');await state('solo','WAITING');}
 try {
   await until(()=>(output.includes('Done (') && output.includes('Recovery bootstrap complete')),'Paper startup',120000);
   const a=await connect('LSAlice',port),b=await connect('LSBob',port);
-  for(const bot of [a,b])await probe('lsprobe m4seed '+bot.username,'M4 seeded');
-  await startSolo(a,b);await probe('lsprobe m5stored LSAlice','M5 stored=347');await sleep(200);
+  for(const bot of [a,b])await probe('brprobe m4seed '+bot.username,'M4 seeded');
+  await startSolo(a,b);await probe('brprobe m5stored LSAlice','M5 stored=347');await sleep(200);
   await a.equip(a.inventory.items().find(i=>i.name==='experience_bottle'),'hand');await a.look(0,Math.PI/2,true);a.activateItem();
   await until(()=>output.includes('M5 XP=347 marked=true'),'Exact 347 XP throw');a.deactivateItem();
   results.push('Actual protocol throw of one PDC Stored Experience Bottle releases exactly 347 XP through ExpBottleEvent.');
-  await probe('lsprobe m5damage LSAlice LSBob melee 4','M5 damage');
-  await consoleCommand('lsprobe health LSBob 1','PROBE health set');
-  await consoleCommand('lsprobe position LSBob 1000 -60 0','PROBE positioned=true');
+  await probe('brprobe m5damage LSAlice LSBob melee 4','M5 damage');
+  await consoleCommand('brprobe health LSBob 1','PROBE health set');
+  await consoleCommand('brprobe position LSBob 1000 -60 0','PROBE positioned=true');
   const ended=await state('solo','ENDING');assert.match(ended,/kills=1/);
   assert.ok(a.lines.some(l=>l.includes('LSBob') && l.toLowerCase().includes('zone')));
   await endSolo();await restore('LSAlice');await restore('LSBob');
   results.push('Real M3 zone setHealth death enters unified M5 elimination, labels ZONE, credits recent attacker, restores and cleans up.');
-  await consoleCommand('lsprobe disable','PROBE disabled');await until(async()=> (await dirs()).length===0,'Cleanup');
-  assert.doesNotMatch(output,/Could not pass event|Task #\d+.*exception|\[LastSector\].*(?:SEVERE|failed)/i);
+  await consoleCommand('brprobe disable','PROBE disabled');await until(async()=> (await dirs()).length===0,'Cleanup');
+  assert.doesNotMatch(output,/Could not pass event|Task #\d+.*exception|\[BattleRoyale\].*(?:SEVERE|failed)/i);
 } catch(error) {results.push('FAILED: '+error.stack);process.exitCode=1;}
 finally {
   for(const bot of bots)try{bot.quit();}catch{}

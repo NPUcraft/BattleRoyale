@@ -14,8 +14,8 @@ await fs.mkdir(path.join(root, 'plugins'), { recursive: true });
 for (const name of ['paper.jar', 'libraries', 'versions', 'cache', 'eula.txt']) {
   await fs.cp(path.join(source, name), path.join(root, name), { recursive: true });
 }
-await fs.copyFile(path.resolve('build/libs/lastsector-1.0.0-rc.1.jar'),
-  path.join(root, 'plugins', 'lastsector.jar'));
+await fs.copyFile(path.resolve('build/libs/battleroyale-1.0.0-rc.1.jar'),
+  path.join(root, 'plugins', 'battleroyale.jar'));
 await fs.writeFile(path.join(root, 'server.properties'), [
   'server-ip=127.0.0.1', 'server-port=0', 'online-mode=true',
   'level-type=minecraft:flat', 'generate-structures=false', 'view-distance=2',
@@ -64,31 +64,31 @@ let server = start('valid-run.log');
 try {
   await server.waitFor('Done (');
   assert.match(server.text(), /Paper version 1\.21\.8/);
-  assert.match(server.text(), /\[LastSector\] Loaded 2 rooms/);
-  assert.match(server.text(), /\[LastSector\] Loaded 2 map templates/);
-  assert.doesNotMatch(server.text(), /ERROR.*LastSector|Error occurred while enabling LastSector/);
+  assert.match(server.text(), /\[BattleRoyale\] Loaded 2 rooms/);
+  assert.match(server.text(), /\[BattleRoyale\] Loaded 2 map templates/);
+  assert.doesNotMatch(server.text(), /ERROR.*BattleRoyale|Error occurred while enabling BattleRoyale/);
   assert.doesNotMatch(server.text(), /ERROR|Exception/);
   results.push('Paper 1.21.8 startup and plugin enable');
-  await server.command('lastsector version', 'Version 1.0.0-rc.1');
-  await server.command('ls version', 'Version 1.0.0-rc.1');
-  await server.command('lastsector help', '/lastsector reload');
-  await server.command('lastsector', '/lastsector help');
-  const rooms = await server.command('lastsector debug rooms', 'squad (Squad)');
+  await server.command('battleroyale version', 'Version 1.0.0-rc.1');
+  await server.command('br version', 'Version 1.0.0-rc.1');
+  await server.command('battleroyale help', '/battleroyale reload');
+  await server.command('battleroyale', '/battleroyale help');
+  const rooms = await server.command('battleroyale debug rooms', 'squad (Squad)');
   assert.match(rooms, /solo \(Solo\) players=2\.\.24/);
-  const maps = await server.command('lastsector debug maps', 'desert (Desert)');
+  const maps = await server.command('battleroyale debug maps', 'desert (Desert)');
   assert.match(maps, /city \(City\)/);
   results.push('Base command, help, version, alias, debug rooms and maps');
-  const roomFile = path.join(root, 'plugins/LastSector/rooms.yml');
+  const roomFile = path.join(root, 'plugins/BattleRoyale/rooms.yml');
   const original = await fs.readFile(roomFile, 'utf8');
   await fs.writeFile(roomFile, original.replace('max-players: 24', 'max-players: 1'));
-  const failed = await server.command('lastsector reload', 'Reload failed; previous configuration retained.');
+  const failed = await server.command('battleroyale reload', 'Reload failed; previous configuration retained.');
   assert.match(failed, /rooms.yml: rooms.solo.max-players.*value=1/);
-  const retained = await server.command('lastsector debug rooms', 'squad (Squad)');
+  const retained = await server.command('battleroyale debug rooms', 'squad (Squad)');
   assert.match(retained, /players=2\.\.24/);
   results.push('Invalid room diagnostics and atomic rollback');
   await fs.writeFile(roomFile, original.replace('display-name: "Solo"', 'display-name: "Solo Reloaded"'));
-  await server.command('lastsector reload', 'Configuration reloaded successfully.');
-  await server.command('lastsector debug rooms', 'Solo Reloaded');
+  await server.command('battleroyale reload', 'Configuration reloaded successfully.');
+  await server.command('battleroyale debug rooms', 'Solo Reloaded');
   results.push('Successful configuration reload');
   await fs.writeFile(roomFile, original.replace('max-players: 24', 'max-players: 1'));
 } finally { await server.stop(); }
@@ -96,9 +96,9 @@ try {
 server = start('invalid-startup.log');
 try {
   await server.waitFor('Done (');
-  assert.match(server.text(), /Startup failed; disabling LastSector/);
+  assert.match(server.text(), /Startup failed; disabling BattleRoyale/);
   assert.match(server.text(), /rooms.yml: rooms.solo.max-players.*value=1/);
-  assert.match(server.text(), /Disabling LastSector/);
+  assert.match(server.text(), /Disabling BattleRoyale/);
   results.push('Invalid startup configuration disables plugin');
 } finally { await server.stop(); }
 await fs.writeFile(path.join(root, 'results.json'), JSON.stringify({ passed: results, root }, null, 2));

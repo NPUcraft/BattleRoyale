@@ -1,14 +1,38 @@
 config-version: 2
+# 内置大厅只在 world 与 config.yml 的 lobby.world 一致时建造。
+# 专用大厅服确认世界名称后设置 enabled: true；通用默认关闭，避免误改已有世界。
+# 已有配置缺少 structure 时不会自动施工。首次施工前会备份受控范围内的非空气方块。
+# 地板层为 center.y，出生点为 center.y + 1；施工范围为半径32格、y-3 至 y+10。
+# READY 标记存在后绝不自动重建；管理员可临时打开 allow-admin-build 装修。
+structure:
+  enabled: false
+  world: battleroyale_lobby
+  center: { x: 0, y: 160, z: 0 }
+  radius: 32
+  blocks-per-tick: 1200
+  clear-existing-blocks: false
+protection:
+  enabled: true
+  allow-admin-build: false
+login:
+  return-to-lobby: true
+# 每秒更新大厅/排队玩家的独立侧边栏，每页最多5个房间。
+# 缺少本段也默认开启；其他插件接管计分板后，本次大厅停留不再抢回。
+sidebar:
+  enabled: true
+  title: 大逃杀
+  page-seconds: 8
+
 titles:
-  rooms: Rooms
-  profile: Profile
-  leaderboard: Leaderboards
-  shop: Cosmetic Shop
-  cosmetics: Your Cosmetics
-  confirmation: Confirm Purchase
+  rooms: 大逃杀 · 选择房间
+  profile: 大逃杀 · 我的战绩
+  leaderboard: 大逃杀 · 排行榜
+  shop: 大逃杀 · 外观商店
+  cosmetics: 大逃杀 · 我的外观
+  confirmation: 确认购买
 items:
-  rooms: { slot: 0, material: COMPASS, name: Rooms, lore: [Choose a room] }
-  autojoin: { slot: 1, material: ENDER_EYE, name: Auto Join, lore: [Join an available room] }
-  profile: { slot: 4, material: PLAYER_HEAD, name: Profile, lore: [Your permanent statistics] }
-  leaderboard: { slot: 7, material: GOLD_INGOT, name: Leaderboards, lore: [Lifetime and historical rankings] }
-  shop: { slot: 8, material: EMERALD, name: Cosmetic Shop, lore: [Permanent visual cosmetics] }
+  rooms: { slot: 0, material: COMPASS, name: 选择房间, lore: [右键查看单人、双人和四人房间] }
+  autojoin: { slot: 1, material: ENDER_EYE, name: 快速加入, lore: [右键加入可用房间] }
+  profile: { slot: 4, material: PLAYER_HEAD, name: 我的战绩, lore: [查看评分与永久统计] }
+  leaderboard: { slot: 7, material: GOLD_INGOT, name: 排行榜, lore: [查看总榜和历史排行] }
+  shop: { slot: 8, material: EMERALD, name: 外观商店, lore: [永久解锁个性外观，不影响比赛属性] }

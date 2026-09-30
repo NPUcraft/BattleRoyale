@@ -13,12 +13,12 @@ const nbt = require('prismarine-nbt');
 const source = path.resolve(process.argv[2]);
 assert.match(await fs.readFile(path.join(source, 'eula.txt'), 'utf8'), /^eula=true\s*$/m);
 const root = path.resolve('.run', 'paper-m3-' + Date.now());
-const data = path.join(root, 'plugins/LastSector');
+const data = path.join(root, 'plugins/BattleRoyale');
 await fs.mkdir(data, { recursive: true });
 for (const name of ['paper.jar', 'libraries', 'versions', 'cache', 'eula.txt'])
   await fs.cp(path.join(source, name), path.join(root, name), { recursive: true });
-await fs.copyFile('build/libs/lastsector-1.0.0-rc.1.jar', path.join(root, 'plugins/lastsector.jar'));
-await fs.copyFile('build/integration/lastsector-test-probe.jar', path.join(root, 'plugins/probe.jar'));
+await fs.copyFile('build/libs/battleroyale-1.0.0-rc.1.jar', path.join(root, 'plugins/battleroyale.jar'));
+await fs.copyFile('build/integration/battleroyale-test-probe.jar', path.join(root, 'plugins/probe.jar'));
 for (const file of ['config.yml', 'rooms.yml', 'maps.yml', 'zones.yml']) {
   let text = await fs.readFile(path.join('src/main/resources', file), 'utf8');
   if (file === 'rooms.yml') text = text.replace('team-size: 4','team-size: 1').replaceAll('countdown-seconds: 30', 'countdown-seconds: 4').replace('min-players: 4', 'min-players: 2').replaceAll('pvp-protection-seconds: 60', 'pvp-protection-seconds: 20').replaceAll('max-players: 24', 'max-players: 8').replaceAll('max-players: 32', 'max-players: 8');
@@ -88,7 +88,7 @@ async function chat(bot, command, expected) {
 async function state(room, expected) {
   let answer;
   await until(async () => {
-    answer = await consoleCommand('ls debug session ' + room, 'countdown=');
+    answer = await consoleCommand('br debug session ' + room, 'countdown=');
     return answer.match(/ session=\S+ state=(\w+)/)?.[1] === expected;
   }, 'Session ' + room + ' ' + expected);
   return answer;
@@ -98,7 +98,7 @@ async function dirs() {
 }
 
 async function zone(room) {
-  const text = await consoleCommand('ls debug zone ' + room, 'protectionSeconds=');
+  const text = await consoleCommand('br debug zone ' + room, 'protectionSeconds=');
   const parse = label => {
     const m = text.match(new RegExp(label + '=Zone\\[centerX=([^,]+), centerZ=([^,]+), halfSize=([^\\]]+)\\]'));
     return m ? { x: +m[1], z: +m[2], h: +m[3] } : null;
@@ -111,16 +111,16 @@ function contains(outer, inner) {
     && Math.abs(inner.z - outer.z) + inner.h <= outer.h + 1e-8;
 }
 async function player(name) {
-  const text = await consoleCommand('lsprobe player ' + name, 'PROBE player=');
+  const text = await consoleCommand('brprobe player ' + name, 'PROBE player=');
   const values = {};
   for (const key of ['x', 'y', 'z', 'health', 'tick']) values[key] = +text.match(new RegExp(' ' + key + '=([^ ]+)'))[1];
   values.text = text; return values;
 }
 async function position(name, x, y, z) {
-  await consoleCommand('lsprobe position ' + name + ' ' + x + ' ' + y + ' ' + z, 'PROBE positioned=true');
+  await consoleCommand('brprobe position ' + name + ' ' + x + ' ' + y + ' ' + z, 'PROBE positioned=true');
 }
 async function hit(kind, expectedHealth, detail) {
-  const text = await consoleCommand('lsprobe hit ' + kind + ' LSAlice LSBob', 'PROBE hit=');
+  const text = await consoleCommand('brprobe hit ' + kind + ' LSAlice LSBob', 'PROBE hit=');
   if (expectedHealth !== null) assert.equal(+text.match(/health=([\d.]+)/)[1], expectedHealth, text);
   if (detail !== undefined) assert.equal(+text.match(/detail=([\d.-]+)/)[1], detail, text);
   return text;
@@ -130,10 +130,10 @@ try {
   assert.match(output, /Paper version 1\.21\.8/); assert.doesNotMatch(output, /ERROR|Exception/);
   await consoleCommand('gamerule naturalRegeneration false', 'naturalRegeneration');
   const a = await connect('LSAlice', port), b = await connect('LSBob', port), c = await connect('LSCarol', port), d = await connect('LSDan', port);
-  await chat(a, '/ls join solo', 'Joined room solo');
-  await chat(b, '/ls join solo', 'Countdown started');
-  await chat(c, '/ls join squad', 'Joined room squad');await chat(d, '/ls join squad', 'Joined room squad');
-  await consoleCommand('ls debug start squad', 'Start requested');
+  await chat(a, '/br join solo', 'Joined room solo');
+  await chat(b, '/br join solo', 'Countdown started');
+  await chat(c, '/br join squad', 'Joined room squad');await chat(d, '/br join squad', 'Joined room squad');
+  await consoleCommand('br debug start squad', 'Start requested');
   const solo = await state('solo', 'RUNNING'), squad = await state('squad', 'RUNNING');
   const initial = await zone('solo');
   assert.equal(initial.initial.h, 500);
@@ -159,7 +159,7 @@ try {
     const text = await hit(kind, null);
     assert.ok(+text.match(/health=([\d.]+)/)[1] < 20, text);
   }
-  await consoleCommand('lsprobe health LSBob 20', 'PROBE health set');
+  await consoleCommand('brprobe health LSBob 20', 'PROBE health set');
   results.push('Real Paper API damage pipeline: player melee/arrow/TNT blocked; synthetic splash/cloud/ignition/bucket-flow events enforce protection; natural fall/mob/lava remain damaging');
   let shrinking;
   await until(async () => {
@@ -194,28 +194,28 @@ try {
   assert.deepEqual(final.initial, initial.initial);
   // The flat template floor is Y=-61; player feet remain Y=-60.
   await position('LSBob', final.current.x, -60, final.current.z);
-  await consoleCommand('lsprobe health LSBob 20', 'PROBE health set');
+  await consoleCommand('brprobe health LSBob 20', 'PROBE health set');
   await sleep(1300);
   const inside = await player('LSBob');
   assert.ok(inside.text.includes('world=' + soloWorld + ' '), inside.text);
   assert.equal(inside.health, 20);
   await position('LSBob', final.current.x + 60, -60, final.current.z);
-  await consoleCommand('lsprobe armor LSBob', 'PROBE armored');
-  await consoleCommand('lsprobe health LSBob 20', 'PROBE health set');
+  await consoleCommand('brprobe armor LSBob', 'PROBE armored');
+  await consoleCommand('brprobe health LSBob 20', 'PROBE health set');
   let damaged;
   await until(async () => { damaged = await player('LSBob'); return damaged.health < 20; }, 'Outside zone damage');
   assert.ok(Math.abs(damaged.health - 15.7) < 0.00001, damaged.text);
   await until(() => b.packets.some(p => p.name === 'world_particles'), 'Local wall particle packets');
   assert.ok(b.packets.some(p => p.name === 'boss_bar'));
   await position('LSBob', final.current.x + 550, -60, final.current.z);
-  await consoleCommand('lsprobe health LSBob 20', 'PROBE health set');
+  await consoleCommand('brprobe health LSBob 20', 'PROBE health set');
   await until(async () => (await player('LSBob')).health === 1, 'Farther outside capped formula', 5000);
   results.push('FINAL persists; inside no damage; 10m outside 4.3 true damage through full diamond Protection IV + Resistance V; 500m outside 19 damage; BossBar and nearby particle packets observed');
   // Keep the test clients alive for cleanup assertions; M5 death/outcome behavior is covered by paper-m5.mjs.
   await position('LSBob', final.current.x, -60, final.current.z);
-  await consoleCommand('lsprobe health LSBob 20', 'PROBE health set');
+  await consoleCommand('brprobe health LSBob 20', 'PROBE health set');
   const beforeEnd = b.packets.length;
-  await consoleCommand('ls debug end solo', 'End requested');
+  await consoleCommand('br debug end solo', 'End requested');
   await state('solo', 'WAITING'); await state('squad', 'RUNNING');
   await until(async () => (await dirs()).length === 1, 'Solo cleanup');
   assert.match((await player('LSBob')).text, /world=world /);
@@ -223,21 +223,21 @@ try {
   const afterEnd = b.packets.slice(beforeEnd);
   assert.ok(afterEnd.some(p => p.name === 'boss_bar' && p.data.action === 1), JSON.stringify(afterEnd.slice(0,5)));
   results.push('End detaches BossBar, returns participants and deletes one runtime; second room loop remains running');
-  await chat(a, '/ls join solo', 'Joined room solo');
-  await consoleCommand('lsprobe reject LSAlice', 'PROBE reject armed');
-  await consoleCommand('ls debug start solo', 'Start requested');
+  await chat(a, '/br join solo', 'Joined room solo');
+  await consoleCommand('brprobe reject LSAlice', 'PROBE reject armed');
+  await consoleCommand('br debug start solo', 'Start requested');
   await state('solo', 'WAITING');
   assert.match(output, /PROBE rejected landing/);
   await state('squad', 'RUNNING');
   assert.match((await player('LSAlice')).text, /world=world /);
   results.push('Injected teleport rejection rolls STARTING back, cleans runtime and leaves the other room running');
-  await chat(a, '/ls join solo', 'Joined room solo');
-  await consoleCommand('ls debug start solo\nls debug end solo', 'End requested');
+  await chat(a, '/br join solo', 'Joined room solo');
+  await consoleCommand('br debug start solo\nls debug end solo', 'End requested');
   await state('solo', 'WAITING');
   await until(async () => (await dirs()).length === 1, 'Cancelled preparation');
   results.push('Cancelled preparation has no late start or retained world');
   const offset = output.length;
-  await consoleCommand('lsprobe disable', 'PROBE disabled');
+  await consoleCommand('brprobe disable', 'PROBE disabled');
   await until(async () => (await dirs()).length === 0, 'Disable cleanup');
   assert.doesNotMatch(output.slice(offset), /ERROR|Exception/);
   assert.equal(await hash(path.join(data, 'maps/city/level.dat')), original);

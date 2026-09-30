@@ -8,7 +8,8 @@
 - **M6 Team, Spectator & OfflineBody — completed**：均衡自动队伍、固定成员、共享友伤策略、Team winner/tie、死亡与外部观战、公共 API 替身、120 秒重连/超时、原背包隔离和清理。仅预留 Party 输入接口，第三方集成后续实现。
 - **M7 Database & Recovery — completed**：异步 SQLite/MySQL、版本/checksum/revision、原状态提交屏障、RUNNING/ENDING 崩溃恢复、暂停比赛计时、租约、autosave 与延迟孤儿清理。正常停服结束比赛。
 - **M8 Lobby, Economy, Cosmetics & Ranking — completed**：canonical 大厅、异步永久档案、幂等结果/outbox、Team placement Rating、Kill Score、历史日/周/月榜、CoinsEngine/ExcellentEconomy/Vault、永久外观和购买审计。
-- **M9 Admin Tools, Map Editing, Diagnostics, Stress Tests & Release Hardening — completed（当前 1.0.0-rc.1）**：安全编辑/维护副本、元数据版本、校验/预生成提交、诊断/脱敏支持包、配置迁移、独立压力测试、真实多房间 soak、发布元信息和校验和。
+- **M9 Admin Tools, Map Editing, Diagnostics, Stress Tests & Release Hardening — completed（1.0.0-rc.1）**：安全编辑/维护副本、元数据版本、校验/预生成提交、诊断/脱敏支持包、配置迁移、独立压力测试、真实多房间 soak、发布元信息和校验和。
+- **1.0.0-rc.2 — Paper 26.2 平台适配**：Java 25、固定 Paper API 构建、新维度存储与世界加载 API、现代伤害类型。M1–M9 的历史测试数字仍保留为原平台证据，不计作 26.2 联机验证。
 
 M6 Solo/Duo/Squad 共用 Team Outcome 和完整比赛生命周期；在线死亡与离线替身淘汰共用一次性 DeathBox。比赛内重连已实现；数据库与进程崩溃恢复已在 M7 实现；永久档案/统计/Rating 与经济外观业务已在 M8 实现；跨插件购买不确定状态保留 MANUAL_REVIEW，人工处理工具后续完善。
 

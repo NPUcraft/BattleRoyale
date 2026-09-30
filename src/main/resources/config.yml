@@ -1,6 +1,10 @@
 config-version: 2
 # Recovery and permanent progression share the versioned SQLite/MySQL database.
 debug: false
+# 聊天只调整显示，不解析玩家输入中的颜色/标签；修改后重启生效。
+chat:
+  format-enabled: true
+  connection-messages: true
 disconnect:
   reconnect-seconds: 120
   mob-aggro:
@@ -19,12 +23,12 @@ deathbox:
 storage:
   type: sqlite
   sqlite:
-    file: data/lastsector.db
+    file: data/battleroyale.db
   mysql:
     host: "127.0.0.1"
     port: 3306
-    database: lastsector
-    username: lastsector
+    database: battleroyale
+    username: battleroyale
     password: ""
     connection-timeout-ms: 5000
 recovery:
@@ -36,26 +40,34 @@ economy:
   auto-priority: [coinsengine, excellenteconomy, vault]
   currency: coins
   shop-enabled: true
-# Relative to plugins/LastSector. Must also be inside Paper's world container.
+# Legacy configuration compatibility only; this no longer selects runtime storage.
+# Paper 26.2 runtime dimensions are under server.getLevelDirectory()/dimensions/:
+# battleroyale_game for matches, battleroyale_maintenance for editors and maintenance.
 runtime-worlds:
   directory: runtime
+# 大厅名称需与 server.properties 的 level-name 和 lobby.yml 的 structure.world 一致。
+# 建筑/保护/登录设置位于 lobby.yml；比赛断线重连优先于登录回大厅。
 lobby:
   world: world
   use-world-spawn: true
 zone-ui:
+  navigation:
+    enabled: true
+    update-interval-ticks: 5
   bossbar:
     enabled: true
     update-interval-ticks: 5
   particle-wall:
     enabled: true
+    colored: true
     particle: END_ROD
     interval-ticks: 5
-    view-distance: 64
-    spacing: 2.5
+    view-distance: 80
+    spacing: 1.5
     vertical-spacing: 1.5
-    height-below-player: 3
-    height-above-player: 6
-    max-particles-per-player: 300
+    height-below-player: 4
+    height-above-player: 12
+    max-particles-per-player: 400
 
 # Async chunk generation is bounded per maintenance operation.
 map-maintenance:

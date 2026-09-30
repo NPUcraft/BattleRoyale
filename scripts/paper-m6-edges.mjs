@@ -13,12 +13,12 @@ const nbt = require('prismarine-nbt');
 const source = path.resolve(process.argv[2]);
 assert.match(await fs.readFile(path.join(source, 'eula.txt'), 'utf8'), /^eula=true\s*$/m);
 const root = path.resolve('.run', 'paper-m6-edges-' + Date.now());
-const data = path.join(root, 'plugins/LastSector');
+const data = path.join(root, 'plugins/BattleRoyale');
 await fs.mkdir(data, { recursive: true });
 for (const name of ['paper.jar', 'libraries', 'versions', 'cache', 'eula.txt'])
   await fs.cp(path.join(source, name), path.join(root, name), { recursive: true });
-await fs.copyFile('build/libs/lastsector-1.0.0-rc.1.jar', path.join(root, 'plugins/lastsector.jar'));
-await fs.copyFile('build/integration/lastsector-test-probe.jar', path.join(root, 'plugins/probe.jar'));
+await fs.copyFile('build/libs/battleroyale-1.0.0-rc.1.jar', path.join(root, 'plugins/battleroyale.jar'));
+await fs.copyFile('build/integration/battleroyale-test-probe.jar', path.join(root, 'plugins/probe.jar'));
 for (const file of ['config.yml', 'rooms.yml', 'maps.yml', 'zones.yml']) {
   let text = await fs.readFile(path.join('src/main/resources', file), 'utf8');
   if (file === 'rooms.yml') text = text.replaceAll('countdown-seconds: 30', 'countdown-seconds: 30').replace('min-players: 4', 'min-players: 2').replaceAll('pvp-protection-seconds: 60', 'pvp-protection-seconds: 10').replaceAll('max-players: 24', 'max-players: 8').replaceAll('max-players: 32', 'max-players: 8');
@@ -90,7 +90,7 @@ async function chat(bot, command, expected) {
 async function state(room, expected) {
   let answer;
   await until(async () => {
-    answer = await consoleCommand('ls debug session ' + room, 'countdown=');
+    answer = await consoleCommand('br debug session ' + room, 'countdown=');
     return answer.match(/ session=\S+ state=(\w+)/)?.[1] === expected;
   }, 'Session ' + room + ' ' + expected);
   return answer;
@@ -107,77 +107,77 @@ async function probe(command, expected) {
   return text;
 }
 async function kit(bot, full=false) {
-  await probe('lsprobe m5kit '+bot.username+(full?' full':''),'M5 kit=');
-  await consoleCommand('lsprobe position '+bot.username+' 0 -60 0','PROBE positioned=true');
+  await probe('brprobe m5kit '+bot.username+(full?' full':''),'M5 kit=');
+  await consoleCommand('brprobe position '+bot.username+' 0 -60 0','PROBE positioned=true');
 }
 async function openBox(bot) {
-  const line=await probe('lsprobe m5box '+bot.username,'M5 box entity=');
+  const line=await probe('brprobe m5box '+bot.username,'M5 box entity=');
   const id=Number(line.match(/entity=(\d+)/)[1]);
   await until(()=>bot.entities[id],'Interaction entity delivered');
   bot.activateEntity(bot.entities[id]);
   await until(()=>bot.currentWindow?.inventoryStart===54,'DeathBox GUI opens');
 }
 async function close(bot) {if(bot.currentWindow)bot.closeWindow(bot.currentWindow);await sleep(200);}
-async function restore(name) { await until(async()=>{const answer=await probe('lsprobe player '+name,'PROBE player=');return answer.includes('world=world ');},'Lobby respawn '+name); await probe('lsprobe m4original '+name,'M4 original=true world=world'); }
+async function restore(name) { await until(async()=>{const answer=await probe('brprobe player '+name,'PROBE player=');return answer.includes('world=world ');},'Lobby respawn '+name); await probe('brprobe m4original '+name,'M4 original=true world=world'); }
 async function startSolo(a,b) {
-  await chat(a,'/ls join solo','Joined room solo');await chat(b,'/ls join solo','Joined room solo');
-  await consoleCommand('ls debug start solo','Start requested');await state('solo','RUNNING');await kit(a);await kit(b);
+  await chat(a,'/br join solo','Joined room solo');await chat(b,'/br join solo','Joined room solo');
+  await consoleCommand('br debug start solo','Start requested');await state('solo','RUNNING');await kit(a);await kit(b);
 }
-async function endSolo() {await consoleCommand('ls debug end solo','End requested');await state('solo','WAITING');}
+async function endSolo() {await consoleCommand('br debug end solo','End requested');await state('solo','WAITING');}
 try {
   await until(()=>(output.includes('Done (') && output.includes('Recovery bootstrap complete')),'Paper startup',120000);
-  const clients=new Map();for(const name of ['LSAlice','LSBob','LSCarol','LSDan','LSEve','LSFrank','LSGrace','LSHeidi']){const bot=await connect(name,port);clients.set(name,bot);await probe('lsprobe m4seed '+name,'M4 seeded');}
+  const clients=new Map();for(const name of ['LSAlice','LSBob','LSCarol','LSDan','LSEve','LSFrank','LSGrace','LSHeidi']){const bot=await connect(name,port);clients.set(name,bot);await probe('brprobe m4seed '+name,'M4 seeded');}
   const roster=['LSAlice','LSBob','LSCarol','LSDan','LSEve'];
-  for(const name of roster)await chat(clients.get(name),'/ls join squad','Joined room squad');
-  for(const name of ['LSGrace','LSHeidi'])await chat(clients.get(name),'/ls join solo','Joined room solo');
-  await consoleCommand('ls debug start squad','Start requested');await state('squad','STARTING');clients.get('LSBob').quit();
-  await consoleCommand('ls debug start solo','Start requested');await state('squad','RUNNING');await state('solo','RUNNING');
-  const teamText=await consoleCommand('ls debug teams squad','Team 1');const teams=[...teamText.matchAll(/members=\[([^\]]+)\]/g)].map(m=>m[1].split(', ').map(v=>v.split('=')[0]));assert.deepEqual(teams.map(t=>t.length).sort(),[2,3]);
-  assert.match(await consoleCommand('ls debug offline squad','offline='),/player=LSBob/);
+  for(const name of roster)await chat(clients.get(name),'/br join squad','Joined room squad');
+  for(const name of ['LSGrace','LSHeidi'])await chat(clients.get(name),'/br join solo','Joined room solo');
+  await consoleCommand('br debug start squad','Start requested');await state('squad','STARTING');clients.get('LSBob').quit();
+  await consoleCommand('br debug start solo','Start requested');await state('squad','RUNNING');await state('solo','RUNNING');
+  const teamText=await consoleCommand('br debug teams squad','Team 1');const teams=[...teamText.matchAll(/members=\[([^\]]+)\]/g)].map(m=>m[1].split(', ').map(v=>v.split('=')[0]));assert.deepEqual(teams.map(t=>t.length).sort(),[2,3]);
+  assert.match(await consoleCommand('br debug offline squad','offline='),/player=LSBob/);
   const bobTeam=teams.find(t=>t.includes('LSBob')),otherTeam=teams.find(t=>!t.includes('LSBob'));const friend=bobTeam.find(n=>n!=='LSBob'),enemy=otherTeam[0];
-  await probe(`lsprobe m6body ${enemy} LSBob`,'M6 body entity=');
-  assert.match(await probe(`lsprobe m6bodyhit ${enemy} LSBob melee 4`,'M6 body hit'),/health=20/);
-  const bob=await connect('LSBob',port);clients.set('LSBob',bob);assert.match(await probe('lsprobe m6state LSBob','M6 mode='),/mode=SURVIVAL.*items=0 xp=0/);
+  await probe(`brprobe m6body ${enemy} LSBob`,'M6 body entity=');
+  assert.match(await probe(`brprobe m6bodyhit ${enemy} LSBob melee 4`,'M6 body hit'),/health=20/);
+  const bob=await connect('LSBob',port);clients.set('LSBob',bob);assert.match(await probe('brprobe m6state LSBob','M6 mode='),/mode=SURVIVAL.*items=0 xp=0/);
   for(const name of [...roster,'LSGrace','LSHeidi'])await kit(clients.get(name));
   results.push('Five-player Squad assigns balanced 3/2. STARTING disconnect retains Team/roster and assigned spawn; others reach RUNNING, body exists, protection blocks enemy damage, reconnect gets the original empty session loadout state.');
   await sleep(10000);
-  await probe('lsprobe m6matchseed LSBob','M6 match seeded');bob.quit();clients.get('LSHeidi').quit();await sleep(500);
-  assert.match(await consoleCommand('ls debug offline squad','offline='),/player=LSBob/);assert.match(await consoleCommand('ls debug offline solo','offline='),/player=LSHeidi/);
-  assert.match(await probe(`lsprobe m6bodyhit ${friend} LSBob tnt 4`,'M6 body hit'),/health=18/);
-  assert.ok(Number((await probe(`lsprobe m6bodyhit ${enemy} LSBob tnt 4`,'M6 body hit')).match(/health=([\d.]+)/)[1])<18);
-  for(const name of roster.filter(n=>n!=='LSBob'))await consoleCommand(`lsprobe position ${name} 100 -60 100`,'PROBE positioned=true');
-  await probe(`lsprobe m6bodyhealth ${enemy} LSBob 20`,'M6 body health set');await probe(`lsprobe m6bodyhit ${enemy} LSBob fire 0`,'M6 body hit');
-  await until(async()=>Number((await probe(`lsprobe m6body ${enemy} LSBob`,'M6 body')).match(/health=([\d.]+)/)[1])<20,'Actual body fire');
-  await probe(`lsprobe m6bodyhealth ${enemy} LSBob 20`,'M6 body health set');await probe(`lsprobe m6bodyhit ${enemy} LSBob lava 0`,'M6 body hit');
-  await until(async()=>Number((await probe(`lsprobe m6body ${enemy} LSBob`,'M6 body')).match(/health=([\d.]+)/)[1])<20,'Actual body lava');await sleep(1000);
-  await probe(`lsprobe m6bodyhealth ${enemy} LSBob 20`,'M6 body health set');
+  await probe('brprobe m6matchseed LSBob','M6 match seeded');bob.quit();clients.get('LSHeidi').quit();await sleep(500);
+  assert.match(await consoleCommand('br debug offline squad','offline='),/player=LSBob/);assert.match(await consoleCommand('br debug offline solo','offline='),/player=LSHeidi/);
+  assert.match(await probe(`brprobe m6bodyhit ${friend} LSBob tnt 4`,'M6 body hit'),/health=18/);
+  assert.ok(Number((await probe(`brprobe m6bodyhit ${enemy} LSBob tnt 4`,'M6 body hit')).match(/health=([\d.]+)/)[1])<18);
+  for(const name of roster.filter(n=>n!=='LSBob'))await consoleCommand(`brprobe position ${name} 100 -60 100`,'PROBE positioned=true');
+  await probe(`brprobe m6bodyhealth ${enemy} LSBob 20`,'M6 body health set');await probe(`brprobe m6bodyhit ${enemy} LSBob fire 0`,'M6 body hit');
+  await until(async()=>Number((await probe(`brprobe m6body ${enemy} LSBob`,'M6 body')).match(/health=([\d.]+)/)[1])<20,'Actual body fire');
+  await probe(`brprobe m6bodyhealth ${enemy} LSBob 20`,'M6 body health set');await probe(`brprobe m6bodyhit ${enemy} LSBob lava 0`,'M6 body hit');
+  await until(async()=>Number((await probe(`brprobe m6body ${enemy} LSBob`,'M6 body')).match(/health=([\d.]+)/)[1])<20,'Actual body lava');await sleep(1000);
+  await probe(`brprobe m6bodyhealth ${enemy} LSBob 20`,'M6 body health set');
   // Creative observers keep vanilla mob activation nearby without becoming competing attack targets.
-  for(const name of roster.filter(n=>n!=='LSBob'))await probe('lsprobe m6mobobserver '+name,'M6 mob observer ready');
-  await probe(`lsprobe m6mobnear ${enemy} LSBob`,'M6 mob spawned');
-  await until(async()=>Number((await probe(`lsprobe m6mobstatus ${enemy} LSBob`,'M6 mob target=')).match(/health=([\d.]+)/)[1])<20,'Production mob target body',15000);
-  await probe(`lsprobe m6mobclear ${enemy}`,'M6 mob removed');
-  await probe(`lsprobe m6bodyhealth ${enemy} LSBob 4`,'M6 body health set');await probe(`lsprobe m6bodyhit ${enemy} LSBob melee 1`,'M6 body hit');await probe(`lsprobe m6bodyhit ${enemy} LSBob zone 0`,'M6 body hit');
-  await until(async()=> (await consoleCommand('ls debug offline squad','offline=')).includes('offline=none'),'Zone kills offline body');
+  for(const name of roster.filter(n=>n!=='LSBob'))await probe('brprobe m6mobobserver '+name,'M6 mob observer ready');
+  await probe(`brprobe m6mobnear ${enemy} LSBob`,'M6 mob spawned');
+  await until(async()=>Number((await probe(`brprobe m6mobstatus ${enemy} LSBob`,'M6 mob target=')).match(/health=([\d.]+)/)[1])<20,'Production mob target body',15000);
+  await probe(`brprobe m6mobclear ${enemy}`,'M6 mob removed');
+  await probe(`brprobe m6bodyhealth ${enemy} LSBob 4`,'M6 body health set');await probe(`brprobe m6bodyhit ${enemy} LSBob melee 1`,'M6 body hit');await probe(`brprobe m6bodyhit ${enemy} LSBob zone 0`,'M6 body hit');
+  await until(async()=> (await consoleCommand('br debug offline squad','offline=')).includes('offline=none'),'Zone kills offline body');
   assert.ok(clients.get(enemy).lines.some(l=>l.includes('LSBob') && l.includes('(Zone)')));
   const bobAfter=await connect('LSBob',port);clients.set('LSBob',bobAfter);await restore('LSBob');
   results.push('Two rooms own separate bodies. Same-team explosion blocked, enemy explosion damages. Real fire/lava and nearby zombie damage the body; zone uses the live body position and produces one attributed DeathBox. Post-body-death login restores Lobby inventory.');
   // One earlier eliminated member plus all remaining members die in the same real tick.
-  const alive=roster.filter(n=>n!=='LSBob');for(const name of alive)await probe('lsprobe m5kit '+name,'M5 kit=');await probe('lsprobe m6teamspectatetie '+alive.join(' '),'M6 tie tick=');const result=await state('squad','ENDING');
+  const alive=roster.filter(n=>n!=='LSBob');for(const name of alive)await probe('brprobe m5kit '+name,'M5 kit=');await probe('brprobe m6teamspectatetie '+alive.join(' '),'M6 tie tick=');const result=await state('squad','ENDING');
   assert.match(result,/tie=true/);assert.equal(result.match(/winnerIds=\[([^\]]+)\]/)[1].split(', ').length,5);
-  const spectator=alive[0];await until(async()=> (await probe('lsprobe m6state '+spectator,'M6 mode=')).includes('mode=SPECTATOR'),'Tie death spectator');
-  assert.match(await probe(`lsprobe m6teleport ${spectator} LSGrace`,'M6 spectate teleport='),/teleport=false/);
-  await chat(clients.get('LSFrank'),'/ls spectate squad','Spectating room squad');
+  const spectator=alive[0];await until(async()=> (await probe('brprobe m6state '+spectator,'M6 mode=')).includes('mode=SPECTATOR'),'Tie death spectator');
+  assert.match(await probe(`brprobe m6teleport ${spectator} LSGrace`,'M6 spectate teleport='),/teleport=false/);
+  await chat(clients.get('LSFrank'),'/br spectate squad','Spectating room squad');
   clients.get(spectator).quit();await sleep(300);const rejoined=await connect(spectator,port);clients.set(spectator,rejoined);await restore(spectator);
-  await consoleCommand('ls debug end squad','End requested');await state('squad','WAITING');await restore('LSFrank');
-  assert.match(await consoleCommand('ls debug offline solo','offline='),/player=LSHeidi/);
+  await consoleCommand('br debug end squad','End requested');await state('squad','WAITING');await restore('LSFrank');
+  assert.match(await consoleCommand('br debug offline solo','offline='),/player=LSHeidi/);
   results.push('Controlled same-tick final-team elimination yields TIE with all five team members including earlier dead Bob. Spectate-cause cross-world teleport rejected. Dead spectator disconnect/login goes Lobby; ENDING external viewer restored on cleanup; other room body survives cleanup.');
-  await probe('lsprobe m6removebody LSGrace LSHeidi','M6 body removed by fixture');
-  await state('solo','ENDING');assert.match(await consoleCommand('ls debug deathboxes solo','deathboxes='),/deathboxes=1/);
+  await probe('brprobe m6removebody LSGrace LSHeidi','M6 body removed by fixture');
+  await state('solo','ENDING');assert.match(await consoleCommand('br debug deathboxes solo','deathboxes='),/deathboxes=1/);
   results.push('Removing an active carrier externally safely eliminates once and creates one DeathBox; no immortal DISCONNECTED combatant remains.');
-  await chat(clients.get('LSBob'),'/ls join squad','Joined room squad');await consoleCommand('ls debug start squad','Start requested');await state('squad','ENDING');
-  assert.match(await consoleCommand('ls debug deathboxes squad','deathboxes='),/deathboxes=0/);
+  await chat(clients.get('LSBob'),'/br join squad','Joined room squad');await consoleCommand('br debug start squad','Start requested');await state('squad','ENDING');
+  assert.match(await consoleCommand('br debug deathboxes squad','deathboxes='),/deathboxes=0/);
   results.push('A start with only one Team resolves at the first tick boundary, without waiting for a death or creating a DeathBox.');
-  await consoleCommand('lsprobe disable','PROBE disabled');await restore('LSGrace');await until(async()=> (await dirs()).length===0,'Disable body cleanup');
+  await consoleCommand('brprobe disable','PROBE disabled');await restore('LSGrace');await until(async()=> (await dirs()).length===0,'Disable body cleanup');
   assert.doesNotMatch(output,/Could not pass event|Task #\d+.*exception/);results.push('Disable removes remaining offline carrier/equipment and deletes all runtime worlds.');
 } catch(error) {results.push('FAILED: '+error.stack);process.exitCode=1;}
 finally {

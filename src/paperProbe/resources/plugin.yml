@@ -1,12 +1,12 @@
-name: LastSectorTestProbe
+name: BattleRoyaleTestProbe
 version: '1'
-main: com.npucraft.lastsector.probe.TestProbe
-api-version: '1.21.8'
-depend: [LastSector]
+main: com.npucraft.battleroyale.probe.TestProbe
+api-version: '26.2'
+depend: [BattleRoyale]
 commands:
-  lsprobe:
-    permission: lsprobe.admin
+  brprobe:
+    permission: brprobe.admin
 permissions:
-  lsprobe.admin:
+  brprobe.admin:
     default: op
 

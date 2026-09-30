@@ -1,4 +1,6 @@
-# Architecture — M9
+# Architecture — M9 / Paper 26.2
+
+当前平台为 Paper 26.2 / Java 25，版本 1.0.0-rc.2。下文保留里程碑设计背景；当前世界格式与加载行为以 RuntimeLayout、维度模板和 namespace 所有权说明为准。历史 Paper 1.21.8 验证仍记录在 VERIFICATION.md，不等同于当前平台联机验证。
 
 
 ## M9 管理边界
@@ -37,7 +39,7 @@ PurchaseService 主线程锁定同一玩家的购买，先异步检查 ownership
 
 ## M7 恢复边界
 
-M7 时 `storage` 只拥有 `lastsector_schema`、`recovery_sessions`、`pending_player_restores`；没有复用恢复表保存永久胜负/统计/经济。`StorageProvider` 创建 JDBC 连接；`DatabaseExecutor` 是命名的单线程、有界 128 队列，拒绝时不会 caller-runs。`JdbcRecoveryRepository` 只处理准备语句和事务，不触碰 Bukkit。`RecoveryStorage` 把完成回调排回 server-thread pump，合并每局最新检查点并维护健康和退休栅栏。记录退休后，迟到的 revision 不能使该局复活。
+M7 时 `storage` 只拥有 `battleroyale_schema`、`recovery_sessions`、`pending_player_restores`；没有复用恢复表保存永久胜负/统计/经济。`StorageProvider` 创建 JDBC 连接；`DatabaseExecutor` 是命名的单线程、有界 128 队列，拒绝时不会 caller-runs。`JdbcRecoveryRepository` 只处理准备语句和事务，不触碰 Bukkit。`RecoveryStorage` 把完成回调排回 server-thread pump，合并每局最新检查点并维护健康和退休栅栏。记录退休后，迟到的 revision 不能使该局复活。
 
 V1 migration 按版本执行；SQLite DDL 事务化，MySQL DDL 会隐式提交，因此 V1 CREATE IF NOT EXISTS 可重入、版本最后更新。未来 migration 需继续显式增加版本；新于程序的 schema 会失败关闭。SQLite 使用 WAL、FULL synchronous、busy timeout；MySQL 使用成熟 JDBC driver、连接/读超时，凭据经 Properties 传递，日志只报告失败类型。驱动打入生产 JAR，探针为独立 sourceSet。
 
@@ -45,9 +47,9 @@ V1 migration 按版本执行；SQLite DDL 事务化，MySQL DDL 会隐式提交�
 
 `PaperDurablePlayers` 为 `PlayerIsolation` 实现提交屏障和恢复 gateway：读取原状态 → 异步整批事务提交 ORIGINAL → 主线程应用装备。外部观众同样经过屏障。取消/提交失败不应用比赛状态；提交后取消则恢复已提交原状态。待恢复按 UUID + generation 定位，恢复同一个 generation 时替换一次；Player PDC generation 与 playerdata 在恢复的同一 tick 保存，之后 SQL APPLIED + 条件删除。数据库删除失败仍冻结物品操作，并在后续周期重试。若 playerdata 已带同一 generation，而旧 ACTIVE 会话尚未来得及完成，登录时安全结束冲突会话，绝不把已确认恢复的 Lobby 玩家接回旧比赛。pending 先于重连/新 join；不能让一个延迟删除清除新 generation。
 
-`PaperRecoveryCoordinator` 在 join gate 打开前读取全部恢复行与原状态。owner UUID + 30 秒 wall-clock lease 使用条件 UPDATE 抢占，启动遇到尚未过期租约最多等待约 40 秒；运行中每 5 秒续租。重复 Room/world 行全部放弃，单条非法快照不阻断其他会话。验证 DB 元数据、配置指纹、重新推导的安全 leaf、marker Session/Room/Map/worldName、level.dat、无符号链接/重解析点、未加载状态后才加载世界。DB read 失败不启动 orphan 扫描。
+`PaperRecoveryCoordinator` 在 join gate 打开前读取全部恢复行与原状态。owner UUID + 30 秒 wall-clock lease 使用条件 UPDATE 抢占，启动遇到尚未过期租约最多等待约 40 秒；运行中每 5 秒续租。重复 Room/world 行全部放弃，单条非法快照不阻断其他会话。验证 DB 元数据、配置指纹、重新推导的安全 leaf、marker Session/Room/Map/worldName/布局身份、维度生成数据、无符号链接/重解析点、未加载状态后才加载世界。DB read 失败不启动 orphan 扫描。
 
-重建顺序：加载原世界 → 清理旧 PDC 身体/展示载体 → 恢复 sanitizer ledger → Session/Team → Zone/保护期 → Combat/DeathBox → bodies 或 ENDING showcase → Room 注册 → 路由原状态 → 打开 join gate。实体清理监听后续 EntitiesLoadEvent，只删除旧 epoch 的 LastSector 载体，不删除普通地面物品；新载体有本进程 epoch。清理世界时移除监听注册。
+重建顺序：加载原世界 → 清理旧 PDC 身体/展示载体 → 恢复 sanitizer ledger → Session/Team → Zone/保护期 → Combat/DeathBox → bodies 或 ENDING showcase → Room 注册 → 路由原状态 → 打开 join gate。实体清理监听后续 EntitiesLoadEvent，只删除旧 epoch 的 BattleRoyale 载体，不删除普通地面物品；新载体有本进程 epoch。清理世界时移除监听注册。
 
 `RecoveryClock` 在整批 Room 恢复期间保持暂停；身体先注册逻辑 RESERVED 状态，原状态路由完成后统一生成实体并启动展示，避免恢复其他 Room 消耗首个 Room 的重连窗口。圈、保护、归因记录 age、身体 remaining、showcase remaining 和比赛 elapsed 均重新锚定当前单调时钟；从不保存 nanoTime 起点，也不用停机 wall-clock 推演比赛。房间/地图/圈配置指纹不符保守放弃。ENDING 只继续展示/清理，归因 tracker 不继续战斗；离线胜者回 Lobby 后收到胜者提示。在线状态在断电后按身体恢复，已断线身体保留剩余窗口；已死亡与所有观众只恢复原状态。
 
@@ -110,7 +112,7 @@ M1 的模型、注册表和 Provider 边界继续使用。M2 最小扩展：Room
 - RoomRuntimeService → GameSession / SessionManager / MapSelector / GameScheduler / PlayerGateway / WorldProvider / MatchLifecycle。
 - PaperScheduler、PaperPlayers、PaperWorlds 实现服务器边界；纯 Java 领域模型不依赖 Bukkit。
 - OnDemandWorldProvider → WorldFiles + WorldGateway + 可替换调度器/ExecutorService。
-- PluginRuntime 组装适配器并管理 reload / close；LastSectorPlugin 只处理配置默认文件、生命周期、注册。
+- PluginRuntime 组装适配器并管理 reload / close；BattleRoyalePlugin 只处理配置默认文件、生命周期、注册。
 - FoundationService 仍负责配置及注册表原子发布；MessageService 统一输出消息与日志。
 - economy/party/item/rating API 仍为预留接口，无第三方插件集成。
 
@@ -151,48 +153,49 @@ WorldLoadEvent 可以同步重入取消/禁用，因此 load 返回后再次验�
 
 ## Runtime 路径与 WorldCreator
 
-模板和 runtime 保留 M1 相对于插件数据目录的路径语义。runtime 必须是插件数据目录、Paper world container 的严格子目录。默认路径：
+模板仍相对于插件数据目录配置；runtime 改用 Paper 26.2 的单 level 维度树，由 `Server.getLevelDirectory()` 决定根目录。`RuntimeLayout` 只允许两个专用 namespace：
 
-`<world-container>/plugins/LastSector/runtime/ls_<sanitized-room-id>_<完整sessionUUID>`
+- GAME：`<level-directory>/dimensions/battleroyale_game/br_<sanitized-room-id>_<完整sessionUUID>`。
+- EDITOR/MAINTENANCE：`<level-directory>/dimensions/battleroyale_maintenance/br_<sanitized-room-id>_<完整sessionUUID>`。
 
-生成叶目录只含小写 ASCII 字母、数字、下划线和连字符；room 片段限制 24 字符，使用原始 id 而非 displayName，完整 UUID 保证局间唯一。既有目标目录绝不覆盖/合并。
+生成叶目录只含小写 ASCII 字母、数字、下划线和连字符；room 片段限制 24 字符，使用原始 id 而非 displayName，UUID 保留全部 128 位并移除连字符。既有目标目录绝不覆盖/合并。旧 `runtime-worlds.directory` 仍接受配置校验，但不再选定运行根目录。
 
-WorldCreator 接收由已校验路径相对 world container 计算的名称，例如 `plugins/LastSector/runtime/ls_solo_<uuid>`，并使用独立 NamespacedKey `lastsector:<uuid>`。不传任意绝对路径、不创建符号链接、不修改 world container。加载后核对 Bukkit world name、实际 folder 和 seed。
+WorldCreator 使用 `WorldCreator.ofKey(new NamespacedKey(namespace, leaf))`；世界 key 为 `<namespace>:<leaf>`，Paper 世界名称为 `<namespace>_<leaf>`。从已复制维度自身的 world generation settings 加载，不用 creator 默认值替代种子或生成器。加载后核对 `World.getKey()`、`World.getName()`、`World.getWorldPath()` 和 seed。
 
-这是通过 Paper 公共 [WorldCreator API](https://jd.papermc.io/paper/1.21.8/org/bukkit/WorldCreator.html) 实现的路径关系，并在真实 1.21.8 上验证。实现行为也核对过 [Paper 1.21.8 createWorld 源码](https://github.com/PaperMC/Paper/blob/ver/1.21.8/paper-server/src/main/java/org/bukkit/craftbukkit/CraftServer.java)；源码仅作参考，插件无 CraftBukkit 依赖。
+这是通过 Paper 26.2 公共 [WorldCreator API](https://jd.papermc.io/paper/26.2/org/bukkit/WorldCreator.html) 和 [Server API](https://jd.papermc.io/paper/26.2/org/bukkit/Server.html) 实现的路径关系；插件无 NMS/CraftBukkit 依赖，不使用绝对世界名称或路径绕过。
 
-自定义插件数据目录若在 world container 外会明确失败；不使用路径绕过。M2 面向普通 Overworld 模板，不能自动推断第三方 ChunkGenerator 插件的配置/依赖。
+模板和专用 runtime 根不能重叠，runtime 也不能与已加载的其他维度重叠。面向普通 Overworld 模板，不能自动推断或安装第三方 ChunkGenerator 插件、datapack 的配置与依赖。
 
 ## 模板验证与 copy filter
 
-模板必须是配置注册的、插件数据目录内的真实目录，不能与 runtime 或已加载世界重叠，不能带 LastSector runtime marker。复制前完整检查源树，无符号链接、Windows junction/reparse 或 canonical redirect。
+模板必须是配置注册的、插件数据目录内的真实目录，不能与 runtime 或已加载世界重叠，不能带 BattleRoyale runtime marker。复制前完整检查源树，无符号链接、Windows junction/reparse 或 canonical redirect。
 
-level.dat 必须是 gzip 标准 NBT compound，含 Data.WorldGenSettings.seed 和非空 dimensions。自有只读解析器有大小/深度/集合长度上限，不使用 NMS，不重写数据。源目录必须处于关闭状态，复制过程中管理员不应编辑它。
+Paper 26.2 模板可直接提供维度目录，或提供包含 `dimensions/minecraft/overworld` 的完整存档；只从中选出的主世界维度复制内容。其 `data/minecraft/world_gen_settings.dat` 必须为 gzip 标准 NBT compound，含 DataVersion、data.seed 和有效 minecraft:overworld 生成数据。自有只读解析器有大小/深度/集合长度上限，不使用 NMS，不重写数据。旧 level.dat 格式只保留测试/检查辅助逻辑，生产维度模式拒绝旧模板，要求先离线升级副本。源目录必须处于关闭状态，复制过程中管理员不应编辑它。
 
-复制保留 level.dat、region、entities、poi、data、datapacks 及其他正常内容。明确排除所有同名：
+复制保留所选维度的 region、entities、poi、data（含原生生成设置）及其他正常内容。完整存档中位于该维度外的 datapack、level 数据和其他维度不会随模板安装。明确排除以下内容：
 
 - session.lock：不继承运行锁；
-- uid.dat：由 Paper 为新副本产生独立 UUID；
-- playerdata、stats、advancements：不继承模板作者的玩家数据；
-- .lastsector-runtime：不可从源继承所有权标记。
+- uid.dat，以及维度相对路径 data/paper/metadata.dat 和其 _old 备份：由 Paper 为新副本产生独立身份；
+- players、playerdata、stats、advancements：不继承模板作者的玩家数据；
+- .battleroyale-runtime：不可从源继承所有权标记。
 
-level.dat 原样复制，保留原 seed 与 WorldGenSettings。不是先创建随机世界再覆盖 region，也不预生成 chunk。副本加载后检查 seed；集成测试另比较完整 WorldGenSettings。所有目录遍历 NOFOLLOW，复制完成后再次检查副本树。
+world_gen_settings.dat 原样复制，保留原 seed 与生成设置，不先创建随机世界再覆盖 region，也不预生成 chunk。副本加载后检查 seed。所有目录遍历 NOFOLLOW，复制完成后再次检查副本树。
 
 ## Ownership marker 与删除授权
 
-新建唯一空目录后写入 .lastsector-runtime（Java Properties）：sessionId、roomId、mapId、worldName、createdAt。复制中途失败也只能通过同一验证器清理；无法确认标记时保留目录并报告原因。
+新建唯一空目录后写入 .battleroyale-runtime（Java Properties）：sessionId、roomId、mapId、worldName、createdAt、type、editorUUID、status，以及 `storageLayout=paper-dimension-v1` 和 namespace。复制中途失败也只能通过同一验证器清理；无法确认标记时保留目录并报告原因。
 
 递归删除只允许生成算法预期的 runtime root **直接子目录**，并验证：
 
 - 路径与 GameWorld 身份、配置 root 和相对 worldName 完全对应；
-- 不是 runtime root、world container、插件根目录、模板或任何保护世界，且不与其重叠；
+- 不是 runtime root、level 根目录、插件根目录、模板或任何保护世界，且不与其重叠；
 - 所有祖先和树内条目没有 symlink、junction/reparse、canonical redirect；
-- 合法 marker 中 sessionId、roomId、mapId、worldName 匹配，createdAt 可解析；
+- 合法 marker 中 sessionId、roomId、mapId、worldName、storageLayout、namespace 和 type 匹配，createdAt 可解析；
 - 已经在 server thread 确认成功卸载；或资源从未交给 Bukkit 加载。
 
-PaperWorlds 按实际 folder 和 worldName 确认世界身份。卸载前把所有在线占用者（包括外部误入玩家）移回大厅，仍有人或 unload 返回 false 就报错并禁止删除。provider 只 release 自己持有的资源，未知描述不能授权卸载/删除。
+PaperWorlds 按实际 world path 和 worldName 确认卸载身份，加载时还校验 namespace key。卸载前把所有在线占用者（包括外部误入玩家）移回大厅，仍有人或 unload 返回 false 就报错并禁止删除。provider 只 release 自己持有的资源，未知描述不能授权卸载/删除。旧 runtime 路径与 marker 不会迁移、接管或自动删除。
 
-删除前先做整个树的链接预检，再逐条复验且不跟随链接。marker 最后删除；若最终目录删除失败则恢复 marker。文件锁最多重试 3 次（100/200ms 间隔），只在 worker sleep。拒绝/失败记录 SEVERE/ERROR；不“尽量删除”未知目录，不扫描清理 ls_*。
+删除前先做整个树的链接预检，再逐条复验且不跟随链接。marker 最后删除；若最终目录删除失败则恢复 marker。文件锁最多重试 3 次（100/200ms 间隔），只在 worker sleep。拒绝/失败记录 SEVERE/ERROR；不“尽量删除”未知目录，不扫描清理 br_*。
 
 这些边界防止配置错误和已存在的链接越界；不把管理员或其它进程在检查间恶意替换文件系统目录视为受支持的并发使用方式。Java NIO 在 Windows 没有跨整棵目录树的原子锁；运维须保持模板及 runtime 目录由插件独占管理。
 
@@ -269,7 +272,7 @@ Session、membership、timer、token、loaded-world registry 仅由 server threa
 
 经济、Party、RatingCalculator 继续保持接口边界。ItemSerializer 已有 NativeItemSerializer 实现，LootItemResolver 提供原生 minecraft 命名空间。组队/观战/OfflineBody 已在 M6 实现；数据库/进程恢复已在 M7 实现，第三方 Party 和物品 Provider 尚未实现。
 
-公共 API 参考：[异步区块](https://jd.papermc.io/paper/1.21.8/org/bukkit/World.html)、[DamageSource](https://jd.papermc.io/paper/1.21.8/org/bukkit/damage/DamageSource.html)、[喷溅药水](https://jd.papermc.io/paper/1.21.8/org/bukkit/event/entity/PotionSplashEvent.html)、[滞留云](https://jd.papermc.io/paper/1.21.8/org/bukkit/event/entity/AreaEffectCloudApplyEvent.html)。
+公共 API 参考：[异步区块](https://jd.papermc.io/paper/26.2/org/bukkit/World.html)、[DamageSource](https://jd.papermc.io/paper/26.2/org/bukkit/damage/DamageSource.html)、[喷溅药水](https://jd.papermc.io/paper/26.2/org/bukkit/event/entity/PotionSplashEvent.html)、[滞留云](https://jd.papermc.io/paper/26.2/org/bukkit/event/entity/AreaEffectCloudApplyEvent.html)。
 
 ## M5 combat, elimination and outcome composition
 
@@ -291,4 +294,4 @@ EliminationService 记录实际 Bukkit current tick；MatchTickListener 在 Serv
 
 进入 ENDING 停 SessionLoop/UI/来源与 CombatTracker、关闭箱子访问；世界和视觉保持。WinnerShowcase 持有一个独立可取消任务，GameClock 单调 deadline 为默认 60 秒，标题一次、效果每 5 秒且最多 12 轮，卡顿不补发风暴。CelebrationEffects 用自有 PDC + registry 识别烟花，CombatListener 取消其对任何实体的伤害；ENDING 存活选手另有本世界伤害保护。到期调用受 session identity/state guard 保护的 MatchLifecycle.onFinished，再走 RoomRuntimeService 的恢复、资源 drain 和 world release。debug end/disable/fatal abort 都取消展示任务并移除登记烟花，迟到回调不能再次结算。
 
-Paper API：[tick 末事件](https://jd.papermc.io/paper/1.21.8/com/destroystokyo/paper/event/server/ServerTickEndEvent.html)、[物品投射事件](https://jd.papermc.io/paper/1.21.8/com/destroystokyo/paper/event/player/PlayerLaunchProjectileEvent.html)、[玩家死亡事件](https://jd.papermc.io/paper/1.21.8/org/bukkit/event/entity/PlayerDeathEvent.html)。
+Paper API：[tick 末事件](https://jd.papermc.io/paper/26.2/com/destroystokyo/paper/event/server/ServerTickEndEvent.html)、[物品投射事件](https://jd.papermc.io/paper/26.2/com/destroystokyo/paper/event/player/PlayerLaunchProjectileEvent.html)、[玩家死亡事件](https://jd.papermc.io/paper/26.2/org/bukkit/event/entity/PlayerDeathEvent.html)。

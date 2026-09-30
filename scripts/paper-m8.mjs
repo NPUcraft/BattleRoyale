@@ -13,13 +13,13 @@ const nbt = require('prismarine-nbt');
 const source = path.resolve(process.argv[2]);
 assert.match(await fs.readFile(path.join(source, 'eula.txt'), 'utf8'), /^eula=true\s*$/m);
 const root = path.resolve('.run', 'paper-m8-' + Date.now());
-const data = path.join(root, 'plugins/LastSector');
+const data = path.join(root, 'plugins/BattleRoyale');
 await fs.mkdir(data, { recursive: true });
 for (const name of ['paper.jar', 'libraries', 'versions', 'cache', 'eula.txt'])
   await fs.cp(path.join(source, name), path.join(root, name), { recursive: true });
 if(process.env.M8_LIBRARY_CACHE)await fs.cp(path.join(process.env.M8_LIBRARY_CACHE,'libraries'),path.join(root,'libraries'),{recursive:true});
-await fs.copyFile('build/libs/lastsector-1.0.0-rc.1.jar', path.join(root, 'plugins/lastsector.jar'));
-await fs.copyFile('build/integration/lastsector-test-probe.jar', path.join(root, 'plugins/probe.jar'));
+await fs.copyFile('build/libs/battleroyale-1.0.0-rc.1.jar', path.join(root, 'plugins/battleroyale.jar'));
+await fs.copyFile('build/integration/battleroyale-test-probe.jar', path.join(root, 'plugins/probe.jar'));
 if(process.env.M8_ECONOMY) {
   for(const name of (process.env.M8_ECONOMY==='excellenteconomy'?['ExcellentEconomy-2.8.0.jar','nightcore-2.16.2.jar','Vault-1.7.3.jar']:['CoinsEngine-2.7.0.jar','nightcore-2.15.0.jar','Vault-1.7.3.jar']))await fs.copyFile(path.join('.run/m8-api',name),path.join(root,'plugins',name));
 }
@@ -95,7 +95,7 @@ async function chat(bot, command, expected) {
 async function state(room, expected) {
   let answer;
   await until(async () => {
-    answer = await consoleCommand('ls debug session ' + room, 'countdown=');
+    answer = await consoleCommand('br debug session ' + room, 'countdown=');
     return answer.match(/ session=\S+ state=(\w+)/)?.[1] === expected;
   }, 'Session ' + room + ' ' + expected);
   return answer;
@@ -112,23 +112,23 @@ async function probe(command, expected) {
   return text;
 }
 async function kit(bot, full=false) {
-  await probe('lsprobe m5kit '+bot.username+(full?' full':''),'M5 kit=');
-  await consoleCommand('lsprobe position '+bot.username+' 0 -60 0','PROBE positioned=true');
+  await probe('brprobe m5kit '+bot.username+(full?' full':''),'M5 kit=');
+  await consoleCommand('brprobe position '+bot.username+' 0 -60 0','PROBE positioned=true');
 }
 async function openBox(bot) {
-  const line=await probe('lsprobe m5box '+bot.username,'M5 box entity=');
+  const line=await probe('brprobe m5box '+bot.username,'M5 box entity=');
   const id=Number(line.match(/entity=(\d+)/)[1]);
   await until(()=>bot.entities[id],'Interaction entity delivered');
   bot.activateEntity(bot.entities[id]);
   await until(()=>bot.currentWindow?.inventoryStart===54,'DeathBox GUI opens');
 }
 async function close(bot) {if(bot.currentWindow)bot.closeWindow(bot.currentWindow);await sleep(200);}
-async function restore(name) { await until(async()=>{const answer=await probe('lsprobe player '+name,'PROBE player=');return answer.includes('world=world ');},'Lobby respawn '+name); await probe('lsprobe m4original '+name,'M4 original=true world=world'); }
+async function restore(name) { await until(async()=>{const answer=await probe('brprobe player '+name,'PROBE player=');return answer.includes('world=world ');},'Lobby respawn '+name); await probe('brprobe m4original '+name,'M4 original=true world=world'); }
 async function startSolo(a,b) {
-  await chat(a,'/ls join solo','Joined room solo');await chat(b,'/ls join solo','Joined room solo');
-  await consoleCommand('ls debug start solo','Start requested');await state('solo','RUNNING');await kit(a);await kit(b);
+  await chat(a,'/br join solo','Joined room solo');await chat(b,'/br join solo','Joined room solo');
+  await consoleCommand('br debug start solo','Start requested');await state('solo','RUNNING');await kit(a);await kit(b);
 }
-async function endSolo() {await consoleCommand('ls debug end solo','End requested');await state('solo','WAITING');}
+async function endSolo() {await consoleCommand('br debug end solo','End requested');await state('solo','WAITING');}
 try {
   await until(()=>output.includes('Done (')&&output.includes('Recovery bootstrap complete'),'startup',120000);
   const clients=[];for(const name of ['LSAlice','LSBob','LSCarol','LSDan'])clients.push(await connect(name,port));
@@ -139,43 +139,43 @@ try {
     await bot.clickWindow(36,1,2);await sleep(150);assert.equal(bot.inventory.slots[36]?.name,'compass');assert.equal(bot.inventory.slots[37]?.name,'ender_eye');
     const before=bot.inventory.slots[36].count;await bot.tossStack(bot.inventory.slots[36]);await sleep(200);assert.equal(bot.inventory.slots[36]?.count,before);
   }
-  const alice=clients[0];alice.chat('/ls profile');await until(()=>alice.currentWindow?.inventoryStart===54,'profile GUI');await close(alice);
-  alice.chat('/ls leaderboard');await until(()=>alice.currentWindow?.inventoryStart===54,'leaderboard GUI');await sleep(400);await close(alice);
-  alice.chat('/ls cosmetics');await until(()=>alice.currentWindow?.inventoryStart===54,'cosmetics GUI');await alice.clickWindow(1,0,0);await sleep(1500);await close(alice);
-  assert.match(await consoleCommand('ls debug stats LSAlice','PlayerProfile'),/LOBBY_EFFECT=lobby_sparkle/);
+  const alice=clients[0];alice.chat('/br profile');await until(()=>alice.currentWindow?.inventoryStart===54,'profile GUI');await close(alice);
+  alice.chat('/br leaderboard');await until(()=>alice.currentWindow?.inventoryStart===54,'leaderboard GUI');await sleep(400);await close(alice);
+  alice.chat('/br cosmetics');await until(()=>alice.currentWindow?.inventoryStart===54,'cosmetics GUI');await alice.clickWindow(1,0,0);await sleep(1500);await close(alice);
+  assert.match(await consoleCommand('br debug stats LSAlice','PlayerProfile'),/LOBBY_EFFECT=lobby_sparkle/);
   const lobbyParticles=alice.packets.filter(p=>p.name==='world_particles').length;await sleep(1100);assert.ok(alice.packets.filter(p=>p.name==='world_particles').length>lobbyParticles);
   alice.setQuickBarSlot(0);alice.activateItem();await until(()=>alice.currentWindow?.inventoryStart===54,'Room selector item');await alice.clickWindow(0,0,0);await until(()=>alice.lines.some(l=>l.includes('Joined room solo')),'Room selector joins via runtime');
   clients[1].setQuickBarSlot(1);clients[1].activateItem();await until(()=>clients[1].lines.some(l=>l.includes('Joined room solo')),'Auto Join item uses populated room');
-  await chat(alice,'/ls leave','Left room');await chat(clients[1],'/ls leave','Left room');await sleep(1500);
+  await chat(alice,'/br leave','Left room');await chat(clients[1],'/br leave','Left room');await sleep(1500);
   if(process.env.M8_ECONOMY) {
     const provider=process.env.M8_ECONOMY;
-    assert.match(await consoleCommand('ls debug economy','configured='),new RegExp('active='+provider));
-    const balanceText=await consoleCommand('lsprobe m8money LSAlice '+provider+' 1000','M8 balance=');const before=Number(balanceText.match(/M8 balance=([0-9.]+)/)[1]);
-    alice.chat('/ls shop');await until(()=>alice.currentWindow?.inventoryStart===54,'paid shop');
+    assert.match(await consoleCommand('br debug economy','configured='),new RegExp('active='+provider));
+    const balanceText=await consoleCommand('brprobe m8money LSAlice '+provider+' 1000','M8 balance=');const before=Number(balanceText.match(/M8 balance=([0-9.]+)/)[1]);
+    alice.chat('/br shop');await until(()=>alice.currentWindow?.inventoryStart===54,'paid shop');
     await alice.clickWindow(3,0,0);await until(()=>alice.currentWindow?.slots[20]?.name==='lime_concrete','purchase confirmation');
     await alice.clickWindow(20,0,0);await until(()=>alice.lines.some(l=>l.includes('Purchased')),'purchase transaction');await sleep(1500);await close(alice);
-    const afterText=await consoleCommand('lsprobe m8money LSAlice '+provider,'M8 balance=');assert.equal(Number(afterText.match(/M8 balance=([0-9.]+)/)[1]),before-100);
-    assert.match(await consoleCommand('ls debug stats LSAlice','PlayerProfile'),/kill_visual_lightning/);
-    alice.chat('/ls cosmetics');await until(()=>alice.currentWindow?.inventoryStart===54,'owned cosmetics');await alice.clickWindow(1,0,0);await sleep(1500);await close(alice);
-    assert.match(await consoleCommand('ls debug stats LSAlice','PlayerProfile'),/KILL_EFFECT=kill_visual_lightning/);
+    const afterText=await consoleCommand('brprobe m8money LSAlice '+provider,'M8 balance=');assert.equal(Number(afterText.match(/M8 balance=([0-9.]+)/)[1]),before-100);
+    assert.match(await consoleCommand('br debug stats LSAlice','PlayerProfile'),/kill_visual_lightning/);
+    alice.chat('/br cosmetics');await until(()=>alice.currentWindow?.inventoryStart===54,'owned cosmetics');await alice.clickWindow(1,0,0);await sleep(1500);await close(alice);
+    assert.match(await consoleCommand('br debug stats LSAlice','PlayerProfile'),/KILL_EFFECT=kill_visual_lightning/);
     results.push('Actual '+provider+' provider: deposited test balance through public API; confirmed shop withdraws exactly 100 and unlocks permanently.');
   }
   results.push('Canonical menu slots and drop protection; profile, leaderboard and cosmetics GUIs open.');
-  for(const bot of clients)await chat(bot,'/ls join solo','Joined room solo');
-  await consoleCommand('ls debug start solo','Start requested');await state('solo','RUNNING');
+  for(const bot of clients)await chat(bot,'/br join solo','Joined room solo');
+  await consoleCommand('br debug start solo','Start requested');await state('solo','RUNNING');
   for(const bot of clients)await kit(bot);
   const activeParticles=alice.packets.filter(p=>p.name==='world_particles').length;await sleep(1100);assert.equal(alice.packets.filter(p=>p.name==='world_particles').length,activeParticles);
-  await probe('lsprobe m5damage LSAlice LSBob melee 1000','M5 damage health=');
-  assert.match(await consoleCommand('lsprobe player LSCarol','PROBE player='),/health=20.0/);
-  assert.match(await consoleCommand('lsprobe player LSDan','PROBE player='),/health=20.0/);
-  for(const victim of clients.slice(2))await probe('lsprobe m5damage LSAlice '+victim.username+' melee 1000','M5 damage health=');
+  await probe('brprobe m5damage LSAlice LSBob melee 1000','M5 damage health=');
+  assert.match(await consoleCommand('brprobe player LSCarol','PROBE player='),/health=20.0/);
+  assert.match(await consoleCommand('brprobe player LSDan','PROBE player='),/health=20.0/);
+  for(const victim of clients.slice(2))await probe('brprobe m5damage LSAlice '+victim.username+' melee 1000','M5 damage health=');
   await state('solo','ENDING');
-  await until(async()=> (await consoleCommand('ls debug stats LSAlice','PlayerProfile')).includes('matches=1'),'result transaction');
-  const stats=await consoleCommand('ls debug stats LSAlice','PlayerProfile');assert.match(stats,/rating=1040/);assert.match(stats,/wins=1/);assert.match(stats,/kills=3/);assert.match(stats,/killScore=30/);
+  await until(async()=> (await consoleCommand('br debug stats LSAlice','PlayerProfile')).includes('matches=1'),'result transaction');
+  const stats=await consoleCommand('br debug stats LSAlice','PlayerProfile');assert.match(stats,/rating=1040/);assert.match(stats,/wins=1/);assert.match(stats,/kills=3/);assert.match(stats,/killScore=30/);
   results.push('Four-player Solo completes: one winner, 3 credited kills, +40 rating, independent +30 kill score.');
   await endSolo();await sleep(2000);
-  execFileSync('python',['-c',"import sqlite3,sys,uuid; c=sqlite3.connect(sys.argv[1]); c.executemany('INSERT INTO player_profiles(player_uuid,last_known_name,first_seen,last_seen,rating,highest_rating) VALUES(?,?,?,?,?,?)',[(str(uuid.uuid4()),'Fixture'+str(i).zfill(2),0,0,500,500) for i in range(40)]); c.commit()",path.join(data,'data/lastsector.db')],{windowsHide:true});
-  alice.chat('/ls leaderboard');await until(()=>alice.currentWindow?.slots[53]?.name==='arrow','leaderboard next page');
+  execFileSync('python',['-c',"import sqlite3,sys,uuid; c=sqlite3.connect(sys.argv[1]); c.executemany('INSERT INTO player_profiles(player_uuid,last_known_name,first_seen,last_seen,rating,highest_rating) VALUES(?,?,?,?,?,?)',[(str(uuid.uuid4()),'Fixture'+str(i).zfill(2),0,0,500,500) for i in range(40)]); c.commit()",path.join(data,'data/battleroyale.db')],{windowsHide:true});
+  alice.chat('/br leaderboard');await until(()=>alice.currentWindow?.slots[53]?.name==='arrow','leaderboard next page');
   await alice.clickWindow(53,0,0);await until(()=>alice.currentWindow?.slots[51]?.name==='arrow','leaderboard second page');
   await alice.clickWindow(37,0,0);await until(()=>alice.currentWindow?.slots[47]?.name==='clock','daily navigation');
   await alice.clickWindow(47,0,0);await until(()=>alice.currentWindow?.slots[13]?.name==='paper','empty historical day');
@@ -184,17 +184,17 @@ try {
   await alice.clickWindow(39,0,0);await sleep(350);assert.equal(alice.currentWindow?.slots[0]?.name,'player_head');await close(alice);
   results.push('Actual GUI SQL pagination over 44 profiles; historical empty day, current day, ISO week and month navigation. Shift/number/drop menu exploits remain cancelled.');
 
-  for(const bot of clients.slice(0,2))await chat(bot,'/ls join solo','Joined room solo');
-  await consoleCommand('ls debug start solo','Start requested');await state('solo','RUNNING');for(const bot of clients.slice(0,2))await kit(bot);
-  await probe('lsprobe m5tie LSAlice LSBob','M5 tie tick=');await state('solo','ENDING');
-  await until(async()=> (await consoleCommand('ls debug stats LSAlice','PlayerProfile')).includes('matches=2'),'tie transaction');
-  assert.match(await consoleCommand('ls debug stats LSAlice','PlayerProfile'),/wins=2/);
-  assert.match(await consoleCommand('ls debug stats LSBob','PlayerProfile'),/wins=1/);
+  for(const bot of clients.slice(0,2))await chat(bot,'/br join solo','Joined room solo');
+  await consoleCommand('br debug start solo','Start requested');await state('solo','RUNNING');for(const bot of clients.slice(0,2))await kit(bot);
+  await probe('brprobe m5tie LSAlice LSBob','M5 tie tick=');await state('solo','ENDING');
+  await until(async()=> (await consoleCommand('br debug stats LSAlice','PlayerProfile')).includes('matches=2'),'tie transaction');
+  assert.match(await consoleCommand('br debug stats LSAlice','PlayerProfile'),/wins=2/);
+  assert.match(await consoleCommand('br debug stats LSBob','PlayerProfile'),/wins=1/);
   results.push('Final same-tick tie grants both players full winner stats.');
   await endSolo();await sleep(2000);
-  for(const bot of clients.slice(0,2))await chat(bot,'/ls join solo','Joined room solo');
-  await consoleCommand('ls debug start solo','Start requested');await state('solo','RUNNING');await endSolo();await sleep(2000);
-  assert.match(await consoleCommand('ls debug stats LSAlice','PlayerProfile'),/matches=2/);
+  for(const bot of clients.slice(0,2))await chat(bot,'/br join solo','Joined room solo');
+  await consoleCommand('br debug start solo','Start requested');await state('solo','RUNNING');await endSolo();await sleep(2000);
+  assert.match(await consoleCommand('br debug stats LSAlice','PlayerProfile'),/matches=2/);
   assert.doesNotMatch(output,/Could not pass event|Task #\d+.*exception|Recovery capture rejected/);
   results.push('Admin abort does not increment official matches. No plugin event/task errors.');
 } catch(error) {results.push('FAILED: '+error.stack);process.exitCode=1;}

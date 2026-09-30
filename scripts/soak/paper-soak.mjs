@@ -13,13 +13,13 @@ const nbt = require('prismarine-nbt');
 const source = path.resolve(process.argv[2]);
 assert.match(await fs.readFile(path.join(source, 'eula.txt'), 'utf8'), /^eula=true\s*$/m);
 const root = path.resolve('.run', 'paper-m9-soak-' + Date.now());
-const data = path.join(root, 'plugins/LastSector');
+const data = path.join(root, 'plugins/BattleRoyale');
 await fs.mkdir(data, { recursive: true });
 for (const name of ['paper.jar', 'libraries', 'versions', 'cache', 'eula.txt'])
   await fs.cp(path.join(source, name), path.join(root, name), { recursive: true });
 if(process.env.M8_LIBRARY_CACHE)await fs.cp(path.join(process.env.M8_LIBRARY_CACHE,'libraries'),path.join(root,'libraries'),{recursive:true});
-await fs.copyFile('build/libs/lastsector-1.0.0-rc.1.jar', path.join(root, 'plugins/lastsector.jar'));
-await fs.copyFile('build/integration/lastsector-test-probe.jar', path.join(root, 'plugins/probe.jar'));
+await fs.copyFile('build/libs/battleroyale-1.0.0-rc.1.jar', path.join(root, 'plugins/battleroyale.jar'));
+await fs.copyFile('build/integration/battleroyale-test-probe.jar', path.join(root, 'plugins/probe.jar'));
 if(process.env.M8_ECONOMY) {
   for(const name of (process.env.M8_ECONOMY==='excellenteconomy'?['ExcellentEconomy-2.8.0.jar','nightcore-2.16.2.jar','Vault-1.7.3.jar']:['CoinsEngine-2.7.0.jar','nightcore-2.15.0.jar','Vault-1.7.3.jar']))await fs.copyFile(path.join('.run/m8-api',name),path.join(root,'plugins',name));
 }
@@ -97,7 +97,7 @@ async function chat(bot, command, expected) {
 async function state(room, expected) {
   let answer;
   await until(async () => {
-    answer = await consoleCommand('ls debug session ' + room, 'countdown=');
+    answer = await consoleCommand('br debug session ' + room, 'countdown=');
     return answer.match(/ session=\S+ state=(\w+)/)?.[1] === expected;
   }, 'Session ' + room + ' ' + expected);
   return answer;
@@ -114,42 +114,42 @@ async function probe(command, expected) {
   return text;
 }
 async function kit(bot, full=false) {
-  await probe('lsprobe m5kit '+bot.username+(full?' full':''),'M5 kit=');
-  await consoleCommand('lsprobe position '+bot.username+' 0 -60 0','PROBE positioned=true');
+  await probe('brprobe m5kit '+bot.username+(full?' full':''),'M5 kit=');
+  await consoleCommand('brprobe position '+bot.username+' 0 -60 0','PROBE positioned=true');
 }
 async function openBox(bot) {
-  const line=await probe('lsprobe m5box '+bot.username,'M5 box entity=');
+  const line=await probe('brprobe m5box '+bot.username,'M5 box entity=');
   const id=Number(line.match(/entity=(\d+)/)[1]);
   await until(()=>bot.entities[id],'Interaction entity delivered');
   bot.activateEntity(bot.entities[id]);
   await until(()=>bot.currentWindow?.inventoryStart===54,'DeathBox GUI opens');
 }
 async function close(bot) {if(bot.currentWindow)bot.closeWindow(bot.currentWindow);await sleep(200);}
-async function restore(name) { await until(async()=>{const answer=await probe('lsprobe player '+name,'PROBE player=');return answer.includes('world=world ');},'Lobby respawn '+name); await probe('lsprobe m4original '+name,'M4 original=true world=world'); }
+async function restore(name) { await until(async()=>{const answer=await probe('brprobe player '+name,'PROBE player=');return answer.includes('world=world ');},'Lobby respawn '+name); await probe('brprobe m4original '+name,'M4 original=true world=world'); }
 async function startSolo(a,b) {
-  await chat(a,'/ls join solo','Joined room solo');await chat(b,'/ls join solo','Joined room solo');
-  await consoleCommand('ls debug start solo','Start requested');await state('solo','RUNNING');await kit(a);await kit(b);
+  await chat(a,'/br join solo','Joined room solo');await chat(b,'/br join solo','Joined room solo');
+  await consoleCommand('br debug start solo','Start requested');await state('solo','RUNNING');await kit(a);await kit(b);
 }
-async function endSolo() {await consoleCommand('ls debug end solo','End requested');await state('solo','WAITING');}
+async function endSolo() {await consoleCommand('br debug end solo','End requested');await state('solo','WAITING');}
 
 const observations=[];
 try {
   await until(()=>output.includes('Done (')&&output.includes('Recovery bootstrap complete'),'startup',120000);
   const clients=[];for(let i=0;i<10;i++)clients.push(await connect('Soak'+i,port));await sleep(3000);
-  const baseline=await consoleCommand('ls debug perf','Timings');const baselineTasks=Number(baseline.match(/tasks=(\d+)/)[1]);
-  const cycles=Number(process.env.LASTSECTOR_SOAK_ROUNDS??20);assert.ok(cycles>=1&&cycles<=100);
+  const baseline=await consoleCommand('br debug perf','Timings');const baselineTasks=Number(baseline.match(/tasks=(\d+)/)[1]);
+  const cycles=Number(process.env.BATTLEROYALE_SOAK_ROUNDS??20);assert.ok(cycles>=1&&cycles<=100);
   for(let cycle=0;cycle<cycles;cycle++){
-    for(let i=0;i<10;i++)await chat(clients[i],'/ls join soak'+Math.floor(i/2),'Joined room');
-    for(let i=0;i<5;i++)await consoleCommand('ls debug start soak'+i,'Start requested');
+    for(let i=0;i<10;i++)await chat(clients[i],'/br join soak'+Math.floor(i/2),'Joined room');
+    for(let i=0;i<5;i++)await consoleCommand('br debug start soak'+i,'Start requested');
     for(let i=0;i<5;i++)await state('soak'+i,'RUNNING');
     if(cycle%5===0){clients[1].quit();await sleep(500);clients[1]=await connect('Soak1',port);await sleep(800);}
-    for(let i=0;i<10;i++)await probe('lsprobe m5kit Soak'+i,'M5 kit=');
-    for(let i=0;i<5;i++)await probe(`lsprobe m5damage Soak${i*2} Soak${i*2+1} melee 1000`,'M5 damage health=');
+    for(let i=0;i<10;i++)await probe('brprobe m5kit Soak'+i,'M5 kit=');
+    for(let i=0;i<5;i++)await probe(`brprobe m5damage Soak${i*2} Soak${i*2+1} melee 1000`,'M5 damage health=');
     for(let i=0;i<5;i++)await state('soak'+i,'WAITING');
     await until(async()=>!(await dirs()).length,'runtime world cleanup',120000);
-    await until(async()=>(await consoleCommand('ls debug stats Soak0','PlayerProfile')).includes('matches='+(cycle+1)+','),'result persisted');
+    await until(async()=>(await consoleCommand('br debug stats Soak0','PlayerProfile')).includes('matches='+(cycle+1)+','),'result persisted');
     await sleep(300);
-    const perf=await consoleCommand('ls debug perf','Timings');assert.match(perf,/sessions=0 players=0 spectators=0/);for(const key of ['entries','draining','bossbars','deathboxes','offlineBodies'])assert.match(perf,new RegExp(key+'=0'));assert.match(perf,/pendingRestore=0/);assert.ok(Number(perf.match(/tasks=(\d+)/)[1])<=baselineTasks+2,'no accumulating scheduled tasks');
+    const perf=await consoleCommand('br debug perf','Timings');assert.match(perf,/sessions=0 players=0 spectators=0/);for(const key of ['entries','draining','bossbars','deathboxes','offlineBodies'])assert.match(perf,new RegExp(key+'=0'));assert.match(perf,/pendingRestore=0/);assert.ok(Number(perf.match(/tasks=(\d+)/)[1])<=baselineTasks+2,'no accumulating scheduled tasks');
     observations.push({cycle:cycle+1,matches:(cycle+1)*5,perf});console.log(`SOAK ${cycle+1}/${cycles}: five concurrent matches cleaned; no resource leaks`);
   }
   assert.equal(await hash(path.join(data,'maps/city/level.dat')),original);assert.doesNotMatch(output,/Could not pass event|Task #\d+.*exception|Recovery capture rejected/);

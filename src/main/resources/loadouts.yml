@@ -1,5 +1,5 @@
 config-version: 2
-# Native item bytes are written by /ls admin loadout edit <room>.
+# Native item bytes are written by /br admin loadout edit <room>.
 # Shared by both default rooms; an empty loadout intentionally starts empty.
 loadouts:
   default:

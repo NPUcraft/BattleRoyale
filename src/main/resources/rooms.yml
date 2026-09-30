@@ -2,10 +2,10 @@ config-version: 2
 rooms:
   solo:
     display-name: "Solo"
-    min-players: 2
+    min-players: 4
     max-players: 24
     team-size: 1
-    countdown-seconds: 30
+    countdown-seconds: 60
     pvp-protection-seconds: 60
     spawn:
       min-distance: 64
@@ -16,10 +16,10 @@ rooms:
     zone-profile: default
   squad:
     display-name: "Squad"
-    min-players: 4
+    min-players: 16
     max-players: 32
     team-size: 4
-    countdown-seconds: 30
+    countdown-seconds: 60
     pvp-protection-seconds: 60
     spawn:
       min-distance: 64

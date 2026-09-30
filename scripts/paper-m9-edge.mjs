@@ -13,13 +13,13 @@ const nbt = require('prismarine-nbt');
 const source = path.resolve(process.argv[2]);
 assert.match(await fs.readFile(path.join(source, 'eula.txt'), 'utf8'), /^eula=true\s*$/m);
 const root = path.resolve('.run', 'paper-m9-edge-'+(process.env.M9_SCENARIO??'fresh')+'-' + Date.now());
-const data = path.join(root, 'plugins/LastSector');
+const data = path.join(root, 'plugins/BattleRoyale');
 await fs.mkdir(data, { recursive: true });
 for (const name of ['paper.jar', 'libraries', 'versions', 'cache', 'eula.txt'])
   await fs.cp(path.join(source, name), path.join(root, name), { recursive: true });
 if(process.env.M8_LIBRARY_CACHE)await fs.cp(path.join(process.env.M8_LIBRARY_CACHE,'libraries'),path.join(root,'libraries'),{recursive:true});
-await fs.copyFile('build/libs/lastsector-1.0.0-rc.1.jar', path.join(root, 'plugins/lastsector.jar'));
-await fs.copyFile('build/integration/lastsector-test-probe.jar', path.join(root, 'plugins/probe.jar'));
+await fs.copyFile('build/libs/battleroyale-1.0.0-rc.1.jar', path.join(root, 'plugins/battleroyale.jar'));
+await fs.copyFile('build/integration/battleroyale-test-probe.jar', path.join(root, 'plugins/probe.jar'));
 if(process.env.M8_ECONOMY) {
   for(const name of (process.env.M8_ECONOMY==='excellenteconomy'?['ExcellentEconomy-2.8.0.jar','CoinsEngine-2.7.0.jar','nightcore-2.15.0.jar','Vault-1.7.3.jar']:['CoinsEngine-2.7.0.jar','nightcore-2.15.0.jar','Vault-1.7.3.jar']))await fs.copyFile(path.join('.run/m8-api',name),path.join(root,'plugins',name));
 }
@@ -104,7 +104,7 @@ async function chat(bot, command, expected) {
 async function state(room, expected) {
   let answer;
   await until(async () => {
-    answer = await consoleCommand('ls debug session ' + room, 'countdown=');
+    answer = await consoleCommand('br debug session ' + room, 'countdown=');
     return answer.match(/ session=\S+ state=(\w+)/)?.[1] === expected;
   }, 'Session ' + room + ' ' + expected);
   return answer;
@@ -121,34 +121,34 @@ async function probe(command, expected) {
   return text;
 }
 async function kit(bot, full=false) {
-  await probe('lsprobe m5kit '+bot.username+(full?' full':''),'M5 kit=');
-  await consoleCommand('lsprobe position '+bot.username+' 0 -60 0','PROBE positioned=true');
+  await probe('brprobe m5kit '+bot.username+(full?' full':''),'M5 kit=');
+  await consoleCommand('brprobe position '+bot.username+' 0 -60 0','PROBE positioned=true');
 }
 async function openBox(bot) {
-  const line=await probe('lsprobe m5box '+bot.username,'M5 box entity=');
+  const line=await probe('brprobe m5box '+bot.username,'M5 box entity=');
   const id=Number(line.match(/entity=(\d+)/)[1]);
   await until(()=>bot.entities[id],'Interaction entity delivered');
   bot.activateEntity(bot.entities[id]);
   await until(()=>bot.currentWindow?.inventoryStart===54,'DeathBox GUI opens');
 }
 async function close(bot) {if(bot.currentWindow)bot.closeWindow(bot.currentWindow);await sleep(200);}
-async function restore(name) { await until(async()=>{const answer=await probe('lsprobe player '+name,'PROBE player=');return answer.includes('world=world ');},'Lobby respawn '+name); await probe('lsprobe m4original '+name,'M4 original=true world=world'); }
+async function restore(name) { await until(async()=>{const answer=await probe('brprobe player '+name,'PROBE player=');return answer.includes('world=world ');},'Lobby respawn '+name); await probe('brprobe m4original '+name,'M4 original=true world=world'); }
 async function startSolo(a,b) {
-  await chat(a,'/ls join solo','Joined room solo');await chat(b,'/ls join solo','Joined room solo');
-  await consoleCommand('ls debug start solo','Start requested');await state('solo','RUNNING');await kit(a);await kit(b);
+  await chat(a,'/br join solo','Joined room solo');await chat(b,'/br join solo','Joined room solo');
+  await consoleCommand('br debug start solo','Start requested');await state('solo','RUNNING');await kit(a);await kit(b);
 }
-async function endSolo() {await consoleCommand('ls debug end solo','End requested');await state('solo','WAITING');}
+async function endSolo() {await consoleCommand('br debug end solo','End requested');await state('solo','WAITING');}
 
 
 try {
   await until(()=>output.includes('Done ('),'server startup',120000);
   if(scenario==='future'){
-    await until(()=>output.includes('Startup failed; disabling LastSector'),'newer version rejected');assert.equal(await hash(path.join(data,'config.yml')),configBefore);assert.ok(!(await fs.readdir(data)).includes('config-backups'));results.push('Unknown config-version 999 rejected without overwriting configuration or migrating siblings.');
+    await until(()=>output.includes('Startup failed; disabling BattleRoyale'),'newer version rejected');assert.equal(await hash(path.join(data,'config.yml')),configBefore);assert.ok(!(await fs.readdir(data)).includes('config-backups'));results.push('Unknown config-version 999 rejected without overwriting configuration or migrating siblings.');
   }else{
-    await until(()=>output.includes('Recovery bootstrap complete'),'recovery ready');const alice=await connect('LSAlice',port),bob=await connect('LSBob',port);await sleep(3500);alice.chat('/ls profile');await until(()=>alice.currentWindow,'profile GUI');await close(alice);
-    await consoleCommand('ls admin diagnose','Overall:');
-    if(scenario==='fresh'){assert.ok(output.includes('No valid map templates available.'));await chat(alice,'/ls join solo','Joined room');await chat(bob,'/ls join solo','Joined room');await consoleCommand('ls debug start solo','Start requested');await until(()=>output.includes('No maps in room pool'),'missing templates prevent start');results.push('Fresh SQLite install without installed map templates enables core, profile and diagnostics; no valid map can start.');}
-    else{assert.match(output,/UnsupportedClassVersionError|class file version|compiled by a more recent/);assert.match(await consoleCommand('ls debug economy','configured='),/active=vault/);await chat(alice,'/ls join solo','Joined room');await chat(bob,'/ls join solo','Joined room');await consoleCommand('ls debug start solo','Start requested');await state('solo','RUNNING');await endSolo();results.push('Actual Java 25 ExcellentEconomy binary rejected on Java 21; LastSector auto selects Vault backed by CoinsEngine 2.7, enables and runs/cleans a match.');}
+    await until(()=>output.includes('Recovery bootstrap complete'),'recovery ready');const alice=await connect('LSAlice',port),bob=await connect('LSBob',port);await sleep(3500);alice.chat('/br profile');await until(()=>alice.currentWindow,'profile GUI');await close(alice);
+    await consoleCommand('br admin diagnose','Overall:');
+    if(scenario==='fresh'){assert.ok(output.includes('No valid map templates available.'));await chat(alice,'/br join solo','Joined room');await chat(bob,'/br join solo','Joined room');await consoleCommand('br debug start solo','Start requested');await until(()=>output.includes('No maps in room pool'),'missing templates prevent start');results.push('Fresh SQLite install without installed map templates enables core, profile and diagnostics; no valid map can start.');}
+    else{assert.match(output,/UnsupportedClassVersionError|class file version|compiled by a more recent/);assert.match(await consoleCommand('br debug economy','configured='),/active=vault/);await chat(alice,'/br join solo','Joined room');await chat(bob,'/br join solo','Joined room');await consoleCommand('br debug start solo','Start requested');await state('solo','RUNNING');await endSolo();results.push('Actual Java 25 ExcellentEconomy binary rejected on Java 21; BattleRoyale auto selects Vault backed by CoinsEngine 2.7, enables and runs/cleans a match.');}
   }
 } catch(error){results.push('FAILED: '+error.stack);process.exitCode=1;}
 finally{for(const bot of bots)try{bot.quit();}catch{}await sleep(300);if(exit===null)child.stdin.write('stop\n');const deadline=Date.now()+60000;while(exit===null&&Date.now()<deadline)await sleep(200);if(exit===null){child.kill();process.exitCode=1;}await fs.writeFile(path.join(root,'console.log'),output);await fs.writeFile(path.join(root,'results.json'),JSON.stringify(results,null,2));console.log(results.join('\n'));console.log('ARTIFACTS '+root);}

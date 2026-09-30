@@ -1,7 +1,7 @@
 import java.security.MessageDigest
 plugins { java }
-group = "com.npucraft.lastsector"
-version = "1.0.0-rc.1"
+group = "com.npucraft.battleroyale"
+version = "1.0.0-rc.8"
 repositories {
     mavenCentral()
     maven("https://repo.nightexpressdev.com/releases")
@@ -16,17 +16,17 @@ dependencies {
     implementation("org.xerial:sqlite-jdbc:3.53.4.0") { exclude(group="org.slf4j") }
     implementation("com.mysql:mysql-connector-j:9.4.0") { exclude(group="com.google.protobuf") }
     implementation("com.google.code.gson:gson:2.13.2")
-    compileOnly("io.papermc.paper:paper-api:1.21.8-R0.1-SNAPSHOT")
-    testImplementation("io.papermc.paper:paper-api:1.21.8-R0.1-SNAPSHOT")
+    compileOnly("io.papermc.paper:paper-api:26.2.build.129-stable")
+    testImplementation("io.papermc.paper:paper-api:26.2.build.129-stable")
     testImplementation(platform("org.junit:junit-bom:5.11.4"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
-java { toolchain.languageVersion.set(JavaLanguageVersion.of(21)) }
-tasks.withType<JavaCompile>().configureEach { options.encoding = "UTF-8"; options.release.set(21) }
+java { toolchain.languageVersion.set(JavaLanguageVersion.of(25)) }
+tasks.withType<JavaCompile>().configureEach { options.encoding = "UTF-8"; options.release.set(25) }
 tasks.withType<Javadoc>().configureEach { options.encoding = "UTF-8" }
 tasks.test {
-    val mysqlPort = providers.environmentVariable("LASTSECTOR_MYSQL_TEST_PORT")
+    val mysqlPort = providers.environmentVariable("BATTLEROYALE_MYSQL_TEST_PORT")
     inputs.property("mysqlTestPort", mysqlPort.orElse("disabled"))
     useJUnitPlatform { if (!mysqlPort.isPresent) excludeTags("mysql") }
 }
@@ -42,7 +42,7 @@ val paperProbe by sourceSets.creating
 paperProbe.compileClasspath += sourceSets.main.get().output
 configurations[paperProbe.compileOnlyConfigurationName].extendsFrom(configurations.compileOnly.get())
 tasks.register<Jar>("paperProbeJar") {
-    archiveFileName.set("lastsector-test-probe.jar")
+    archiveFileName.set("battleroyale-test-probe.jar")
     from(paperProbe.output)
     destinationDirectory.set(layout.buildDirectory.dir("integration"))
 }
@@ -64,14 +64,14 @@ val commitHash = providers.provider {
     } catch (_: Exception) { "unknown" }
 }
 val generateBuildInfo by tasks.registering {
-    val output = layout.buildDirectory.file("generated/build-info/lastsector-build.properties")
+    val output = layout.buildDirectory.file("generated/build-info/battleroyale-build.properties")
     inputs.property("commit", commitHash)
     inputs.property("version", project.version.toString())
     outputs.file(output)
-    doLast { output.get().asFile.apply { parentFile.mkdirs(); writeText("commit=${commitHash.get()}\nversion=${project.version}\ntype=release-candidate\njava-target=21\npaper-target=1.21.8\n") } }
+    doLast { output.get().asFile.apply { parentFile.mkdirs(); writeText("commit=${commitHash.get()}\nversion=${project.version}\ntype=release-candidate\njava-target=25\npaper-target=26.2\n") } }
 }
 tasks.processResources { dependsOn(generateBuildInfo); from(layout.buildDirectory.dir("generated/build-info")) }
-tasks.jar { manifest.attributes("Implementation-Version" to project.version, "Build-Type" to "release-candidate", "Java-Target" to "21", "Paper-Target" to "1.21.8", "Build-Commit" to commitHash.get()) }
+tasks.jar { manifest.attributes("Implementation-Version" to project.version, "Build-Type" to "release-candidate", "Java-Target" to "25", "Paper-Target" to "26.2", "Build-Commit" to commitHash.get()) }
 val releaseChecksum by tasks.registering {
     dependsOn(tasks.jar)
     val jar = tasks.jar.flatMap { it.archiveFile }
@@ -92,7 +92,7 @@ tasks.register<Test>("stressTest") {
     dependsOn(tasks.testClasses)
     testClassesDirs = stressTest.output.classesDirs
     classpath = stressTest.runtimeClasspath
-    useJUnitPlatform { if (!providers.environmentVariable("LASTSECTOR_MYSQL_TEST_PORT").isPresent) excludeTags("mysql") }
-    inputs.property("mysqlTestPort", providers.environmentVariable("LASTSECTOR_MYSQL_TEST_PORT").orElse("disabled"))
+    useJUnitPlatform { if (!providers.environmentVariable("BATTLEROYALE_MYSQL_TEST_PORT").isPresent) excludeTags("mysql") }
+    inputs.property("mysqlTestPort", providers.environmentVariable("BATTLEROYALE_MYSQL_TEST_PORT").orElse("disabled"))
     maxHeapSize = "1g"
 }

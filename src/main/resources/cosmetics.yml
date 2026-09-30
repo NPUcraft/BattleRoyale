@@ -2,47 +2,47 @@ config-version: 2
 cosmetics:
   kill_particle_burst:
     category: KILL_EFFECT
-    display-name: Emerald Burst
-    description: [A small particle burst on a credited kill.]
+    display-name: 翡翠绽放
+    description: [成功击杀时绽放一簇粒子。]
     icon: EMERALD
     price: 0
     effect-type: particle_burst
     effect-config: { particle: HAPPY_VILLAGER }
   kill_visual_lightning:
     category: KILL_EFFECT
-    display-name: Visual Lightning
-    description: [A harmless lightning visual.]
+    display-name: 幻影闪电
+    description: [仅供观赏的无伤闪电。]
     icon: LIGHTNING_ROD
     price: 100
     effect-type: visual_lightning
   win_fireworks:
     category: WIN_EFFECT
-    display-name: Victory Fireworks
-    description: [Celebrate a team victory.]
+    display-name: 胜利烟花
+    description: [为队伍胜利燃放烟花。]
     icon: FIREWORK_ROCKET
     price: 0
     effect-type: firework_burst
     effect-config: { color: "55FF55" }
   deathbox_ender:
     category: DEATHBOX_SKIN
-    display-name: Ender DeathBox
-    description: [An ender chest display for your DeathBox.]
+    display-name: 末影物资箱
+    description: [将死亡物资箱显示为末影箱。]
     icon: ENDER_CHEST
     price: 100
     effect-type: block_display
     effect-config: { material: ENDER_CHEST }
   deathbox_gold:
     category: DEATHBOX_SKIN
-    display-name: Golden DeathBox
-    description: [A golden display for your DeathBox.]
+    display-name: 黄金物资箱
+    description: [将死亡物资箱显示为金块。]
     icon: GOLD_BLOCK
     price: 100
     effect-type: block_display
     effect-config: { material: GOLD_BLOCK }
   lobby_sparkle:
     category: LOBBY_EFFECT
-    display-name: Lobby Sparkle
-    description: [A small particle aura in the lobby.]
+    display-name: 大厅星光
+    description: [在大厅中环绕身边的星光粒子。]
     icon: NETHER_STAR
     price: 0
     effect-type: particle_burst

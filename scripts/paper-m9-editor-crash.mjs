@@ -13,19 +13,19 @@ const nbt = require('prismarine-nbt');
 const source = path.resolve(process.argv[2]);
 assert.match(await fs.readFile(path.join(source, 'eula.txt'), 'utf8'), /^eula=true\s*$/m);
 const root = path.resolve('.run', 'paper-m9-editor-crash-' + Date.now());
-const data = path.join(root, 'plugins/LastSector');
+const data = path.join(root, 'plugins/BattleRoyale');
 await fs.mkdir(data, { recursive: true });
 for (const name of ['paper.jar', 'libraries', 'versions', 'cache', 'eula.txt'])
   await fs.cp(path.join(source, name), path.join(root, name), { recursive: true });
-await fs.copyFile('build/libs/lastsector-1.0.0-rc.1.jar', path.join(root, 'plugins/lastsector.jar'));
-await fs.copyFile('build/integration/lastsector-test-probe.jar', path.join(root, 'plugins/probe.jar'));
+await fs.copyFile('build/libs/battleroyale-1.0.0-rc.1.jar', path.join(root, 'plugins/battleroyale.jar'));
+await fs.copyFile('build/integration/battleroyale-test-probe.jar', path.join(root, 'plugins/probe.jar'));
 for (const file of ['config.yml', 'rooms.yml', 'maps.yml', 'zones.yml']) {
   let text = await fs.readFile(path.join('src/main/resources', file), 'utf8');
   if (file === 'rooms.yml') text = text.replaceAll('countdown-seconds: 30', 'countdown-seconds: 30').replace('min-players: 4', 'min-players: 2').replaceAll('pvp-protection-seconds: 60', 'pvp-protection-seconds: 0').replaceAll('max-players: 24', 'max-players: 8').replaceAll('max-players: 32', 'max-players: 8');
   if (file === 'rooms.yml') text=text.replace('team-size: 4','team-size: 1').replace('max-players: 8','max-players: 4');
   if (file === 'zones.yml') text = text.replace(/wait-seconds: \d+/g, 'wait-seconds: 5').replace(/shrink-seconds: \d+/g, 'shrink-seconds: 300');
   if (file === 'maps.yml') text = text.replace(/3000|2500/g, '600');
-  if(file==='config.yml'){text=text.replace('checkpoint-seconds: 5','checkpoint-seconds: 1');if(process.env.M7_MYSQL_PORT)text=text.replace('type: sqlite','type: mysql').replace('port: 3306','port: '+process.env.M7_MYSQL_PORT).replace('database: lastsector','database: lastsector_test').replace('username: lastsector','username: lastsector_test').replace('password: ""','password: "lastsector-isolated-test"');}
+  if(file==='config.yml'){text=text.replace('checkpoint-seconds: 5','checkpoint-seconds: 1');if(process.env.M7_MYSQL_PORT)text=text.replace('type: sqlite','type: mysql').replace('port: 3306','port: '+process.env.M7_MYSQL_PORT).replace('database: battleroyale','database: battleroyale_test').replace('username: battleroyale','username: battleroyale_test').replace('password: ""','password: "battleroyale-isolated-test"');}
   await fs.writeFile(path.join(data, file), text);
 }
 for (const name of ['city', 'desert'])
@@ -88,7 +88,7 @@ async function chat(bot, command, expected) {
 async function state(room, expected) {
   let answer;
   await until(async () => {
-    answer = await consoleCommand('ls debug session ' + room, 'countdown=');
+    answer = await consoleCommand('br debug session ' + room, 'countdown=');
     return answer.match(/ session=\S+ state=(\w+)/)?.[1] === expected;
   }, 'Session ' + room + ' ' + expected);
   return answer;
@@ -105,26 +105,26 @@ async function probe(command, expected) {
   return text;
 }
 async function kit(bot, full=false) {
-  await probe('lsprobe m5kit '+bot.username+(full?' full':''),'M5 kit=');
-  await consoleCommand('lsprobe position '+bot.username+' 0 -60 0','PROBE positioned=true');
+  await probe('brprobe m5kit '+bot.username+(full?' full':''),'M5 kit=');
+  await consoleCommand('brprobe position '+bot.username+' 0 -60 0','PROBE positioned=true');
 }
 async function openBox(bot) {
-  const line=await probe('lsprobe m5box '+bot.username,'M5 box entity=');
+  const line=await probe('brprobe m5box '+bot.username,'M5 box entity=');
   const id=Number(line.match(/entity=(\d+)/)[1]);
   await until(()=>bot.entities[id],'Interaction entity delivered');
   bot.activateEntity(bot.entities[id]);
   await until(()=>bot.currentWindow?.inventoryStart===54,'DeathBox GUI opens');
 }
 async function close(bot) {if(bot.currentWindow)bot.closeWindow(bot.currentWindow);await sleep(200);}
-async function restore(name) { await until(async()=>{const answer=await probe('lsprobe player '+name,'PROBE player=');return answer.includes('world=world ');},'Lobby respawn '+name); await probe('lsprobe m4original '+name,'M4 original=true world=world'); }
+async function restore(name) { await until(async()=>{const answer=await probe('brprobe player '+name,'PROBE player=');return answer.includes('world=world ');},'Lobby respawn '+name); await probe('brprobe m4original '+name,'M4 original=true world=world'); }
 async function startSolo(a,b) {
-  await chat(a,'/ls join solo','Joined room solo');await chat(b,'/ls join solo','Joined room solo');
-  await consoleCommand('ls debug start solo','Start requested');await state('solo','RUNNING');await kit(a);await kit(b);
+  await chat(a,'/br join solo','Joined room solo');await chat(b,'/br join solo','Joined room solo');
+  await consoleCommand('br debug start solo','Start requested');await state('solo','RUNNING');await kit(a);await kit(b);
 }
-async function endSolo() {await consoleCommand('ls debug end solo','End requested');await state('solo','WAITING');}
+async function endSolo() {await consoleCommand('br debug end solo','End requested');await state('solo','WAITING');}
 
-const db=path.join(data,'data/lastsector.db');
-function mysql(sql){const text=execFileSync('docker',['exec','--env','MYSQL_PWD=lastsector-isolated-test','lastsector-m7-mysql','mysql','--user=lastsector_test','--database=lastsector_test','--batch','--raw','--execute',sql],{encoding:'utf8',windowsHide:true}).trim();if(!text)return [];const [header,...lines]=text.split('\n');const columns=header.split('\t');return lines.map(line=>Object.fromEntries(line.split('\t').map((value,i)=>[columns[i],value])));}
+const db=path.join(data,'data/battleroyale.db');
+function mysql(sql){const text=execFileSync('docker',['exec','--env','MYSQL_PWD=battleroyale-isolated-test','battleroyale-m7-mysql','mysql','--user=battleroyale_test','--database=battleroyale_test','--batch','--raw','--execute',sql],{encoding:'utf8',windowsHide:true}).trim();if(!text)return [];const [header,...lines]=text.split('\n');const columns=header.split('\t');return lines.map(line=>Object.fromEntries(line.split('\t').map((value,i)=>[columns[i],value])));}
 function query(sql){if(process.env.M7_MYSQL_PORT)return mysql(sql);return JSON.parse(execFileSync('python',['-c','import sqlite3,json,sys; c=sqlite3.connect(sys.argv[1]); c.row_factory=sqlite3.Row; print(json.dumps([dict(r) for r in c.execute(sys.argv[2])]))',db,sql],{encoding:'utf8',windowsHide:true}));}
 async function ready(){await until(()=>output.includes('Done (')&&output.includes('Recovery bootstrap complete'),'Paper/DB bootstrap',120000);}
 async function json(command){const text=await consoleCommand(command,'M7 JSON=');return JSON.parse(text.match(/M7 JSON=(.*)/)[1]);}
@@ -133,9 +133,9 @@ async function checkpoint(test){let row;await until(()=>{row=query("SELECT * FRO
 const originals=new Map();
 async function nativeValues(value){if(value?.format==='paper-native')return nbt.simplify((await nbt.parse(Buffer.from(value.data,'base64'))).parsed);if(Array.isArray(value))return Promise.all(value.map(nativeValues));if(value&&typeof value==='object')return Object.fromEntries(await Promise.all(Object.entries(value).map(async([key,item])=>[key,await nativeValues(item)])));return value;}
 function stableLobby(value){const copy=structuredClone(value);delete copy.inventory;delete copy.cursor;delete copy.effects;delete copy.exhaustion;delete copy.fireTicks;delete copy.fallDistance;return copy;}
-async function restored(name){await until(async()=>{const text=await consoleCommand('lsprobe player '+name,'PROBE player=');return text.includes('world=world ');},'Lobby restore '+name);let canonical;await until(async()=>{canonical=await json('lsprobe m7lobby '+name);return JSON.stringify(Object.keys(canonical.inventory).sort())===JSON.stringify(['0','1','4','7','8']);},'Canonical Lobby '+name);assert.deepEqual(Object.keys(canonical.inventory).sort(),['0','1','4','7','8']);assert.deepEqual(await nativeValues(stableLobby(canonical)),await nativeValues(stableLobby(originals.get(name))));}
+async function restored(name){await until(async()=>{const text=await consoleCommand('brprobe player '+name,'PROBE player=');return text.includes('world=world ');},'Lobby restore '+name);let canonical;await until(async()=>{canonical=await json('brprobe m7lobby '+name);return JSON.stringify(Object.keys(canonical.inventory).sort())===JSON.stringify(['0','1','4','7','8']);},'Canonical Lobby '+name);assert.deepEqual(Object.keys(canonical.inventory).sort(),['0','1','4','7','8']);assert.deepEqual(await nativeValues(stableLobby(canonical)),await nativeValues(stableLobby(originals.get(name))));}
 
 try {
- await ready();let alice=await connect('LSAlice',port);await probe('lsprobe m4seed LSAlice','M4 seeded');originals.set('LSAlice',await json('lsprobe m7lobby LSAlice'));await consoleCommand('op LSAlice','Made LSAlice');await chat(alice,'/ls admin map edit city','Editor ready');await chat(alice,'/ls admin map area -700 700 -700 700','INFO');assert.ok((await fs.readdir(path.join(data,'maintenance-worlds'))).length===1);await kill();launch();await ready();alice=await connect('LSAlice',port);await restored('LSAlice');await until(async()=>!(await fs.readdir(path.join(data,'maintenance-worlds'))).length,'maintenance orphan cleared');assert.equal(await hash(path.join(data,'maps/city/level.dat')),original);assert.ok(!(await fs.readdir(path.join(data,'map-data/city'))).includes('metadata.json'));await chat(alice,'/ls admin map edit city','Editor ready');await chat(alice,'/ls admin map discard','Editor discard requested');await until(async()=>!(await fs.readdir(path.join(data,'maintenance-worlds'))).length,'second editor closes');results.push('Real SIGKILL during unsaved editor: restart deletes only owned maintenance orphan, restores administrator durable state, leaves template/metadata unchanged and releases map lock.');
+ await ready();let alice=await connect('LSAlice',port);await probe('brprobe m4seed LSAlice','M4 seeded');originals.set('LSAlice',await json('brprobe m7lobby LSAlice'));await consoleCommand('op LSAlice','Made LSAlice');await chat(alice,'/br admin map edit city','Editor ready');await chat(alice,'/br admin map area -700 700 -700 700','INFO');assert.ok((await fs.readdir(path.join(data,'maintenance-worlds'))).length===1);await kill();launch();await ready();alice=await connect('LSAlice',port);await restored('LSAlice');await until(async()=>!(await fs.readdir(path.join(data,'maintenance-worlds'))).length,'maintenance orphan cleared');assert.equal(await hash(path.join(data,'maps/city/level.dat')),original);assert.ok(!(await fs.readdir(path.join(data,'map-data/city'))).includes('metadata.json'));await chat(alice,'/br admin map edit city','Editor ready');await chat(alice,'/br admin map discard','Editor discard requested');await until(async()=>!(await fs.readdir(path.join(data,'maintenance-worlds'))).length,'second editor closes');results.push('Real SIGKILL during unsaved editor: restart deletes only owned maintenance orphan, restores administrator durable state, leaves template/metadata unchanged and releases map lock.');
 } catch(error){results.push('FAILED: '+error.stack);process.exitCode=1;}
 finally{for(const bot of bots)try{bot.quit();}catch{}await sleep(300);if(exit===null)child.stdin.write('stop\n');const deadline=Date.now()+60000;while(exit===null&&Date.now()<deadline)await sleep(200);if(exit===null){child.kill();process.exitCode=1;}await fs.writeFile(path.join(root,`console-${epoch}.log`),output);await fs.writeFile(path.join(root,'results.json'),JSON.stringify(results,null,2));console.log(results.join('\n'));console.log('ARTIFACTS '+root);}

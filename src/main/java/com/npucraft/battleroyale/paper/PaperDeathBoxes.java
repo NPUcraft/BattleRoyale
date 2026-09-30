@@ -1,0 +1,89 @@
+package com.npucraft.battleroyale.paper;
+import com.npucraft.battleroyale.death.*;
+import com.npucraft.battleroyale.session.GameSession;
+import com.npucraft.battleroyale.service.UiText;
+import com.npucraft.battleroyale.service.I18n;
+import net.kyori.adventure.text.Component;
+import org.bukkit.*;
+import org.bukkit.entity.*;
+import org.bukkit.inventory.*;
+import org.bukkit.plugin.java.JavaPlugin;
+import java.util.*;
+import java.util.function.Function;
+
+/** Session-owned shared inventories and visual identities. Every access is revalidated. */
+public final class PaperDeathBoxes implements AutoCloseable {
+    private final JavaPlugin plugin;
+    private final GameSession session;
+    private final double reach;
+    private final NativeItemSerializer serializer;
+    private final StoredExperienceBottles experience;
+    private final PaperDeathBoxVisuals visuals;
+    private final Map<UUID,View> boxes=new LinkedHashMap<>();
+    private final Map<UUID,View> entities=new HashMap<>();
+    private final Set<Long> chunks=new HashSet<>();
+    private final UUID worldId;
+    public PaperDeathBoxes(JavaPlugin plugin,GameSession session,double reach,NativeItemSerializer serializer,StoredExperienceBottles experience) {
+        this.plugin=plugin; this.session=session; this.reach=reach; this.serializer=serializer; this.experience=experience; visuals=new PaperDeathBoxVisuals(plugin);
+        worldId=Objects.requireNonNull(plugin.getServer().getWorld(session.gameWorld().orElseThrow().worldName())).getUID();
+    }
+    private Function<UUID,Material> skin=id->Material.BARREL;
+    public void skin(Function<UUID,Material> value){skin=value;}
+    public void create(DeathBox box,Function<UUID,String> names) {
+        if(boxes.containsKey(box.id())) return;
+        List<ItemStack> items=new ArrayList<>(); box.contents().forEach(i->items.add(serializer.item(i)));
+        if(box.storedXp()>0) items.add(experience.create(box.storedXp()));
+        View view=new View(this,box); for(int i=0;i<items.size();i++) view.inventory.setItem(i,items.get(i));
+        boxes.put(box.id(),view);
+        World world=Objects.requireNonNull(plugin.getServer().getWorld(worldId));
+        int cx=((int)Math.floor(box.location().x()))>>4,cz=((int)Math.floor(box.location().z()))>>4;
+        long key=Chunk.getChunkKey(cx,cz); if(chunks.add(key)) PaperChunkTickets.acquire(plugin,world,cx,cz);
+        long seconds=box.elapsedNanos()/1_000_000_000L;
+        Component label=UiText.heading(box.deceasedName()).appendNewline().append(DeathReasonRenderer.shared(box.reason(),names))
+                .appendNewline().append(I18n.shared("death.survived","存活 {0}","Survived {0}",UiText.value("%02d:%02d".formatted(seconds/60,seconds%60))).color(UiText.BODY));
+        view.visuals=visuals.spawn(box,label,skin.apply(box.deceased())); view.visuals.forEach(id->entities.put(id,view));
+    }
+    public java.util.List<com.npucraft.battleroyale.recovery.SessionRecoverySnapshot.Box> snapshot(){
+        var result=new java.util.ArrayList<com.npucraft.battleroyale.recovery.SessionRecoverySnapshot.Box>();for(var view:boxes.values()){
+            var b=view.box;var contents=new HashMap<Integer,com.npucraft.battleroyale.loadout.StoredItem>();for(int slot=0;slot<54;slot++){var item=serializer.store(view.inventory.getItem(slot));if(item!=null)contents.put(slot,item);}
+            result.add(new com.npucraft.battleroyale.recovery.SessionRecoverySnapshot.Box(b.id(),b.deceased(),b.deceasedName(),b.location().x(),b.location().y(),b.location().z(),b.elapsedNanos(),b.reason().origin().name(),b.reason().killer().orElse(null),b.reason().assists(),b.reason().direct(),contents));
+        }return java.util.List.copyOf(result);
+    }
+    public void recover(java.util.List<com.npucraft.battleroyale.recovery.SessionRecoverySnapshot.Box> saved,Function<UUID,String> names) {
+        for(var b:saved){var reason=new com.npucraft.battleroyale.combat.DeathReason(com.npucraft.battleroyale.combat.DamageOrigin.valueOf(b.cause()),Optional.ofNullable(b.killer()),b.assists(),b.direct());
+            var box=new DeathBox(b.id(),session.sessionId(),b.deceased(),b.name(),new DeathPosition(worldId,b.x(),b.y(),b.z()),b.elapsedNanos(),-1,reason,List.of(),0);
+            create(box,names);var view=boxes.get(b.id());for(var item:b.inventory().entrySet()){if(item.getKey()<0 || item.getKey()>=54)throw new IllegalArgumentException("Invalid deathbox slot");view.inventory.setItem(item.getKey(),serializer.item(item.getValue()));}
+        }
+    }
+    public View visual(Entity entity) {
+        View view=entities.get(entity.getUniqueId()); return view!=null && visuals.marked(entity,view.box)?view:null;
+    }
+    public boolean allowed(View view,Player player) {
+        var at=player.getLocation();
+        return view.valid && boxes.get(view.box.id())==view && !player.isDead()
+                && DeathBoxAccess.allowed(session,view.box,player.getUniqueId(),new DeathPosition(at.getWorld().getUID(),at.getX(),at.getY(),at.getZ()),reach);
+    }
+    public void open(Entity entity,Player player) {
+        View view=visual(entity); if(view!=null && allowed(view,player) && player.getOpenInventory().getTopInventory()!=view.inventory) player.openInventory(view.inventory);
+    }
+    public void closeViewers() {
+        for(View view:boxes.values()) for(var viewer:List.copyOf(view.inventory.getViewers())) viewer.closeInventory();
+    }
+    @Override public void close() {
+        closeViewers();
+        for(View view:boxes.values()) {view.valid=false;visuals.remove(view.visuals);view.inventory.clear();}
+        entities.clear();boxes.clear(); World world=plugin.getServer().getWorld(worldId);
+        if(world!=null) for(long chunk:chunks) PaperChunkTickets.release(plugin,world,(int)chunk,(int)(chunk>>32));
+        chunks.clear();
+    }
+    public int size(){return boxes.size();}
+    public String diagnostics() {
+        return "deathboxes="+boxes.size()+" "+boxes.values().stream().map(v->"id="+v.box.id()+" dead="+v.box.deceasedName()+" location="+v.box.location()+" stacks="+Arrays.stream(v.inventory.getContents()).filter(Objects::nonNull).filter(i->!i.getType().isAir()).count()).toList();
+    }
+    public static final class View implements InventoryHolder {
+        public final PaperDeathBoxes owner; public final DeathBox box; public final Inventory inventory;
+        boolean valid=true; List<UUID> visuals=List.of();
+        View(PaperDeathBoxes owner,DeathBox box) { this.owner=owner;this.box=box;inventory=Bukkit.createInventory(this,54,I18n.shared("death.inventory","死亡物资箱：{0}","Death supplies: {0}",UiText.value(box.deceasedName())).color(UiText.BRAND)); }
+        @Override public Inventory getInventory() { return inventory; }
+    }
+}

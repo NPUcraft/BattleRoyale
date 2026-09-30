@@ -1,42 +1,42 @@
-name: LastSector
+name: BattleRoyale
 version: '${version}'
-main: com.npucraft.lastsector.LastSectorPlugin
-api-version: '1.21.8'
+main: com.npucraft.battleroyale.BattleRoyalePlugin
+api-version: '26.2'
 description: Multiplayer battle royale with safe map authoring and release diagnostics - Milestone 9
 load: POSTWORLD
 commands:
-  lastsector:
-    description: LastSector administration
-    aliases: [ls]
-    usage: /lastsector help
+  battleroyale:
+    description: BattleRoyale administration
+    aliases: [br]
+    usage: /battleroyale help
 permissions:
-  lastsector.command:
+  battleroyale.command:
     description: Access help and version
     default: true
-  lastsector.admin:
+  battleroyale.admin:
     description: Access reload and debug
     default: op
     children:
-      lastsector.command: true
-      lastsector.play: true
-      lastsector.admin.map: true
-      lastsector.admin.config: true
-      lastsector.admin.cosmetic: true
-      lastsector.admin.diagnostics: true
-  lastsector.play:
+      battleroyale.command: true
+      battleroyale.play: true
+      battleroyale.admin.map: true
+      battleroyale.admin.config: true
+      battleroyale.admin.cosmetic: true
+      battleroyale.admin.diagnostics: true
+  battleroyale.play:
     description: List, join and leave waiting rooms
     default: true
 
-  lastsector.admin.map:
+  battleroyale.admin.map:
     description: Map editor, validation and maintenance
     default: op
-  lastsector.admin.config:
+  battleroyale.admin.config:
     description: Configuration diagnostics and backups
     default: op
-  lastsector.admin.cosmetic:
+  battleroyale.admin.cosmetic:
     description: Cosmetic grants and purchase diagnostics
     default: op
-  lastsector.admin.diagnostics:
+  battleroyale.admin.diagnostics:
     description: Diagnostics and support bundles
     default: op
 

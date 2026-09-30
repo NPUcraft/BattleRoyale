@@ -21,6 +21,8 @@ logs/
 *.sqlite3-wal
 *.sqlite3-shm
 .run/
+# Local MCSManager operations toolkit contains private credentials and server snapshots.
+tools/
 server/
 test-server/
 paper-server/
