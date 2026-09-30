@@ -157,8 +157,19 @@ public final class Rc8LobbyProbe {
             require(Objects.equals(objective.numberFormat(),NumberFormat.blank()),"Native blank number format hides score numbers");
             int count=0;for(String entry:viewer.scoreboard.getEntries())if(objective.getScore(entry).isScoreSet())count++;require(count==5,"Exactly five actual sidebar scores");
             require(page.lines().stream().map(Rc8LobbyProbe::plain).anyMatch(value->value.contains("Duo  4/24 · 12s")),"Compact countdown with English default room");
+            var owned=viewer.scoreboard;var teamsBefore=new TreeMap<String,Set<String>>();var scoresBefore=new TreeMap<String,Integer>();
+            for(var team:owned.getTeams())teamsBefore.put(team.getName(),Set.copyOf(team.getEntries()));
+            for(String entry:owned.getEntries())if(objective.getScore(entry).isScoreSet())scoresBefore.put(entry,objective.getScore(entry).getScore());
             viewer.locale=Locale.TRADITIONAL_CHINESE;controller.update(viewer.player,true,LobbySidebarModel.page(rooms,14,0,8,viewer.locale));
-            require(viewer.scoreboard.getObjective(PaperLobbySidebar.OBJECTIVE)==objective&&plain(objective.displayName()).equals("大逃杀"),"Locale refresh reuses owned native scoreboard");
+            require(viewer.scoreboard==owned,"Locale refresh retains the same native Scoreboard");
+            var localized=owned.getObjective(PaperLobbySidebar.OBJECTIVE);require(localized!=null,"Localized objective remains registered");
+            require(owned.getObjectives().size()==1&&localized.getName().equals(PaperLobbySidebar.OBJECTIVE)&&localized.getScoreboard()==owned,"One objective remains registered on the owned board");
+            require(plain(localized.displayName()).equals("大逃杀"),"Chinese default sidebar title; actual="+plain(localized.displayName()));
+            require(localized.getDisplaySlot()==org.bukkit.scoreboard.DisplaySlot.SIDEBAR&&Objects.equals(localized.numberFormat(),NumberFormat.blank()),"Locale refresh keeps native sidebar slot and hidden numbers");
+            var teamsAfter=new TreeMap<String,Set<String>>();var scoresAfter=new TreeMap<String,Integer>();
+            for(var team:owned.getTeams())teamsAfter.put(team.getName(),Set.copyOf(team.getEntries()));
+            for(String entry:owned.getEntries())if(localized.getScore(entry).isScoreSet())scoresAfter.put(entry,localized.getScore(entry).getScore());
+            require(teamsBefore.equals(teamsAfter)&&scoresBefore.equals(scoresAfter),"Locale refresh preserves all team entries and five score values");
             require(plain(viewer.scoreboard.getTeam("br_line_2").prefix()).contains("12秒"),"Chinese countdown in same room row");
             controller.hide(viewer.player);require(viewer.scoreboard==previous,"Original native board restored");require(failures.isEmpty(),"No sidebar controller failures");
         }finally{controller.close();}
