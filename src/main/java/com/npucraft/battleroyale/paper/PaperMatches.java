@@ -138,6 +138,8 @@ public final class PaperMatches implements MatchLifecycle {
         entry.tick++;
         entry.offline.tick(entry.tick,pulse);
         var expected=new HashSet<UUID>();
+        // The border follows the interpolated square on the same interval as the rest of the zone UI.
+        int borderInterval=configuration.settings().zoneUi().bossbarInterval();
         for (var gamePlayer:session.players().values()) {
             UUID id=gamePlayer.playerId(); Player player=plugin.getServer().getPlayer(id);
             if (gamePlayer.state()!=PlayerState.ALIVE || player==null || !player.isOnline() || player.isDead()
@@ -158,7 +160,7 @@ public final class PaperMatches implements MatchLifecycle {
             }
             var at=player.getLocation();var drop=entry.airdrops==null?null:entry.airdrops.navigationTarget(at.getX(),at.getZ()).orElse(null);
             entry.ui.render(player,zone,entry.tick,session.activeCount(),gamePlayer.kills(),session.activeTeamCount(),false,drop);
-            entry.border.apply(player,zone);
+            if(entry.tick%borderInterval==0)entry.border.apply(player,zone);
         }
         for(var presence:spectators.registry().session(session.sessionId())){
             var viewer=plugin.getServer().getPlayer(presence.player());if(viewer==null)continue;

@@ -12,11 +12,12 @@ import java.util.*;
 public final class PaperZoneBorder implements AutoCloseable {
     /** Extra blocks past the damage square: the wall can never hide or replace the ZoneDamage boundary. */
     static final double MARGIN=2;
+    /** Below this the square is considered unchanged, so a waiting circle pushes no updates at all. */
+    static final double EPSILON=.01;
     private final Server server;
     private final WorldBorder border;
     private final Set<UUID> viewers=new HashSet<>();
     private double lastSize=Double.NaN,lastX=Double.NaN,lastZ=Double.NaN;
-    private int animatedStage=-1;
     private final boolean enabled;
     public PaperZoneBorder(Server server,ZoneUiSettings settings) {
         this.server=server; this.enabled=settings.worldBorderEnabled();
@@ -29,29 +30,17 @@ public final class PaperZoneBorder implements AutoCloseable {
     public boolean enabled(){return enabled;}
     public int size(){return viewers.size();}
     public WorldBorder border(){return border;}
-    /** Subscribe a live combatant and keep the shared border tracking the interpolated safe square. */
-    @SuppressWarnings("removal") // Paper 26.2 marks both timed setSize overloads for removal; the single-stage animation is still the cheapest correct motion.
+    /** Subscribe a live combatant and track the interpolated safe square with the absolute-size API only. */
     public void apply(Player player,ZoneRuntime zone) {
         if(!enabled)return;
         Zone current=zone.current();
         // The final collapse has no safe square; the server border is the only sane fallback.
         if(current.halfSize()<=0){restore(player.getUniqueId());return;}
-        if(zone.phase()==ZonePhase.SHRINKING && zone.next()!=null && zone.next().halfSize()>0){
-            // Animate once per stage; re-issuing setSize(size,seconds) every interval would restart the motion.
-            if(animatedStage!=zone.stageIndex()){
-                animatedStage=zone.stageIndex();
-                border.setCenter(zone.next().centerX(),zone.next().centerZ());
-                border.setSize(2*(zone.next().halfSize()+MARGIN),java.util.concurrent.TimeUnit.SECONDS,Math.max(1,Math.round(zone.remainingSeconds())));
-            }
-        } else {
-            // Leaving a shrink stage (or a legacy final closure toward zero) falls back to absolute tracking.
-            animatedStage=-1;
-            double size=2*(current.halfSize()+MARGIN);
-            if(!Double.isFinite(lastSize) || Math.abs(size-lastSize)>=.5
-                    || Math.abs(current.centerX()-lastX)>=.5 || Math.abs(current.centerZ()-lastZ)>=.5){
-                border.setCenter(current.centerX(),current.centerZ());
-                border.setSize(size); lastSize=size; lastX=current.centerX(); lastZ=current.centerZ();
-            }
+        double size=2*(current.halfSize()+MARGIN);
+        if(!Double.isFinite(lastSize) || Math.abs(size-lastSize)>=EPSILON
+                || Math.abs(current.centerX()-lastX)>=EPSILON || Math.abs(current.centerZ()-lastZ)>=EPSILON){
+            border.setCenter(current.centerX(),current.centerZ());
+            border.setSize(size); lastSize=size; lastX=current.centerX(); lastZ=current.centerZ();
         }
         if(viewers.add(player.getUniqueId()))player.setWorldBorder(border);
     }

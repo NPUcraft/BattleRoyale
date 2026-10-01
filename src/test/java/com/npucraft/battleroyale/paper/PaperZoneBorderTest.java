@@ -21,10 +21,10 @@ class PaperZoneBorderTest {
                 List.of(new ZoneProfile.Stage(Duration.ofSeconds(90),Duration.ofSeconds(60),250,1,0,1)));
         return new ZoneRuntime(new Zone(0,0,500),profile,new Random(1),0);
     }
-    private static ZoneRuntime shrinking(){
+    private static ZoneRuntime shrinkingHalfway(){
         var profile=new ZoneProfile("t",List.of(new ZoneProfile.InitialSize(8,500)),
                 List.of(new ZoneProfile.Stage(Duration.ZERO,Duration.ofSeconds(20),250,1,0,1)));
-        var runtime=new ZoneRuntime(new Zone(0,0,500),profile,new Random(1),0);runtime.update(1);return runtime;
+        var runtime=new ZoneRuntime(new Zone(0,0,500),profile,new Random(1),0);runtime.update(10_000_000_000L);return runtime;
     }
     private static ZoneRuntime finalZero(){
         var profile=new ZoneProfile("t",List.of(new ZoneProfile.InitialSize(8,500)),
@@ -46,20 +46,24 @@ class PaperZoneBorderTest {
         assertEquals(1,server.created);assertEquals(1,border.size());
         assertEquals(0,server.border.damageAmount);assertEquals(0,server.border.damageBuffer);
         assertEquals(0,server.border.warningTime);assertEquals(0,server.border.warningDistance);
-        assertEquals(2*(zone.current().halfSize()+PaperZoneBorder.MARGIN),server.border.size,.001);
+        assertEquals(2*(zone.current().halfSize()+PaperZoneBorder.MARGIN),server.border.size.doubleValue(),.001);
         assertEquals(List.of(border.border()),player.borders);
         border.apply(player.player,zone);
         assertEquals(1,player.borders.size());
     }
-    @Test void shrinkStageAnimatesOnceInsteadOfRestartingEveryInterval(){
+    @Test void absoluteTrackingPushesOnlyWhenTheSquareMoves(){
         var server=new ServerRecorder();var player=new PlayerRecorder();
         var border=new PaperZoneBorder(server.server,settings(true));
-        border.apply(player.player,shrinking());
-        assertEquals(2*(250+PaperZoneBorder.MARGIN),server.border.animatedSize.doubleValue(),.001);
-        assertEquals(20L,server.border.animatedSeconds.longValue());
-        assertNull(server.border.size);
-        border.apply(player.player,shrinking());
-        assertNull(server.border.size);
+        var waiting=waiting();
+        border.apply(player.player,waiting);
+        assertEquals(2*(waiting.current().halfSize()+PaperZoneBorder.MARGIN),server.border.size.doubleValue(),.001);
+        assertEquals(1,server.border.sizePushes);
+        border.apply(player.player,waiting);
+        assertEquals(1,server.border.sizePushes);
+        var shrinking=shrinkingHalfway();
+        border.apply(player.player,shrinking);
+        assertEquals(2*(shrinking.current().halfSize()+PaperZoneBorder.MARGIN),server.border.size.doubleValue(),.001);
+        assertEquals(2,server.border.sizePushes);
     }
     @Test void finalCollapseRestoresTheServerBorderInsteadOfCagingAnEmptySquare(){
         var server=new ServerRecorder();var player=new PlayerRecorder();var zone=finalZero();
@@ -83,13 +87,13 @@ class PaperZoneBorderTest {
         assertEquals(2,player.borders.size());
     }
     private static final class BorderRecorder {
-        Double size,centerX,centerZ,animatedSize;Long animatedSeconds;
+        Double size,centerX,centerZ;int sizePushes;
         double damageAmount=-1,damageBuffer=-1;int warningTime=-1,warningDistance=-1;
     }
     private static final class ServerRecorder {
         final BorderRecorder border=new BorderRecorder();
         final WorldBorder worldBorder=(WorldBorder)Proxy.newProxyInstance(WorldBorder.class.getClassLoader(),new Class<?>[]{WorldBorder.class},(proxy,method,args)-> switch (method.getName()) {
-            case "setSize" -> { if(args.length==1)border.size=(Double)args[0];else{border.animatedSize=(Double)args[0];border.animatedSeconds=(Long)args[2];} yield null; }
+            case "setSize" -> { if(args.length!=1)throw new AssertionError("Timed setSize must not be used");border.size=(Double)args[0];border.sizePushes++;yield null; }
             case "setCenter" -> { border.centerX=(Double)args[0];border.centerZ=(Double)args[1];yield null; }
             case "setDamageAmount" -> { border.damageAmount=(Double)args[0];yield null; }
             case "setDamageBuffer" -> { border.damageBuffer=(Double)args[0];yield null; }
