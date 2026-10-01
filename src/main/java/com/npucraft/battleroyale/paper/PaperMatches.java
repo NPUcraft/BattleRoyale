@@ -65,6 +65,7 @@ public final class PaperMatches implements MatchLifecycle {
         // can be copied by selected regions. All later shrinking and spawn planning use this square.
         session.initialZone(profile.initialZone(session.selectedMap().orElseThrow(),session.players().size(),random,session.initialRegionId().orElse(null)));
         Entry entry=new Entry(session,profile,new PaperZoneUi(plugin.getServer(),configuration.settings().zoneUi()));entries.put(session.sessionId(),entry);
+        entry.border=new PaperZoneBorder(plugin.getServer(),configuration.settings().zoneUi());
         entry.preparationUi=new PaperPreparationUi(plugin.getServer(),scheduler,clock,session.players().keySet(),()->preparationStatus(entry));
         if(progression!=null)entry.progress=new com.npucraft.battleroyale.progression.SessionProgress(session.teams().keySet(),progression.freeze(session.players().keySet()));
         entry.offline=new PaperOfflineBodies(plugin,entry,configuration.settings().disconnect(),clock,bodySnapshots,messages,id->{isolation.defer(session.sessionId(),id);isolation.retry(id);});
@@ -129,35 +130,47 @@ public final class PaperMatches implements MatchLifecycle {
         if(entry.horses!=null)entry.horses.tick(zone,now);
         if(entry.loot!=null)entry.loot.tickSupplies();
         boolean pulse=entry.damagePulse.due(now);
+        if(pulse)entry.feedbackPulses++;
         if (!entry.protectionExpired && !session.protection().orElseThrow().active(now)) {
             entry.protectionExpired=true;
             players.notify(session.players().keySet(),"protection-ended");
         }
         entry.tick++;
         entry.offline.tick(entry.tick,pulse);
+        var expected=new HashSet<UUID>();
         for (var gamePlayer:session.players().values()) {
             UUID id=gamePlayer.playerId(); Player player=plugin.getServer().getPlayer(id);
             if (gamePlayer.state()!=PlayerState.ALIVE || player==null || !player.isOnline() || player.isDead()
                     || !player.getWorld().getName().equals(session.gameWorld().orElseThrow().worldName())) {
-                entry.ui.detach(id); continue;
+                // No per-tick detach: the retain sweep below removes only viewers that stopped rendering, so a
+                // spectator transition never fights the per-interval render.
+                entry.border.restore(id);
+                if(player!=null)ZoneDamageFeedback.clear(player);
+                continue;
             }
+            expected.add(id);
             if (player.getFireTicks()<=0) entry.hazards.burning(id,null);
             if (pulse) {
                 var location=player.getLocation();
                 double amount=ZoneDamage.amount(zone.current(),location.getX(),location.getZ(),zone.stage());
-                if (amount>0) entry.combat.zone(id,()->applyZoneDamage(player,new ZoneDamage.Context(session.sessionId(),zone.stageIndex(),
+                if (amount>0) entry.combat.zone(id,()->applyZoneDamage(entry,player,new ZoneDamage.Context(session.sessionId(),zone.stageIndex(),
                         zone.current().distanceOutside(location.getX(),location.getZ()),amount)));
             }
-            if (!player.isDead()) {
-                var at=player.getLocation();var drop=entry.airdrops==null?null:entry.airdrops.navigationTarget(at.getX(),at.getZ()).orElse(null);
-                entry.ui.render(player,zone,entry.tick,session.activeCount(),gamePlayer.kills(),session.activeTeamCount(),false,drop);
-            }
+            var at=player.getLocation();var drop=entry.airdrops==null?null:entry.airdrops.navigationTarget(at.getX(),at.getZ()).orElse(null);
+            entry.ui.render(player,zone,entry.tick,session.activeCount(),gamePlayer.kills(),session.activeTeamCount(),false,drop);
+            entry.border.apply(player,zone);
         }
-        for(var presence:spectators.registry().session(session.sessionId())){var viewer=plugin.getServer().getPlayer(presence.player());if(viewer!=null)entry.ui.render(viewer,zone,entry.tick,session.activeCount(),0,session.activeTeamCount(),true);}
+        for(var presence:spectators.registry().session(session.sessionId())){
+            var viewer=plugin.getServer().getPlayer(presence.player());if(viewer==null)continue;
+            expected.add(viewer.getUniqueId());
+            entry.ui.render(viewer,zone,entry.tick,session.activeCount(),0,session.activeTeamCount(),true);
+        }
+        entry.ui.retain(expected);
     }
-    private void applyZoneDamage(Player player,ZoneDamage.Context context) {
+    private void applyZoneDamage(Entry entry,Player player,ZoneDamage.Context context) {
         double max=Objects.requireNonNull(player.getAttribute(Attribute.MAX_HEALTH)).getValue();
         player.setHealth(ZoneDamage.healthAfter(player.getHealth(),max,context.amount()));
+        ZoneDamageFeedback.apply(player,entry.feedbackPulses);
     }
     public Optional<Entry> protectedPlayer(UUID id) {
         return entries.values().stream().filter(e -> e.session.state()==GameState.RUNNING
@@ -179,6 +192,7 @@ public final class PaperMatches implements MatchLifecycle {
     public void recover(GameSession session,com.npucraft.battleroyale.recovery.SessionRecoverySnapshot saved,Consumer<Throwable> failed) {
         var profile=configuration.zoneProfiles().stream().filter(p->p.id().equals(session.room().zoneProfileId())).findFirst().orElseThrow();
         Entry entry=new Entry(session,profile,new PaperZoneUi(plugin.getServer(),configuration.settings().zoneUi()));entries.put(session.sessionId(),entry);
+        entry.border=new PaperZoneBorder(plugin.getServer(),configuration.settings().zoneUi());
         var world=Objects.requireNonNull(plugin.getServer().getWorld(session.gameWorld().orElseThrow().worldName()));entry.worldId=world.getUID();entry.recoveredLootComplete=true;
         sanitizer.recover(world,session.sessionId(),saved.sanitizedBlocks(),saved.sanitizedEntities(),failed);
         long now=clock.nanoTime();restoreZone(session,saved,profile,random,now);
@@ -267,12 +281,15 @@ public final class PaperMatches implements MatchLifecycle {
         if(spectators.registry().find(player).isPresent())throw new IllegalStateException("请先退出观战。");
         if(isolation.blocked(player)) throw new IllegalStateException("请等待上一局的玩家状态恢复完成后再加入。");
     }
-    @Override public void restore(GameSession session) { spectators.cleanup(session);var entry=entries.get(session.sessionId());if(entry!=null){if(entry.preparationUi!=null)entry.preparationUi.close();if(entry.flight!=null)entry.flight.stop();if(entry.offline!=null)entry.offline.close();}isolation.end(session.sessionId()); }
+    @Override public void restore(GameSession session) { spectators.cleanup(session);var entry=entries.get(session.sessionId());if(entry!=null){if(entry.border!=null)entry.border.restoreAll();if(entry.preparationUi!=null)entry.preparationUi.close();if(entry.flight!=null)entry.flight.stop();if(entry.offline!=null)entry.offline.close();}isolation.end(session.sessionId()); }
     @Override public void leaveEnding(GameSession session,UUID player){
         Entry entry=entries.get(session.sessionId());
         if(entry==null||entry.session!=session||session.state()!=GameState.ENDING||session.outcome().isEmpty()||!session.players().containsKey(player))throw new IllegalStateException("只能在比赛结束后的展示阶段提前返回大厅。");
         if(!recoveryReady.getAsBoolean()||!storageHealthy.getAsBoolean())throw new IllegalStateException("恢复或存储暂未就绪，请稍后再返回大厅。");
         EndingReturnPolicy.require(session,player,entry.resultDurable);
+        // World-border restore point: an early return must never carry the match edge into the lobby.
+        if(entry.border!=null)entry.border.restore(player);
+        Player leaving=plugin.getServer().getPlayer(player);if(leaving!=null)ZoneDamageFeedback.clear(leaving);
         if(!spectators.leave(player,false)){entry.ui.detach(player);isolation.defer(session.sessionId(),player);isolation.retry(player);}
         celebrations.detach(player);
     }
@@ -357,6 +374,7 @@ public final class PaperMatches implements MatchLifecycle {
         public boolean inWorld(UUID world) {return world.equals(worldId);}
         final ZoneProfile profile;
         final PaperZoneUi ui;
+        PaperZoneBorder border;
         SpawnPreparation preparation;
         PaperPreparationUi preparationUi;
         PaperFlightDeployment flight;
@@ -369,10 +387,11 @@ public final class PaperMatches implements MatchLifecycle {
         SessionLoop task;
         DamagePulse damagePulse;
         long tick;
+        long feedbackPulses;
         boolean protectionExpired;
         boolean recoveredLootComplete;
         Entry(GameSession session,ZoneProfile profile,PaperZoneUi ui) { this.session=session; this.profile=profile; this.ui=ui; }
-        void stopLoop() { if(preparationUi!=null)preparationUi.close();if(flight!=null)flight.stop();if(task!=null) task.close();if(airdrops!=null)airdrops.close();if(horses!=null)horses.close();ui.close(); hazards.clear(); }
+        void stopLoop() { if(preparationUi!=null)preparationUi.close();if(flight!=null)flight.stop();if(task!=null) task.close();if(airdrops!=null)airdrops.close();if(horses!=null)horses.close();if(border!=null)border.close();ui.close(); hazards.clear(); }
         void closeCombat() {if(showcase!=null)showcase.close();if(combat!=null)combat.close();}
     }
 }

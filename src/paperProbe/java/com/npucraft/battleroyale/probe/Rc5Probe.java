@@ -87,7 +87,7 @@ public final class Rc5Probe {
             case "spawnParticle"->{
                 Particle type=(Particle)args[0];particles.add(type);require(((Integer)args[4])==1,"Single particle per sample");
                 double x=(Double)args[1],y=(Double)args[2],z=(Double)args[3];
-                if(type==Particle.DUST){var dust=(Particle.DustOptions)args[9];require(dust.getColor().asRGB()==Color.fromRGB(255,62,85).asRGB(),"Red boundary dust color");world.spawnParticle(type,x,y,z,1,0,0,0,0,dust);}
+                if(type==Particle.DUST){var dust=(Particle.DustOptions)args[9];require(dust.getColor().asRGB()==Color.fromRGB(80,170,255).asRGB(),"Blue boundary dust color");world.spawnParticle(type,x,y,z,1,0,0,0,0,dust);}
                 else{require(type==Particle.END_ROD,"Bright outline particle");world.spawnParticle(type,x,y,z,1,0,0,0,0);}
                 yield null;
             }

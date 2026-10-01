@@ -113,6 +113,28 @@ class PaperZoneUiTest {
         ui.render(viewer.player,zone(),5,2,0,1,true); assertEquals(12,viewer.particles.size());
         assertTrue(viewer.messages.isEmpty());
     }
+    @Test void scaledStageTargetRoundsSideLengthAndHidesFloatNoise(){
+        // 600/750*500 is a repeating binary fraction; the displayed side length must still read as an integer.
+        var profile=new ZoneProfile("scaled",List.of(new ZoneProfile.InitialSize(8,500)),
+                List.of(new ZoneProfile.Stage(Duration.ofSeconds(10),Duration.ofSeconds(20),600,1,0,1)),750,Map.of());
+        var runtime=new ZoneRuntime(new Zone(0,0,500),profile,new Random(1),0);
+        String text=TEXT.serialize(PaperZoneUi.bossbarMessage(runtime,8,0,4,false,0,0));
+        assertTrue(text.contains("下圈面积 800² ㎡"),text);assertFalse(text.contains("800.0"),text);
+    }
+    @Test void retainDetachesOnlyViewersThatStoppedRenderingSoSpectatorTransitionDoesNotFlicker(){
+        var viewer=new Viewer(Locale.ENGLISH);
+        var settings=new ZoneUiSettings(true,5,false,"END_ROD",5,64,2.5,1.5,3,6,20,true,5,true);
+        var ui=new PaperZoneUi(viewer.server(),settings);var runtime=zone();
+        ui.render(viewer.player,runtime,0,8,0,4,false,null);
+        assertEquals(1,ui.size());assertEquals(1,viewer.shown.size());
+        // The spectator tick keeps rendering the same owner, so nothing may be hidden and nothing re-created.
+        ui.render(viewer.player,runtime,5,2,0,1,true);ui.retain(Set.of(viewer.id));
+        assertTrue(viewer.hidden.isEmpty());assertEquals(1,viewer.shown.size());
+        ui.retain(Set.of(viewer.id));assertTrue(viewer.hidden.isEmpty());
+        // Only a viewer that left the render set is detached, exactly once.
+        ui.retain(Set.of());assertEquals(1,viewer.hidden.size());assertEquals(0,ui.size());
+        ui.close();
+    }
     /** API-call recorder, not a real client: unexpected inventory or world-border writes fail immediately. */
     private static final class Viewer {
         final UUID id=UUID.randomUUID();

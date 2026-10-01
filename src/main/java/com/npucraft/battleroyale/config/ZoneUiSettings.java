@@ -3,14 +3,22 @@ package com.npucraft.battleroyale.config;
 public record ZoneUiSettings(boolean bossbarEnabled, int bossbarInterval, boolean wallEnabled, String particle,
         int wallInterval, double viewDistance, double spacing, double verticalSpacing,
         double below, double above, int maximumParticles,
-        boolean navigationEnabled, int navigationInterval, boolean coloredWall) {
-    public static final ZoneUiSettings DEFAULT = new ZoneUiSettings(true,5,true,"END_ROD",5,64,2.5,1.5,3,6,300,true,5,true);
+        boolean navigationEnabled, int navigationInterval, boolean coloredWall, boolean worldBorderEnabled) {
+    public static final ZoneUiSettings DEFAULT = new ZoneUiSettings(true,5,true,"END_ROD",5,64,2.5,1.5,3,6,300,true,5,true,true);
+
+    /** Existing configuration call sites keep compiling; the per-player world border defaults on. */
+    public ZoneUiSettings(boolean bossbarEnabled,int bossbarInterval,boolean wallEnabled,String particle,
+            int wallInterval,double viewDistance,double spacing,double verticalSpacing,double below,double above,int maximumParticles,
+            boolean navigationEnabled,int navigationInterval,boolean coloredWall) {
+        this(bossbarEnabled,bossbarInterval,wallEnabled,particle,wallInterval,viewDistance,spacing,verticalSpacing,
+                below,above,maximumParticles,navigationEnabled,navigationInterval,coloredWall,true);
+    }
 
     /** Existing configurations gain navigation and colored edges without requiring a migration. */
     public ZoneUiSettings(boolean bossbarEnabled,int bossbarInterval,boolean wallEnabled,String particle,
             int wallInterval,double viewDistance,double spacing,double verticalSpacing,double below,double above,int maximumParticles) {
         this(bossbarEnabled,bossbarInterval,wallEnabled,particle,wallInterval,viewDistance,spacing,verticalSpacing,
-                below,above,maximumParticles,true,5,true);
+                below,above,maximumParticles,true,5,true,true);
     }
 
     public ZoneUiSettings {
