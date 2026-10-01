@@ -140,6 +140,24 @@ class RoomRuntimeServiceTest {
         assertEquals(GameState.RUNNING, b.state());
         assertTrue(worlds.released.stream().noneMatch(world -> world.sessionId().equals(b.sessionId())));
     }
+    @Test void runningMatchIsOfferedForExternalSpectatingAndWaitingRoomIsNot() {
+        runtime.join(alice, "a"); runtime.debugStart("a"); worlds.succeed(session("a").sessionId());
+        assertEquals(GameState.RUNNING, session("a").state());
+        assertTrue(runtime.spectatable("a").isPresent());
+        assertEquals(session("a").sessionId(), runtime.spectatorMatch().orElseThrow().sessionId());
+        runtime.join(bob, "b");
+        assertTrue(runtime.spectatable("b").isEmpty());
+    }
+    @Test void roomsThatDisallowExternalSpectatorsAreNeverOffered() {
+        var isolatedWorlds = new TestSupport.Worlds();
+        var custom = List.of(new RoomDefinition("c", "c", 1, 3, 1, java.time.Duration.ZERO, List.of("city"), "default", "default", false, java.time.Duration.ofSeconds(3)));
+        var snapshot = new ConfigurationSnapshot(new PluginSettings(false, "sqlite", "auto", Path.of("runtime")), custom, List.of(TestSupport.map(Path.of("city"))), List.of());
+        var isolated = new RoomRuntimeService(() -> snapshot, new SessionManager(), new TestSupport.Scheduler(), MapSelector.random(new Random(3)), isolatedWorlds, players, Clock.systemUTC(), players.matches());
+        isolated.join(alice, "c"); isolated.debugStart("c"); isolatedWorlds.succeed(isolated.session("c").orElseThrow().sessionId());
+        assertEquals(GameState.RUNNING, isolated.session("c").orElseThrow().state());
+        assertTrue(isolated.spectatable("c").isEmpty());
+        assertTrue(isolated.spectatorMatch().isEmpty());
+    }
     @Test void waitingDisconnectLeavesButActiveDisconnectRetainsUuid() {
         runtime.join(alice, "a"); runtime.join(bob, "a"); runtime.disconnected(bob);
         assertEquals(GameState.WAITING, session("a").state());

@@ -4,6 +4,12 @@ config-version: 2
 # 已有配置缺少 structure 时不会自动施工。首次施工前会备份受控范围内的非空气方块。
 # 地板层为 center.y，出生点为 center.y + 1；施工范围为半径32格、y-3 至 y+10。
 # READY 标记存在后绝不自动重建；管理员可临时打开 allow-admin-build 装修。
+# 大厅环境：固定晴天与固定白天，只作用于大厅世界，不影响对局世界。
+# fixed-time 6000 是游戏内正午（0 日出、6000 正午、12000 日落），为最明亮的白天时刻。
+environment:
+  enabled: true
+  fixed-time: 6000
+  clear-weather: true
 structure:
   enabled: false
   world: battleroyale_lobby

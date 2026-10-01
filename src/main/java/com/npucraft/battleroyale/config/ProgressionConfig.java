@@ -9,14 +9,14 @@ import java.time.ZoneId;
 import java.util.*;
 public record ProgressionConfig(RankingSettings ranking,Map<String,CosmeticDefinition> cosmetics,
                                 Map<String,MenuItem> menu,Map<String,String> titles,List<String> economyPriority,
-                                String currency,boolean shopEnabled,LobbySettings lobbySettings,LobbySidebarSettings sidebarSettings) {
+                                String currency,boolean shopEnabled,LobbySettings lobbySettings,LobbySidebarSettings sidebarSettings,LobbyEnvironmentSettings environmentSettings) {
     public ProgressionConfig(RankingSettings ranking,Map<String,CosmeticDefinition> cosmetics,Map<String,MenuItem> menu,
             Map<String,String> titles,List<String> economyPriority,String currency,boolean shopEnabled) {
-        this(ranking,cosmetics,menu,titles,economyPriority,currency,shopEnabled,LobbySettings.DEFAULT,LobbySidebarSettings.DEFAULT);
+        this(ranking,cosmetics,menu,titles,economyPriority,currency,shopEnabled,LobbySettings.DEFAULT,LobbySidebarSettings.DEFAULT,LobbyEnvironmentSettings.DEFAULT);
     }
     public ProgressionConfig(RankingSettings ranking,Map<String,CosmeticDefinition> cosmetics,Map<String,MenuItem> menu,
             Map<String,String> titles,List<String> economyPriority,String currency,boolean shopEnabled,LobbySettings lobbySettings) {
-        this(ranking,cosmetics,menu,titles,economyPriority,currency,shopEnabled,lobbySettings,LobbySidebarSettings.DEFAULT);
+        this(ranking,cosmetics,menu,titles,economyPriority,currency,shopEnabled,lobbySettings,LobbySidebarSettings.DEFAULT,LobbyEnvironmentSettings.DEFAULT);
     }
     public record MenuItem(int slot,Material material,String name,List<String> lore) {public MenuItem {lore=List.copyOf(lore);}}
     public ProgressionConfig {cosmetics=Map.copyOf(cosmetics);menu=Map.copyOf(menu);titles=Map.copyOf(titles);economyPriority=List.copyOf(economyPriority);}
@@ -54,7 +54,7 @@ public record ProgressionConfig(RankingSettings ranking,Map<String,CosmeticDefin
         var titles=new HashMap<String,String>();for(String name:List.of("rooms","profile","leaderboard","shop","cosmetics","confirmation"))titles.put(name,Objects.requireNonNull(lobby.getString("titles."+name)));
         var priority=config.getStringList("economy.auto-priority");if(priority.isEmpty())priority=List.of("coinsengine","excellenteconomy","vault");
         if(new HashSet<>(priority).size()!=priority.size() || !Set.of("coinsengine","excellenteconomy","vault").containsAll(priority))throw new IllegalArgumentException("Invalid economy priority");
-        return new ProgressionConfig(settings,definitions,menu,titles,priority,config.getString("economy.currency","coins"),config.getBoolean("economy.shop-enabled",true),LobbySettings.load(lobby),LobbySidebarSettings.load(lobby));
+        return new ProgressionConfig(settings,definitions,menu,titles,priority,config.getString("economy.currency","coins"),config.getBoolean("economy.shop-enabled",true),LobbySettings.load(lobby),LobbySidebarSettings.load(lobby),LobbyEnvironmentSettings.load(lobby));
     }
     private static int integer(Object value,String path) {
         if(!(value instanceof Number))throw new IllegalArgumentException(path+" must be an integer");

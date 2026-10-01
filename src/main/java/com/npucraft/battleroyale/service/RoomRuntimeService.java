@@ -90,6 +90,16 @@ public final class RoomRuntimeService implements AutoCloseable {
     public List<RoomDefinition> rooms() { return configuration.get().rooms(); }
     public Optional<GameSession> session(String room) { return sessions.findByRoom(room); }
     public Optional<GameSession> participant(UUID id){return Optional.ofNullable(memberships.get(id)).flatMap(sessions::find);}
+    /** A running match that explicitly accepts external spectators, used to route mid-match joins. */
+    public Optional<GameSession> spectatable(String roomId){
+        var session=session(roomId).orElse(null);
+        return session!=null && session.state()==GameState.RUNNING && session.room().allowExternalSpectators() ? Optional.of(session) : Optional.empty();
+    }
+    /** First running spectator match, used as the auto-join fallback when no room can be queued. */
+    public Optional<GameSession> spectatorMatch(){
+        return rooms().stream().map(room->session(room.id())).flatMap(Optional::stream)
+                .filter(session->session.state()==GameState.RUNNING&&session.room().allowExternalSpectators()).findFirst();
+    }
     public int remaining(GameSession session) {
         Countdown countdown = countdowns.get(session.sessionId());
         return countdown == null ? -1 : countdown.remaining;

@@ -95,6 +95,7 @@ public final class PluginRuntime implements AutoCloseable {
         plugin.getServer().getPluginManager().registerEvents(new com.npucraft.battleroyale.listener.SpectatorListener(this),plugin);
         plugin.getServer().getPluginManager().registerEvents(new com.npucraft.battleroyale.listener.OfflineBodyListener(this),plugin);
         plugin.getServer().getPluginManager().registerEvents(new com.npucraft.battleroyale.listener.PreparationFreezeListener(this),plugin);
+        plugin.getServer().getPluginManager().registerEvents(new com.npucraft.battleroyale.listener.StorageGuardListener(plugin,this),plugin);
         mobLoot=new PaperMobLoot(plugin,this);
     }
     public RoomRuntimeService rooms() { return rooms; }

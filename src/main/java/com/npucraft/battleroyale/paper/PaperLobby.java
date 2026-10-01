@@ -6,6 +6,7 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import com.npucraft.battleroyale.config.ProgressionConfig;
 import com.npucraft.battleroyale.config.LobbySettings;
+import com.npucraft.battleroyale.config.LobbyEnvironmentSettings;
 import com.npucraft.battleroyale.progression.*;
 import com.npucraft.battleroyale.cosmetic.*;
 import org.bukkit.*;
@@ -31,12 +32,15 @@ public final class PaperLobby implements Listener, AutoCloseable {
     private PaperLobbySidebar sidebar;
     private final PaperRegionVoteMenu regionVoting;
     private com.npucraft.battleroyale.config.LobbySidebarSettings sidebarSettings=com.npucraft.battleroyale.config.LobbySidebarSettings.DEFAULT;
-    private String sidebarWorld;
+    private LobbyEnvironmentSettings environmentSettings=LobbyEnvironmentSettings.DEFAULT;
+    private String sidebarWorld,environmentWorld;
+    private World environmentApplied;
     private final long sidebarStarted=System.nanoTime();
     public void configure(ProgressionConfig config,String lobbyWorld) {
         if(dataBoard!=null)dataBoard.reconfigure(config.lobbySettings());
         if(structure!=null)structure.close();
         settings=config.lobbySettings();sidebarSettings=config.sidebarSettings();sidebarWorld=lobbyWorld;
+        environmentSettings=config.environmentSettings();environmentWorld=lobbyWorld;
         if(sidebar==null)sidebar=new PaperLobbySidebar(plugin.getServer().getScoreboardManager(),sidebarSettings,
                 error->plugin.getLogger().log(java.util.logging.Level.WARNING,"大厅侧边栏更新失败，已保留其他计分板",error));
         else sidebar.configure(sidebarSettings);
@@ -53,8 +57,22 @@ public final class PaperLobby implements Listener, AutoCloseable {
         try {
             if(room.equals("rooms")){command(player,"rooms",null);return;}
             if(!player.hasPermission("battleroyale.play"))throw new IllegalStateException(I18n.text(player,"你没有进入比赛的权限。","You do not have permission to join a match."));
-            requireLobby(player);runtime.rooms().join(player.getUniqueId(),room);showQueueExit(player);player.closeInventory();
+            requireLobby(player);joinOrSpectate(player,room);
         }catch(RuntimeException error){player.sendMessage(UiText.error(I18n.error(player,error.getMessage())));}
+    }
+    /** A room still accepting players is queued; a running match that allows external spectators is watched. */
+    private void joinOrSpectate(Player player,String room){
+        var match=runtime.rooms().spectatable(room);
+        if(match.isPresent()){runtime.spectators().external(player,match.get());return;}
+        runtime.rooms().join(player.getUniqueId(),room);showQueueExit(player);player.closeInventory();
+    }
+    private void autojoinOrSpectate(Player player){
+        try{runtime.rooms().autojoin(player.getUniqueId());}
+        catch(IllegalStateException noJoinable){
+            if(runtime.rooms().participant(player.getUniqueId()).isPresent())throw noJoinable;
+            runtime.spectators().external(player,runtime.rooms().spectatorMatch().orElseThrow(()->noJoinable));return;
+        }
+        showQueueExit(player);
     }
     @EventHandler(priority=EventPriority.MONITOR)public void joined(PlayerJoinEvent event){
         lobby.remove(event.getPlayer().getUniqueId());
@@ -76,6 +94,7 @@ public final class PaperLobby implements Listener, AutoCloseable {
     }
     public void tick() {
         lobby.removeIf(id->plugin.getServer().getPlayer(id)==null);
+        environment();
         for(var player:plugin.getServer().getOnlinePlayers())regionVoting.tick(player);
         // Visibility cleanup always runs, including bootstrap, profile loading and lobby-build failure.
         sidebarTick();
@@ -114,6 +133,20 @@ public final class PaperLobby implements Listener, AutoCloseable {
                 particlesRemaining-=3;player.spawnParticle(Particle.valueOf(definition.effectConfig().getOrDefault("particle","END_ROD")),player.getLocation().add(0,.5,0),3,.2,.2,.2,0);
             }
         }
+    }
+    /** Lobby-only contract: fixed bright daylight and no weather. Never touches a match world. */
+    private void environment(){
+        if(!environmentSettings.enabled()||environmentWorld==null)return;
+        World world=plugin.getServer().getWorld(environmentWorld);if(world==null)return;
+        boolean fresh=world!=environmentApplied;environmentApplied=world;
+        // Corrections are only written when the value actually drifted, so no per-second packets are sent.
+        if(fresh||Boolean.TRUE.equals(world.getGameRuleValue(GameRules.ADVANCE_TIME)))world.setGameRule(GameRules.ADVANCE_TIME,false);
+        if(fresh||Boolean.TRUE.equals(world.getGameRuleValue(GameRules.ADVANCE_WEATHER)))world.setGameRule(GameRules.ADVANCE_WEATHER,false);
+        if(environmentSettings.clearWeather()){
+            if(fresh||world.hasStorm())world.setStorm(false);
+            if(fresh||world.isThundering())world.setThundering(false);
+        }
+        if(fresh||world.getTime()!=environmentSettings.fixedTime())world.setTime(environmentSettings.fixedTime());
     }
     private void sidebarTick(){
         if(sidebar==null)return;
@@ -187,7 +220,7 @@ public final class PaperLobby implements Listener, AutoCloseable {
         data().check(player.getUniqueId());
         switch(action) {
             case "rooms" -> rooms(player,0);
-            case "autojoin" -> {runtime.rooms().autojoin(player.getUniqueId());showQueueExit(player);}
+            case "autojoin" -> autojoinOrSpectate(player);
             case "profile" -> profile(player);
             case "leaderboard" -> board(player,new LeaderboardRepository.Query(LeaderboardRepository.Scope.LIFETIME,"",argument==null?LeaderboardRepository.Metric.RATING:LeaderboardRepository.Metric.valueOf(argument.toUpperCase(Locale.ROOT)),0,36));
             case "shop" -> shop(player,false,null,0);
@@ -300,11 +333,12 @@ public final class PaperLobby implements Listener, AutoCloseable {
         for(var room:all.subList(Math.min(page*45,all.size()),Math.min(page*45+45,all.size()))) {
             var session=runtime.rooms().session(room.id()).orElse(null);String state=session==null?"WAITING":session.state().name();int count=session==null?0:session.players().size();
             boolean joinable=Set.of("WAITING","COUNTDOWN").contains(state)&&count<room.maxPlayers();
+            boolean spectatable=session!=null&&"RUNNING".equals(state)&&room.allowExternalSpectators();
             String pending=I18n.text(player,"等待抽取","Pending selection");
-            menu.put(index++,joinable?Material.LIME_CONCRETE:Material.RED_CONCRETE,LobbyText.defaultLabel(player,room.displayName()),List.of(
+            menu.put(index++,joinable?Material.LIME_CONCRETE:spectatable?Material.LIGHT_BLUE_CONCRETE:Material.RED_CONCRETE,LobbyText.defaultLabel(player,room.displayName()),List.of(
                     I18n.text(player,"状态：%s","Status: %s",I18n.state(player,state)),I18n.text(player,"人数：%s / %s","Players: %s / %s",count,room.maxPlayers()),
                     I18n.text(player,"每队人数：%s","Team size: %s",room.teamSize()),I18n.text(player,"地图：%s","Map: %s",session==null?pending:session.selectedMap().map(m->m.displayName()).orElse(pending)),
-                    I18n.text(player,joinable?"点击加入比赛":"暂时无法加入",joinable?"Click to join":"Unavailable right now")),()->{runtime.rooms().join(player.getUniqueId(),room.id());showQueueExit(player);player.closeInventory();});
+                    I18n.text(player,joinable?"点击加入比赛":spectatable?"点击观战":"暂时无法加入",joinable?"Click to join":spectatable?"Click to spectate":"Unavailable right now")),()->joinOrSpectate(player,room.id()));
         }
         if(page>0)menu.put(51,Material.ARROW,I18n.text(player,"上一页","Previous page"),List.of(),()->rooms(player,page-1));
         if((page+1)*45<all.size())menu.put(53,Material.ARROW,I18n.text(player,"下一页","Next page"),List.of(),()->rooms(player,page+1));
