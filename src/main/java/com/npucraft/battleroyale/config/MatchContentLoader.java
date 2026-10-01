@@ -96,7 +96,22 @@ public final class MatchContentLoader {
             var n=section(lootConfig,"horses");
             horses=new HorseSettings(bool(n,"enabled"),integer(n,"max-per-session"),integer(n,"interval-seconds"),integer(n,"max-attempts"),number(n,"min-distance"));
         }
-        return new MatchContent(loadouts,tables,maps,mapErrors,auto,airdrops,mobs,horses);
+        var quality=LootRegionQualitySettings.DISABLED;
+        if(lootConfig.contains("region-quality")){
+            var n=section(lootConfig,"region-quality");
+            quality=new LootRegionQualitySettings(bool(n,"enabled"),number(n,"built-threshold"),text(n,"natural-table"),text(n,"built-table"));
+        }
+        quality.validate(tables);
+        if(quality.enabled()){
+            if(auto.enabled())for(var level:LootRegionQuality.values())quality.resolve(level,auto.resolvedTable(tables),tables);
+            var regionalSources=new HashSet<String>();
+            for(var metadata:maps.values()){
+                for(var point:metadata.containers())regionalSources.add(point.table());
+                for(var area:metadata.areas())regionalSources.add(area.table());
+            }
+            for(String source:regionalSources)for(var level:LootRegionQuality.values())quality.resolve(level,tables.get(source),tables);
+        }
+        return new MatchContent(loadouts,tables,maps,mapErrors,auto,airdrops,mobs,horses,quality);
     }
     public static String loadoutYaml(Map<String,LoadoutDefinition> definitions) {
         YamlConfiguration yaml = new YamlConfiguration();

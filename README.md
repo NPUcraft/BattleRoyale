@@ -4,7 +4,7 @@
 
 BattleRoyale is a multi-room Battle Royale plugin for Paper.
 
-> Current version: **1.0.0-rc.9**
+> Current version: **1.0.0-rc.10**
 > Target: **Paper 26.2** · **Java 25**
 > Status: **Release Candidate**
 
@@ -15,7 +15,10 @@ BattleRoyale 是一个面向 Paper 的多房间 Battle Royale 插件，提供随
 - Independent multi-room matches using isolated template-world clones.
 - Random square safe zones that finish shrinking to zero; the BossBar displays the target side length squared (for example `100²`).
 - A bilingual preparation progress bar, followed by a randomly routed moving aircraft platform. Temporary elytra is removed and chest armor restored on landing.
-- Lower container loot chance (40%, 1–3 rolls) and a stratified ground-loot distribution; only match clones replace high-value storage blocks, preserving ores and ancient debris.
+- Lower container loot chance (40%, 1–3 rolls) and stratified field supply points; only match clones replace high-value storage blocks, preserving ores and ancient debris.
+- Field supply points show colored particle rings and nearby chimes; items only appear within 4 blocks after a durable, one-time claim. No unopened item or display entities.
+- Cached surface samples select natural or built-area loot for containers and field supplies, without changing ordinary enchantment limits.
+- Population-scaled initial squares (400/600/1000/1500 blocks wide), optional map-specific opening centers, and a 7m10s four-stage default zone schedule; later centers still move randomly.
 - Coordinate-free center arrows, shortest distance to the next zone when outside, a separate supply-drop arrow, and stage totals with next-zone area.
 - Supply drops announced at fixed coordinates at least 60 seconds before descent, marked by real yellow beacon beams granting only Speed I to living participants within a 24-block sphere for 100 ticks per refresh.
 - Solo, Duo, Squad and configurable team sizes.
@@ -51,7 +54,7 @@ Without an economy provider, matches and free cosmetics remain available; paid p
 ## Installation
 
 1. Install Paper 26.2 and a compatible Java runtime.
-2. Build BattleRoyale and place `battleroyale-1.0.0-rc.9.jar` in `plugins/`.
+2. Build BattleRoyale and place `battleroyale-1.0.0-rc.10.jar` in `plugins/`.
 3. Start the server once to generate configuration files.
 4. Configure the lobby, rooms, maps, zones and storage.
 5. Install saved, unloaded map templates under `plugins/BattleRoyale/maps/`.
@@ -110,7 +113,7 @@ Windows:
 .\gradlew.bat clean check build
 ```
 
-Output: `build/libs/battleroyale-1.0.0-rc.9.jar`, with an adjacent `.sha256` file. Generated JARs are not committed. Runtime dependency versions are locked; Paper API is pinned to `26.2.build.129-stable` and is provided by the server.
+Output: `build/libs/battleroyale-1.0.0-rc.10.jar`, with an adjacent `.sha256` file. Generated JARs are not committed. Runtime dependency versions are locked; Paper API is pinned to `26.2.build.129-stable` and is provided by the server.
 
 The MySQL contracts require an isolated test database and `BATTLEROYALE_MYSQL_TEST_PORT`; otherwise they are explicitly excluded. See [Verification](docs/VERIFICATION.md) for test setup, evidence and measured scale.
 

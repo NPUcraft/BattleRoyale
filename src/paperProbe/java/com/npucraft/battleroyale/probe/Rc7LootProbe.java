@@ -39,7 +39,11 @@ public final class Rc7LootProbe {
             var entries=catalog.getMapList("loot-tables."+table+".entries");var present=new HashSet<String>();
             for(var entry:entries){String key=entry.get("item").toString();present.add(key);require(!key.equals("minecraft:elytra"),"No elytra");
                 if(key.equals("minecraft:diamond"))require(((Number)entry.get("weight")).intValue()==1&&((Number)entry.get("max-amount")).intValue()==1,"Diamonds are rare single-item rolls");}
-            require(present.containsAll(List.of("minecraft:oak_log","minecraft:cobblestone","minecraft:stone","minecraft:iron_ingot","minecraft:gold_ingot","minecraft:coal","minecraft:diamond")),"Requested materials in "+table);
+            if(table.equals(catalog.getString("region-quality.natural-table")))
+                require(present.containsAll(List.of("minecraft:oak_log","minecraft:cobblestone","minecraft:iron_ingot","minecraft:coal","minecraft:stone_sword","minecraft:bow")),"Natural area retains basic combat and resource supplies");
+            else if(table.equals(catalog.getString("region-quality.built-table")))
+                require(present.containsAll(List.of("minecraft:iron_chestplate","minecraft:iron_sword","minecraft:diamond","minecraft:iron_ingot","minecraft:coal")),"Built area improves equipment while retaining resources");
+            else require(present.containsAll(List.of("minecraft:oak_log","minecraft:cobblestone","minecraft:stone","minecraft:iron_ingot","minecraft:gold_ingot","minecraft:coal","minecraft:diamond")),"Requested materials in "+table);
         }
         var report=new YamlConfiguration();report.set("status","passed");report.set("guarantee-samples",2000);report.set("native-max-samples",maximum);report.set("multi-enchanted-samples",stacked);report.set("random-airdrop-enchanted",enchanted);
         report.set("limits","Native item metadata and production YAML, not an actual player loot pickup.");

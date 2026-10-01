@@ -15,12 +15,16 @@ class ConfigurationLoaderTest {
     @TempDir Path directory;
     @BeforeEach void copyDefaults() throws Exception {
         for (String file : new String[]{"config.yml", "rooms.yml", "maps.yml", "zones.yml"})
-            try (var stream = getClass().getResourceAsStream("/" + file)) { Files.copy(stream, directory.resolve(file)); }
+            try (var stream = getClass().getResourceAsStream("/" + file)) {
+                Files.writeString(directory.resolve(file),new String(stream.readAllBytes(),java.nio.charset.StandardCharsets.UTF_8).replace("\r\n","\n"));
+            }
     }
     private ConfigurationSnapshot load() { return new ConfigurationLoader(directory).load(); }
     private void replace(String file, String from, String to) throws Exception {
         Path path = directory.resolve(file);
-        Files.writeString(path, Files.readString(path).replace(from, to));
+        String before=Files.readString(path).replace("\r\n","\n");
+        assertTrue(before.contains(from), "Test replacement did not match " + file + ": " + from);
+        Files.writeString(path, before.replace(from, to));
     }
     @Test void recoveryDefaultsAndCredentialsAreNotRendered(){var settings=load().settings();assertEquals(5,settings.recovery().checkpoint().toSeconds());assertEquals(60,settings.recovery().orphanAge().toMinutes());assertEquals(directory.resolve("data/battleroyale.db"),settings.database().sqliteFile());assertTrue(settings.database().toString().contains("redacted"));}
     @ParameterizedTest @CsvSource(delimiter='|',value={
@@ -37,6 +41,11 @@ class ConfigurationLoaderTest {
         var result = load();
         assertEquals(2, result.rooms().size()); assertEquals(2, result.maps().size());
         assertEquals(1, result.zoneProfiles().size()); assertEquals(4, result.zoneProfiles().getFirst().stages().size());
+        var zone=result.zoneProfiles().getFirst();
+        assertEquals(java.util.List.of(200.0,300.0,500.0,750.0),zone.initialSizes().stream().map(size->size.halfSize()).toList());
+        assertEquals(750,zone.stageReferenceHalfSize());
+        assertEquals(430,zone.stages().stream().mapToLong(stage->stage.waitDuration().plus(stage.shrinkDuration()).toSeconds()).sum());
+        assertEquals(160,zone.resolved(200).stages().getFirst().targetHalfSize());
         assertEquals(directory.resolve("runtime"), result.settings().runtimeDirectory());
         assertEquals(4, result.rooms().get(1).teamSize());
         assertFalse(Files.exists(directory.resolve("runtime")));
@@ -57,14 +66,14 @@ class ConfigurationLoaderTest {
         "config.yml|min-damage-share: 0.20|min-damage-share: 1.1|combat/match/deathbox",
         "config.yml|winner-showcase-seconds: 60|winner-showcase-seconds: -1|match.winner-showcase-seconds",
         "config.yml|interaction-distance: 6.0|interaction-distance: .nan|deathbox.interaction-distance",
-        "zones.yml|target-half-size: 400|target-half-size: 500|profiles.default.stages[0]",
-        "zones.yml|target-half-size: 400|target-half-size: 700|profiles.default.stages[0]",
+        "zones.yml|target-half-size: 600|target-half-size: 750|profiles.default.stages[0]",
+        "zones.yml|target-half-size: 600|target-half-size: 800|profiles.default.stages[0]",
         "zones.yml|target-half-size: 0|target-half-size: -1|profiles.default.stages[3]",
-        "zones.yml|target-half-size: 400|target-half-size: 0|profiles.default.stages[1]",
-        "zones.yml|wait-seconds: 300|wait-seconds: -1|profiles.default.stages[0]",
-        "zones.yml|shrink-seconds: 120|shrink-seconds: 0|profiles.default.stages[0]",
-        "zones.yml|half-size: 500|half-size: 499|initial-size-by-players[0]",
-        "zones.yml|max-players: 16|max-players: 8|initial-size-by-players[1]",
+        "zones.yml|target-half-size: 600|target-half-size: 0|profiles.default.stages[1]",
+        "zones.yml|wait-seconds: 90|wait-seconds: -1|profiles.default.stages[0]",
+        "zones.yml|shrink-seconds: 60|shrink-seconds: 0|profiles.default.stages[0]",
+        "zones.yml|half-size: 200|half-size: 127|initial-size-by-players[0]",
+        "zones.yml|max-players: 16|max-players: 8|initial-size-by-players[2]",
         "zones.yml|max-players: 32|max-players: 31|rooms.squad.max-players",
         "zones.yml|extra-damage-per-block: 0.01|extra-damage-per-block: -.1|stages[0]",
         "zones.yml|base-damage-per-second: 1.0|base-damage-per-second: .NaN|stages[0]",
@@ -106,13 +115,13 @@ class ConfigurationLoaderTest {
         assertArrayEquals(before, Files.readAllBytes(directory.resolve("maps.yml")));
     }
     @Test void runtimeStillRejectsMalformedGlobalRules() throws Exception {
-        replace("zones.yml", "wait-seconds: 300", "wait-seconds: -1");
+        replace("zones.yml", "wait-seconds: 90", "wait-seconds: -1");
         assertThrows(ConfigurationException.class, () -> new ConfigurationLoader(directory, true).load());
     }
     @Test void crossValidationNamesRoomMapProfileAndRequiredArea() throws Exception {
-        replace("maps.yml","min-x: -3000","min-x: 1500");
+        replace("maps.yml","min-x: -3000","min-x: 2000");
         var error=assertThrows(ConfigurationException.class,this::load).getMessage();
-        for(String value:new String[]{"room=solo","map=city","profile=default","2000","1500"}) assertTrue(error.contains(value),error);
+        for(String value:new String[]{"room=solo","map=city","profile=default","1500","1000"}) assertTrue(error.contains(value),error);
     }
     @Test void unreachableLargerBucketsDoNotRejectSmallRoomMaps() throws Exception {
         replace("rooms.yml","min-players: 16","min-players: 4");
@@ -121,9 +130,17 @@ class ConfigurationLoaderTest {
         assertEquals(2,load().rooms().size());
     }
     @Test void firstTargetMustFitEveryBucketEvenIfHalfSizesNotMonotonic() throws Exception {
-        replace("zones.yml","half-size: 500","half-size: 900");
-        replace("zones.yml","half-size: 750","half-size: 500");
-        replace("zones.yml","target-half-size: 400","target-half-size: 600");
+        Files.writeString(directory.resolve("zones.yml"), """
+                config-version: 2
+                profiles:
+                  default:
+                    initial-size-by-players:
+                      - {max-players: 8, half-size: 900}
+                      - {max-players: 16, half-size: 500}
+                      - {max-players: 32, half-size: 1000}
+                    stages:
+                      - {wait-seconds: 5, shrink-seconds: 10, target-half-size: 600, base-damage-per-second: 1, extra-damage-per-block: 0, max-damage-per-second: 1}
+                """);
         assertTrue(assertThrows(ConfigurationException.class,this::load).getMessage().contains("stages[0]"));
     }
     @Test void emptyStagesRejectedBeforePublishing() throws Exception {
@@ -169,10 +186,10 @@ class ConfigurationLoaderTest {
         "config.yml|type: sqlite|type: invalid|storage.type",
         "config.yml|provider: auto|provider: missing|economy.provider",
         "config.yml|directory: runtime|directory: .|runtime-worlds.directory",
-        "zones.yml|half-size: 500|half-size: 499|profiles.default.initial-size-by-players[0].half-size",
-        "zones.yml|max-players: 16|max-players: 8|profiles.default.initial-size-by-players[1].max-players",
-        "zones.yml|shrink-seconds: 120|shrink-seconds: 0|profiles.default.stages[0].shrink-seconds",
-        "zones.yml|target-half-size: 250|target-half-size: 800|profiles.default.stages[1].target-half-size",
+        "zones.yml|half-size: 200|half-size: 127|profiles.default.initial-size-by-players[0].half-size",
+        "zones.yml|max-players: 16|max-players: 8|profiles.default.initial-size-by-players[2].max-players",
+        "zones.yml|shrink-seconds: 60|shrink-seconds: 0|profiles.default.stages[0].shrink-seconds",
+        "zones.yml|target-half-size: 300|target-half-size: 800|profiles.default.stages[1].target-half-size",
         "zones.yml|max-damage-per-second: 6.0|max-damage-per-second: 0.5|profiles.default.stages[0].max-damage-per-second",
         "zones.yml|extra-damage-per-block: 0.01|extra-damage-per-block: .nan|profiles.default.stages[0].extra-damage-per-block",
         "rooms.yml|max-players: 24|max-players: 33|rooms.solo.max-players"

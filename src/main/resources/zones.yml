@@ -1,37 +1,51 @@
 config-version: 2
-# Square halfSize is half the side length. Targets strictly decrease; only the final target may be 0.
+# Square half-size is half the side length (minimum 128). Only the final target may be 0.
+# Targets are multiplied by initial half-size / stage-reference-half-size for each match.
+# Omit the reference (or use 0) to retain old absolute targets and existing recovery hashes.
 # Legacy positive final targets continue shrinking to 0 in the same final stage.
 profiles:
   default:
+    stage-reference-half-size: 750
     initial-size-by-players:
+      - max-players: 4
+        half-size: 200
       - max-players: 8
-        half-size: 500
+        half-size: 300
       - max-players: 16
-        half-size: 750
+        half-size: 500
       - max-players: 32
-        half-size: 1000
+        half-size: 750
+    # Optional map-specific opening centers; no entry means random across the playable area.
+    # Each point plus the full jitter radius and every reachable initial circle must fit its map.
+    # Later circles still move randomly; this setting never pins their centers.
+    # initial-centers:
+    #   city:
+    #     jitter-radius: 150
+    #     points:
+    #       - {x: 0, z: 0}
+    #       - {x: 500, z: 500}
+    # Four stages, 430 seconds total, independent of starting player count.
     stages:
-      - wait-seconds: 300
-        shrink-seconds: 120
-        target-half-size: 400
+      - wait-seconds: 90
+        shrink-seconds: 60
+        target-half-size: 600
         base-damage-per-second: 1.0
         extra-damage-per-block: 0.01
         max-damage-per-second: 6.0
-      - wait-seconds: 240
-        shrink-seconds: 90
-        target-half-size: 250
+      - wait-seconds: 60
+        shrink-seconds: 45
+        target-half-size: 300
         base-damage-per-second: 2.0
         extra-damage-per-block: 0.015
         max-damage-per-second: 10.0
-
-      - wait-seconds: 180
-        shrink-seconds: 60
-        target-half-size: 125
+      - wait-seconds: 60
+        shrink-seconds: 30
+        target-half-size: 100
         base-damage-per-second: 3.0
         extra-damage-per-block: 0.02
         max-damage-per-second: 14.0
-      - wait-seconds: 120
-        shrink-seconds: 45
+      - wait-seconds: 60
+        shrink-seconds: 25
         target-half-size: 0
         base-damage-per-second: 4.0
         extra-damage-per-block: 0.03

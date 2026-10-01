@@ -51,6 +51,10 @@ public final class MapValidationService {
         double size = zone.largestReachableHalfSize(room.maxPlayers()) * 2;
         if (area.maxX() - area.minX() < size || area.maxZ() - area.minZ() < size)
           error(found, "Playable area cannot contain InitialZone for room " + room.id());
+        try { zone.validateInitialCenters(data.apply(map), room.maxPlayers()); }
+        catch (IllegalArgumentException invalid) {
+          error(found, "Initial center invalid for room " + room.id() + ": " + invalid.getMessage());
+        }
       }
     Set<String> ids = new HashSet<>(), blocks = new HashSet<>();
     for (var p : data.loot().containers()) {

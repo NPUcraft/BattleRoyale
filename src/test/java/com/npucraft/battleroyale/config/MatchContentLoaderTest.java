@@ -62,7 +62,7 @@ class MatchContentLoaderTest {
         Path path=directory.resolve("loot-tables.yml");String original=Files.readString(path);String tables="config-version: 2\n"+original.substring(original.indexOf("loot-tables:"));
         Files.writeString(path,tables.replace("  basic:","  survival:"));
         for(String map:new String[]{"city","desert"})replace("map-data/"+map+"/loot.yml","loot-table: basic","loot-table: survival");
-        var content=load();assertTrue(content.autoContainers().enabled());assertEquals("survival",content.autoContainers().table());assertEquals("survival",content.airdrops().table());assertEquals("survival",content.mobLoot().table());assertEquals(com.npucraft.battleroyale.loot.HorseSettings.DEFAULT,content.horses());
+        var content=load();assertTrue(content.autoContainers().enabled());assertEquals("survival",content.autoContainers().table());assertEquals("survival",content.airdrops().table());assertEquals("survival",content.mobLoot().table());assertEquals(com.npucraft.battleroyale.loot.HorseSettings.DEFAULT,content.horses());assertFalse(content.regionQuality().enabled());
     }
     @Test void mobLootRejectsUnknownTableAndUnboundedRate()throws Exception{
         replace("loot-tables.yml","per-player-cooldown-seconds: 10","per-player-cooldown-seconds: 0");assertThrows(IllegalArgumentException.class,this::load);
@@ -76,5 +76,18 @@ class MatchContentLoaderTest {
     }
     @Test void horseBudgetCannotBeUnbounded()throws Exception{
         replace("loot-tables.yml","max-per-session: 16","max-per-session: 65");assertThrows(IllegalArgumentException.class,this::load);
+    }
+    @Test void regionQualityDefaultsKeepNaturalCombatAndLimitBuiltGearBelowAirdrops()throws Exception{
+        var content=load();assertTrue(content.regionQuality().enabled());assertEquals(.25,content.regionQuality().builtThreshold());
+        var natural=content.tables().get(content.regionQuality().naturalTable()).entries().stream().map(com.npucraft.battleroyale.loot.LootTable.Entry::item).toList();
+        assertTrue(natural.contains("minecraft:stone_sword"));assertTrue(natural.contains("minecraft:bow"));
+        var built=content.tables().get(content.regionQuality().builtTable()).entries().stream().map(com.npucraft.battleroyale.loot.LootTable.Entry::item).toList();
+        assertTrue(built.contains("minecraft:iron_chestplate"));assertFalse(built.stream().anyMatch(item->item.startsWith("minecraft:diamond_")||item.contains("netherite")||item.contains("totem")));
+        var diamond=content.tables().get(content.regionQuality().builtTable()).entries().stream().filter(item->item.item().equals("minecraft:diamond")).findFirst().orElseThrow();
+        assertEquals(1,diamond.weight());assertEquals(1,diamond.maxAmount());
+        replace("loot-tables.yml","built-table: region-built","built-table: missing");assertThrows(IllegalArgumentException.class,this::load);
+    }
+    @Test void regionQualityThresholdIsStrictlyValidated()throws Exception{
+        replace("loot-tables.yml","built-threshold: 0.25","built-threshold: 0");assertThrows(IllegalArgumentException.class,this::load);
     }
 }

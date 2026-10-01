@@ -27,6 +27,8 @@ public final class PaperAutoContainerLoot implements Listener,AutoCloseable {
     private final WorldSanitizer sanitizer;
     private final AutoContainerLootSettings settings;
     private final LootTable table;
+    private final Map<String,LootTable> tables;
+    private final PaperLootRegionQuality quality;
     private final NativeLootItems items;
     private final RandomGenerator random;
     private final NamespacedKey ledgerSession,ledgerEntries,processed,airdrop;
@@ -50,6 +52,12 @@ public final class PaperAutoContainerLoot implements Listener,AutoCloseable {
     public PaperAutoContainerLoot(JavaPlugin plugin,World world,UUID session,Zone initial,WorldSanitizer sanitizer,
             AutoContainerLootSettings settings,Map<String,LootTable> tables,Collection<ContainerLootPoint> points,
             NativeLootItems items,RandomGenerator random,GameScheduler scheduler){
+        this(plugin,world,session,initial,sanitizer,settings,tables,points,items,random,scheduler,null);
+    }
+    public PaperAutoContainerLoot(JavaPlugin plugin,World world,UUID session,Zone initial,WorldSanitizer sanitizer,
+            AutoContainerLootSettings settings,Map<String,LootTable> tables,Collection<ContainerLootPoint> points,
+            NativeLootItems items,RandomGenerator random,GameScheduler scheduler,PaperLootRegionQuality quality){
+        this.quality=quality;this.tables=Map.copyOf(tables);
         this.plugin=plugin;worldId=world.getUID();this.session=session.toString();this.initial=initial;this.sanitizer=sanitizer;
         this.settings=settings;table=settings.resolvedTable(tables);this.items=items;this.random=random;
         ledgerSession=new NamespacedKey(plugin,"container_loot_session");ledgerEntries=new NamespacedKey(plugin,"container_loot_decisions");
@@ -119,7 +127,8 @@ public final class PaperAutoContainerLoot implements Listener,AutoCloseable {
         if(excluded||!inventory.isEmpty()||!settings.activates(random)){skipped++;return true;}
         var slots=new ArrayList<Integer>();for(int slot=0;slot<inventory.getSize();slot++)slots.add(slot);
         Collections.shuffle(slots,new Random(random.nextLong()));int slot=0;
-        for(var roll:table.roll(random)){
+        LootTable selected=quality==null?table:quality.resolve(block.getChunk(),table,tables);
+        for(var roll:selected.roll(random)){
             ItemStack prototype=items.roll(roll.item(),random);
             for(int amount:LootTable.split(roll.amount(),prototype.getMaxStackSize())){
                 if(slot>=slots.size()){overflow++;continue;}

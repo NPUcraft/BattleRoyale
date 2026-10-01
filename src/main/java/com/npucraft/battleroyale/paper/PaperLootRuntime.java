@@ -6,7 +6,6 @@ import com.npucraft.battleroyale.service.GameScheduler;
 import com.npucraft.battleroyale.session.GameSession;
 import org.bukkit.*;
 import org.bukkit.block.*;
-import org.bukkit.entity.Item;
 import org.bukkit.inventory.*;
 import org.bukkit.loot.Lootable;
 import org.bukkit.persistence.PersistentDataType;
@@ -40,26 +39,36 @@ public final class PaperLootRuntime {
     private GameScheduler.Task task;
     private State state=State.NOT_STARTED;
     private PaperAutoContainerLoot automatic;
+    private PaperLootRegionQuality quality;
+    private final PaperGroundSupplies supplies;
+    private boolean sealing;
     private NamespacedKey automaticSessionKey(){return new NamespacedKey(plugin,"automatic_loot_session");}
     public State state(){return state;}
     private boolean cancelled;private long generationStarted;
-    private int activePoints,skippedPoints,activeAreas,skippedAreas,groundItems,missedSpawns;
+    private int activePoints,skippedPoints,activeAreas,skippedAreas,groundPoints,missedSpawns;
     public PaperLootRuntime(JavaPlugin plugin,GameSession session,WorldSanitizer sanitizer,MatchContent content,NativeLootItems items,
             RandomGenerator random,NamespacedKey marker,GameScheduler scheduler) {
+        this(plugin,session,sanitizer,content,items,random,marker,scheduler,Runnable::run);
+    }
+    public PaperLootRuntime(JavaPlugin plugin,GameSession session,WorldSanitizer sanitizer,MatchContent content,NativeLootItems items,
+            RandomGenerator random,NamespacedKey marker,GameScheduler scheduler,Executor io) {
         this.plugin=plugin; this.session=session; this.sanitizer=sanitizer; this.content=content; this.items=items; this.random=random; this.marker=marker; this.scheduler=scheduler;
         worldId=Objects.requireNonNull(plugin.getServer().getWorld(session.gameWorld().orElseThrow().worldName())).getUID();
+        supplies=new PaperGroundSupplies(plugin,session,content,items,marker,io);
     }
     private World world() { return Objects.requireNonNull(plugin.getServer().getWorld(worldId),"Match world unloaded"); }
     private void activateAutomatic(){
         if(automatic!=null||cancelled||!content.autoContainers().enabled())return;
         var map=session.selectedMap().orElseThrow();var metadata=map.metadata()==null?content.maps().get(map.id()):map.metadata().loot();
         automatic=new PaperAutoContainerLoot(plugin,world(),session.sessionId(),session.initialZone().orElseThrow(),sanitizer,
-                content.autoContainers(),content.tables(),metadata.containers(),items,random,scheduler);
+                content.autoContainers(),content.tables(),metadata.containers(),items,random,scheduler,quality);
         world().getPersistentDataContainer().set(automaticSessionKey(),PersistentDataType.STRING,session.sessionId().toString());
     }
     /** Continue discovery after recovery, without regenerating configured points or ground drops. */
     public void recoverAutomatic(){
         if(state!=State.NOT_STARTED)throw new IllegalStateException("Loot runtime already started");
+        quality=new PaperLootRegionQuality(plugin,world(),session.sessionId(),content.regionQuality(),true);
+        supplies.recover();
         // Legacy runtime worlds have no per-container decisions. Treat their contents as already
         // played rather than introducing another roll into previously emptied player storage.
         if(session.sessionId().toString().equals(world().getPersistentDataContainer().get(automaticSessionKey(),PersistentDataType.STRING)))activateAutomatic();
@@ -68,6 +77,7 @@ public final class PaperLootRuntime {
     public CompletableFuture<Void> generate() {
         if(state!=State.NOT_STARTED) return result;
         state=State.GENERATING;generationStarted=System.nanoTime();
+        quality=new PaperLootRegionQuality(plugin,world(),session.sessionId(),content.regionQuality(),false);
         var map=session.selectedMap().orElseThrow();var metadata=map.metadata()==null?content.maps().get(map.id()):map.metadata().loot(); var initial=session.initialZone().orElseThrow();
         for(var point:metadata.containers()) {
             if(initial.contains(point.x(),point.z())) { points.add(point); activePoints++; } else skippedPoints++;
@@ -89,6 +99,7 @@ public final class PaperLootRuntime {
             if(pending!=null) {
                 if(!pending.isDone()) return;
                 pending.join(); pending=null;
+                if(sealing){finish(null);return;}
                 for(var future:requested) {
                     Chunk chunk=future.join(); if(tickets.add(chunk.getChunkKey())) PaperChunkTickets.acquire(plugin,chunk.getWorld(),chunk.getX(),chunk.getZ()); sanitizer.ensure(chunk);
                     if(cancelled) return;
@@ -105,14 +116,14 @@ public final class PaperLootRuntime {
             }
             if(!ground.isEmpty()&&!groundBudget.request(System.nanoTime())){
                 groundBudgetExhausted=true;missedSpawns+=ground.size();ground.clear();
-                plugin.getLogger().info("Ground loot candidate budget reached; generated="+groundItems+" skipped="+missedSpawns+" attempts="+groundBudget.attempts());
+                plugin.getLogger().info("Ground loot candidate budget reached; generated="+groundPoints+" skipped="+missedSpawns+" attempts="+groundBudget.attempts());
             }
             if(!ground.isEmpty()) {
                 GroundRequest request=ground.peek(); var b=request.bounds;
                 int x=random.nextInt(b.minX(),b.maxX()+1),z=random.nextInt(b.minZ(),b.maxZ()+1);
                 request(Set.of(key(x>>4,z>>4)),()->drop(request,x,z)); return;
             }
-            finish(null);
+            sealing=true;pending=supplies.seal();
         } catch(RuntimeException error) { finish(error); }
     }
     private void request(Set<Long> chunks,Runnable inspect) {
@@ -137,13 +148,13 @@ public final class PaperLootRuntime {
         List<Integer> empty=new ArrayList<>();
         for(int i=0;i<inventory.getSize();i++) if(inventory.getItem(i)==null || inventory.getItem(i).getType().isAir()) empty.add(i);
         for(int i=empty.size()-1;i>0;i--) Collections.swap(empty,i,random.nextInt(i+1));
-        List<ItemStack> stacks=stacks(point.table()); int n=Math.min(empty.size(),stacks.size());
+        List<ItemStack> stacks=stacks(quality.resolve(world.getChunkAt(point.x()>>4,point.z()>>4),content.tables().get(point.table()),content.tables())); int n=Math.min(empty.size(),stacks.size());
         for(int i=0;i<n;i++) inventory.setItem(empty.get(i),stacks.get(i));
         if(n<stacks.size()) warn(point,"overflow: discarded " + (stacks.size()-n) + " stacks");
     }
-    private List<ItemStack> stacks(String table) {
+    private List<ItemStack> stacks(LootTable table) {
         List<ItemStack> result=new ArrayList<>();
-        for(var roll:content.tables().get(table).roll(random)) {
+        for(var roll:table.roll(random)) {
             ItemStack prototype=items.roll(roll.item(),random);
             for(int amount:LootTable.split(roll.amount(),prototype.getMaxStackSize())) { ItemStack item=prototype.clone(); item.setAmount(amount); result.add(item); }
         }
@@ -154,13 +165,8 @@ public final class PaperLootRuntime {
         boolean safe=y>=request.area.minY() && y<=request.area.maxY() && y>world.getMinHeight() && y<world.getMaxHeight()
                 && safeGround(world.getBlockAt(x,y-1,z),world.getBlockAt(x,y,z));
         if(safe) {
-            for(ItemStack stack:stacks(request.area.table())) {
-                if(groundItems>=10_000) throw new IllegalStateException("Ground loot entity budget exceeded (10000)");
-                world.dropItem(new Location(world,x+.5,y+.1,z+.5),stack,item-> {
-                    item.getPersistentDataContainer().set(marker,PersistentDataType.STRING,session.sessionId().toString());
-                    item.setUnlimitedLifetime(true); item.setVelocity(new org.bukkit.util.Vector());
-                }); groundItems++;
-            }
+            var table=quality.resolve(world.getChunkAt(x>>4,z>>4),content.tables().get(request.area.table()),content.tables());
+            supplies.plan(x,y,z,table,random.nextLong());groundPoints++;
             ground.remove();
         } else if(++request.attempts>=request.area.maxAttempts()) { ground.remove(); missedSpawns++; }
     }
@@ -189,12 +195,15 @@ public final class PaperLootRuntime {
         cancelled=true;
         if(automatic!=null){automatic.close();automatic=null;}
         if(pending==null || pending.isDone()) finish(new CancellationException("Loot stopped"));
-        return result.handle((ignored,error)->null);
+        if(quality!=null)quality.close();
+        return CompletableFuture.allOf(result.handle((ignored,error)->null),supplies.stop());
     }
-    public void close() { cancelled=true;if(automatic!=null){automatic.close();automatic=null;} if(pending!=null) pending.cancel(false); finish(new CancellationException("Plugin stopped")); }
+    public void close() { cancelled=true;supplies.close();if(quality!=null)quality.close();if(automatic!=null){automatic.close();automatic=null;} if(pending!=null&&!sealing) pending.cancel(false); finish(new CancellationException("Plugin stopped")); }
+    public void tickSupplies(){supplies.tick();}
     public String diagnostics() {
         return "loot="+state+" active/skipped-points="+activePoints+"/"+skippedPoints+" active/skipped-areas="+activeAreas+"/"+skippedAreas
-                +" ground-items="+groundItems+" missed-spawns="+missedSpawns+" candidate-attempts="+groundBudget.attempts()+" candidate-budget-exhausted="+groundBudgetExhausted+" sanitized-chunks="+sanitizer.chunks(worldId)
+                +" ground-points="+groundPoints+" missed-spawns="+missedSpawns+" candidate-attempts="+groundBudget.attempts()+" candidate-budget-exhausted="+groundBudgetExhausted+" sanitized-chunks="+sanitizer.chunks(worldId)
+                +" "+supplies.diagnostics()+" "+(quality==null?"region-quality=inactive":quality.diagnostics())
                 +" "+(automatic==null?"automatic-containers=inactive":automatic.diagnostics());
     }
     private static final class GroundRequest {

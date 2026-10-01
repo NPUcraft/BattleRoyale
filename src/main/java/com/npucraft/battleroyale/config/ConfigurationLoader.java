@@ -3,6 +3,7 @@ package com.npucraft.battleroyale.config;
 import com.npucraft.battleroyale.map.*;
 import com.npucraft.battleroyale.room.RoomDefinition;
 import com.npucraft.battleroyale.zone.ZoneProfile;
+import com.npucraft.battleroyale.zone.InitialZoneCenters;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -106,14 +107,30 @@ public final class ConfigurationLoader {
             for (Node size : profile.nodes("initial-size-by-players")) {
                 int count = size.integer("max-players", 1);
                 size.require("max-players", count > previousCount, "thresholds must strictly increase");
-                sizes.add(new ZoneProfile.InitialSize(count, size.number("half-size", 500)));
+                sizes.add(new ZoneProfile.InitialSize(count, size.number("half-size", 128)));
                 previousCount = count;
             }
+            double reference = profile.values().containsKey("stage-reference-half-size") ? profile.number("stage-reference-half-size", 0) : 0;
+            profile.require("stage-reference-half-size", reference == 0 || reference >= 128, "must be 0 (absolute legacy targets) or >= 128");
+            Map<String, InitialZoneCenters> centers = new LinkedHashMap<>();
+            if (profile.values().containsKey("initial-centers")) {
+                Node candidates = profile.section("initial-centers");
+                for (String mapId : candidates.keys()) {
+                    candidates.require(mapId, maps.stream().anyMatch(map -> map.id().equals(mapId)), "unknown map id: " + mapId);
+                    Node configured = candidates.section(mapId);
+                    double jitter = configured.values().containsKey("jitter-radius") ? configured.number("jitter-radius", 0) : 0;
+                    var points = new ArrayList<InitialZoneCenters.Point>();
+                    for (Node point : configured.nodes("points"))
+                        points.add(new InitialZoneCenters.Point(point.number("x", -Double.MAX_VALUE), point.number("z", -Double.MAX_VALUE)));
+                    configured.require("points", points.size() <= 256, "at most 256 center points supported");
+                    centers.put(mapId, new InitialZoneCenters(jitter, points));
+                }
+            }
             List<ZoneProfile.Stage> stages = new ArrayList<>();
-            double previousSize = sizes.stream().mapToDouble(ZoneProfile.InitialSize::halfSize).min().orElseThrow();
+            double previousSize = reference > 0 ? reference : sizes.stream().mapToDouble(ZoneProfile.InitialSize::halfSize).min().orElseThrow();
             for (Node stage : profile.nodes("stages")) {
                 double target = stage.number("target-half-size", 0);
-                stage.require("target-half-size", target >= 0 && target < previousSize, "must be >= 0 and strictly less than every initial half-size / previous target (" + previousSize + ")");
+                stage.require("target-half-size", target >= 0 && target < previousSize, "must be >= 0 and strictly less than initial half-size / stage reference / previous target (" + previousSize + ")");
                 double base = stage.number("base-damage-per-second", 0);
                 double extra = stage.number("extra-damage-per-block", 0);
                 double maximum = stage.number("max-damage-per-second", 0);
@@ -122,7 +139,11 @@ public final class ConfigurationLoader {
                         Duration.ofSeconds(stage.integer("shrink-seconds", 1)), target, base, extra, maximum));
                 previousSize = target;
             }
-            zones.add(new ZoneProfile(id, sizes, stages));
+            ZoneProfile parsed = new ZoneProfile(id, sizes, stages, reference, centers);
+            // Reject floating-point collapse before publishing a profile, rather than failing at match start.
+            try { for (var size : sizes) parsed.resolved(size.halfSize()); }
+            catch (IllegalArgumentException error) { throw profile.error("stages", error.getMessage()); }
+            zones.add(parsed);
         }
 
         Node roomsNode = read("rooms.yml").section("rooms");
@@ -146,6 +167,8 @@ public final class ConfigurationLoader {
                 room.require("maps", area.maxX()-area.minX() >= required && area.maxZ()-area.minZ() >= required,
                         "room=" + id + " map=" + map.id() + " profile=" + zoneId + " requires width/depth >= " + required
                                 + ", actual=" + (area.maxX()-area.minX()) + "x" + (area.maxZ()-area.minZ()) + " " + area);
+                try { zone.validateInitialCenters(map, maximum); }
+                catch (IllegalArgumentException error) { throw room.error("maps", "room=" + id + " map=" + map.id() + " profile=" + zoneId + " " + error.getMessage()); }
             }
             com.npucraft.battleroyale.room.SpawnSettings spawn = com.npucraft.battleroyale.room.SpawnSettings.DEFAULT;
             if (room.values().containsKey("spawn")) {

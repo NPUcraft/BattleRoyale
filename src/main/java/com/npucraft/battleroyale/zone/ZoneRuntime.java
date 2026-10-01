@@ -15,7 +15,7 @@ public final class ZoneRuntime {
     private Zone from, current, next;
     private double remainingSeconds, progress;
     public ZoneRuntime(Zone initial, ZoneProfile profile, RandomGenerator random, long started) {
-        this.initial=initial; this.current=initial; this.from=initial; this.profile=profile;
+        this.initial=initial; this.current=initial; this.from=initial; this.profile=profile.resolved(initial.halfSize());
         this.random=random; this.started=started; this.phaseStart=started;
         next=ZoneGeometry.next(initial, stage().targetHalfSize(), random);
         update(started);

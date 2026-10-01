@@ -106,14 +106,19 @@ public final class Rc9LootProbe {
         var ground=new LootArea("ground",8,135,-64,319,8,135,"basic",1,400,400,10);
         var table=new LootTable("basic",1,1,List.of(new LootTable.Entry("minecraft:bread",1,1,1)));
         var content=new MatchContent(Map.of(),Map.of("basic",table),Map.of("fixture",new MapLoot(List.of(),List.of(ground))),Map.of(),new AutoContainerLootSettings(false,"basic",.4,1,3,16),new AirdropSettings(false,"basic",2,2,8,24,120));
-        loot=new PaperLootRuntime(plugin,session,sanitizer,content,new NativeLootItems(),new Random(9),new NamespacedKey(plugin,"ground_loot_session"),new PaperScheduler(plugin));
+        loot=new PaperLootRuntime(plugin,session,sanitizer,content,new NativeLootItems(),new Random(9),new NamespacedKey(plugin,"ground_loot_session"),new PaperScheduler(plugin),io);
         long started=System.nanoTime();var generated=loot.generate();
         return until(generated::isDone,1800,"Production ground runtime finishes within preparation budget").thenRun(()->{
             generated.join();double elapsed=(System.nanoTime()-started)/1_000_000_000.0;require(elapsed<80,"Ground preparation stays bounded on actual local Paper");
             // Controlled sample chunks are reloaded before counting persistent item entities; production does not pin them.
             long drops=0;var positions=new HashSet<String>();for(int x=0;x<=8;x++)for(int z=0;z<=8;z++)for(var entity:world.getChunkAt(x,z).getEntities())if(entity instanceof Item item&&sessionId.toString().equals(item.getPersistentDataContainer().get(new NamespacedKey(plugin,"ground_loot_session"),org.bukkit.persistence.PersistentDataType.STRING))){drops++;positions.add(item.getLocation().getBlockX()+":"+item.getLocation().getBlockZ());}
-            require(drops>0&&drops<=400,"Finite requested ground point count");require(drops==positions.size(),"Stratified candidates do not stack on the same ground column");
-            var restored=new PaperLootRuntime(plugin,session,sanitizer,content,new NativeLootItems(),new Random(9),new NamespacedKey(plugin,"ground_loot_session"),new PaperScheduler(plugin));restored.recoverAutomatic();require(restored.state()==PaperLootRuntime.State.COMPLETE,"Recovery skips static ground generation");restored.close();
+            require(drops==0,"Unopened field supplies contain no item entities");
+            try{var saved=new GroundSupplyLedger(world.getWorldPath(),sessionId,world.getUID()).read().orElseThrow();
+                for(var point:saved.points())positions.add(point.x()+":"+point.z());
+                require(!saved.points().isEmpty()&&saved.points().size()<=400,"Finite requested ground point count");
+                require(saved.points().size()==positions.size(),"Stratified points do not stack on the same column");
+            }catch(java.io.IOException error){throw new CompletionException(error);}
+            var restored=new PaperLootRuntime(plugin,session,sanitizer,content,new NativeLootItems(),new Random(9),new NamespacedKey(plugin,"ground_loot_session"),new PaperScheduler(plugin),io);restored.recoverAutomatic();require(restored.state()==PaperLootRuntime.State.COMPLETE,"Recovery skips static ground generation");restored.close();
             report.set("ground.requested",400);report.set("ground.actual-item-entities",drops);report.set("ground.distinct-columns",positions.size());report.set("ground.real-elapsed-seconds",elapsed);report.set("ground.diagnostics",loot.diagnostics());
             report.set("container.defaults.chance",AutoContainerLootSettings.DEFAULT.chance());report.set("container.defaults.min-rolls",AutoContainerLootSettings.DEFAULT.minRolls());report.set("container.defaults.max-rolls",AutoContainerLootSettings.DEFAULT.maxRolls());
         });

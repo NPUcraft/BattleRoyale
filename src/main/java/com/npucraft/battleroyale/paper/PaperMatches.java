@@ -63,8 +63,7 @@ public final class PaperMatches implements MatchLifecycle {
         var profile=configuration.zoneProfiles().stream().filter(p->p.id().equals(session.room().zoneProfileId())).findFirst().orElseThrow();
         // Freeze the same random initial square before filesystem preparation, so a large template
         // can be copied by selected regions. All later shrinking and spawn planning use this square.
-        session.initialZone(ZoneGeometry.initial(session.selectedMap().orElseThrow().playableArea(),
-                profile.initialHalfSize(session.players().size()), random));
+        session.initialZone(profile.initialZone(session.selectedMap().orElseThrow(),session.players().size(),random));
         Entry entry=new Entry(session,profile,new PaperZoneUi(plugin.getServer(),configuration.settings().zoneUi()));entries.put(session.sessionId(),entry);
         entry.preparationUi=new PaperPreparationUi(plugin.getServer(),scheduler,clock,session.players().keySet(),()->preparationStatus(entry));
         if(progression!=null)entry.progress=new com.npucraft.battleroyale.progression.SessionProgress(session.teams().keySet(),progression.freeze(session.players().keySet()));
@@ -79,7 +78,7 @@ public final class PaperMatches implements MatchLifecycle {
         sanitizer.register(world,session.sessionId(),failed);
         if(closed || entries.get(session.sessionId())!=entry || session.state()!=GameState.STARTING)
             throw new IllegalStateException("Match cancelled during initial sanitation");
-        entry.loot=new PaperLootRuntime(plugin,session,sanitizer,content,new NativeLootItems(),new java.util.Random(random.nextLong()),groundMarker,scheduler);
+        entry.loot=new PaperLootRuntime(plugin,session,sanitizer,content,new NativeLootItems(),new java.util.Random(random.nextLong()),groundMarker,scheduler,airdropIo);
         var fallbackLandings=new LinkedHashMap<UUID,org.bukkit.Location>();
         entry.preparation=new SpawnPreparation(new PaperSpawnTerrain(plugin,session,sanitizer,entry.loot::generate,
                 ()->{},(id,location)->{fallbackLandings.put(id,location.clone());entry.offline.planned(id,location);}),new SpawnPlanner(initial,session.room().spawn(),starters.size(),random),
@@ -128,6 +127,7 @@ public final class PaperMatches implements MatchLifecycle {
         long now=clock.nanoTime(); var zone=session.zone().orElseThrow(); zone.update(now);
         if(entry.airdrops!=null)entry.airdrops.tick(zone,now);
         if(entry.horses!=null)entry.horses.tick(zone,now);
+        if(entry.loot!=null)entry.loot.tickSupplies();
         boolean pulse=entry.damagePulse.due(now);
         if (!entry.protectionExpired && !session.protection().orElseThrow().active(now)) {
             entry.protectionExpired=true;
@@ -182,7 +182,7 @@ public final class PaperMatches implements MatchLifecycle {
         var world=Objects.requireNonNull(plugin.getServer().getWorld(session.gameWorld().orElseThrow().worldName()));entry.worldId=world.getUID();entry.recoveredLootComplete=true;
         sanitizer.recover(world,session.sessionId(),saved.sanitizedBlocks(),saved.sanitizedEntities(),failed);
         long now=clock.nanoTime();restoreZone(session,saved,profile,random,now);
-        entry.loot=new PaperLootRuntime(plugin,session,sanitizer,content,new NativeLootItems(),new java.util.Random(random.nextLong()),groundMarker,scheduler);
+        entry.loot=new PaperLootRuntime(plugin,session,sanitizer,content,new NativeLootItems(),new java.util.Random(random.nextLong()),groundMarker,scheduler,airdropIo);
         if(session.state()==GameState.RUNNING){entry.loot.recoverAutomatic();entry.airdrops=new PaperAirdrops(plugin,session,sanitizer,content,airdropIo,true);entry.horses=new PaperMatchHorses(plugin,session,sanitizer,content.horses(),true);}
         entry.protectionExpired=saved.protectionRemainingNanos()==0;entry.damagePulse=new DamagePulse(now);
         entry.offline=new PaperOfflineBodies(plugin,entry,configuration.settings().disconnect(),clock,bodySnapshots,messages,id->{isolation.defer(session.sessionId(),id);isolation.retry(id);});
