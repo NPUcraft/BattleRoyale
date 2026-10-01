@@ -128,7 +128,8 @@ public final class PaperMatches implements MatchLifecycle {
         long now=clock.nanoTime(); var zone=session.zone().orElseThrow(); zone.update(now);
         if(entry.airdrops!=null)entry.airdrops.tick(zone,now);
         if(entry.horses!=null)entry.horses.tick(zone,now);
-        if(entry.loot!=null)entry.loot.tickSupplies();
+        // Supplies first, then the staged ground refill: it needs this tick's already-updated zone.
+        if(entry.loot!=null){entry.loot.tickSupplies();entry.loot.tickZone(zone);}
         boolean pulse=entry.damagePulse.due(now);
         if(pulse)entry.feedbackPulses++;
         if (!entry.protectionExpired && !session.protection().orElseThrow().active(now)) {
