@@ -78,7 +78,8 @@ public final class Rc5Probe {
     private void navigation(){
         Zone current=new Zone(100,-200,50),next=new Zone(90,-190,20);
         var component=PaperZoneUi.navigationMessage(ZoneNavigation.guide(current,next,170,-200,0),current,next);
-        require(plain(component).equals("→ 立即进圈 22 米 · 圈心 X:100 Z:-200 · 下圈 X:90 Z:-190"),"Chinese compass direction/distance/current and next centers");
+        // rc.7 removed the circle-center coordinates; the live format is direction + next-boundary distance only.
+        require(plain(component).equals("→ 下圈边界 60 米"),"Chinese next-boundary direction and distance without coordinates");
         var messages=new ArrayList<Component>();var particles=new ArrayList<Particle>();UUID viewerId=UUID.randomUUID();
         Player viewer=(Player)Proxy.newProxyInstance(Player.class.getClassLoader(),new Class<?>[]{Player.class},(proxy,method,args)->switch(method.getName()){
             case "getUniqueId"->viewerId;
@@ -87,7 +88,7 @@ public final class Rc5Probe {
             case "spawnParticle"->{
                 Particle type=(Particle)args[0];particles.add(type);require(((Integer)args[4])==1,"Single particle per sample");
                 double x=(Double)args[1],y=(Double)args[2],z=(Double)args[3];
-                if(type==Particle.DUST){var dust=(Particle.DustOptions)args[9];require(dust.getColor().asRGB()==Color.fromRGB(255,62,85).asRGB(),"Red boundary dust color");world.spawnParticle(type,x,y,z,1,0,0,0,0,dust);}
+                if(type==Particle.DUST){var dust=(Particle.DustOptions)args[9];require(dust.getColor().asRGB()==Color.fromRGB(80,170,255).asRGB(),"Blue boundary dust color");world.spawnParticle(type,x,y,z,1,0,0,0,0,dust);}
                 else{require(type==Particle.END_ROD,"Bright outline particle");world.spawnParticle(type,x,y,z,1,0,0,0,0);}
                 yield null;
             }

@@ -78,6 +78,19 @@ public final class PvPProtectionListener implements Listener {
                 entry.hazards.block(key(event.getBlock()),event.getPlayer().getUniqueId());
         }
     }
+    /** TNT detonates the instant it is lit instead of running the vanilla four-second fuse. */
+    static boolean ignition(Material type) { return type==Material.FLINT_AND_STEEL||type==Material.FIRE_CHARGE; }
+    @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)
+    public void detonateTnt(PlayerInteractEvent event) {
+        Block block=event.getClickedBlock();
+        if(block==null || event.getAction()!=Action.RIGHT_CLICK_BLOCK || block.getType()!=Material.TNT) return;
+        if(event.getItem()==null || !ignition(event.getItem().getType())) return;
+        matches().activePlayer(event.getPlayer().getUniqueId()).filter(e -> inWorld(e,block.getWorld())).ifPresent(entry -> {
+            event.setUseInteractedBlock(Event.Result.DENY); event.setUseItemInHand(Event.Result.DENY);
+            // Vanilla TNT power and terrain damage are preserved; only the fuse is removed.
+            block.getWorld().createExplosion(block.getLocation().add(.5,.5,.5),4f,false,true,event.getPlayer());
+        });
+    }
     @EventHandler(priority=EventPriority.MONITOR,ignoreCancelled=true)
     public void explosiveInteraction(PlayerInteractEvent event) {
         Block block=event.getClickedBlock();
@@ -119,13 +132,17 @@ public final class PvPProtectionListener implements Listener {
     }
     @EventHandler(priority=EventPriority.MONITOR,ignoreCancelled=true)
     public void spawn(EntitySpawnEvent event) {
-        if(!(event.getEntity() instanceof TNTPrimed)) return;
-        for(var entry:matches().runningEntries()) if(inWorld(entry,event.getEntity().getWorld())) {
-            UUID owner=runtime.provenance().owner(event.getEntity(),entry);
-            if(owner==null) owner=entry.hazards.owner(key(event.getLocation().getBlock()));
-            entry.hazards.entity(event.getEntity().getUniqueId(),owner);
-            entry.hazards.block(key(event.getLocation().getBlock()),null);
+        if(!(event.getEntity() instanceof TNTPrimed tnt)) return;
+        boolean managed=false;
+        for(var entry:matches().runningEntries()) if(inWorld(entry,tnt.getWorld())) {
+            managed=true;
+            UUID owner=runtime.provenance().owner(tnt,entry);
+            if(owner==null) owner=entry.hazards.owner(key(tnt.getLocation().getBlock()));
+            entry.hazards.entity(tnt.getUniqueId(),owner);
+            entry.hazards.block(key(tnt.getLocation().getBlock()),null);
         }
+        // Any ignition path (redstone, fire, dispenser) also detonates immediately instead of after four seconds.
+        if(managed)tnt.setFuseTicks(0);
     }
     @EventHandler(priority=EventPriority.MONITOR,ignoreCancelled=true)
     public void launch(ProjectileLaunchEvent event) {

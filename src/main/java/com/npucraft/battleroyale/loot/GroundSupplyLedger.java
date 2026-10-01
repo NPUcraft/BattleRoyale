@@ -105,8 +105,16 @@ public final class GroundSupplyLedger {
         var claimed=new HashSet<>(before.claimed());claimed.add(id);
         write(new Snapshot(before.points(),claimed));return true;
     }
-    private void safe()throws IOException {
-        AtomicFiles.safe(worldFolder);
+    /** Appends points that continue the committed plan; existing claims are preserved. */
+    public void append(List<Point> extra)throws IOException {
+        safe();
+        Snapshot before=read().orElseThrow(()->new IOException("No committed supply plan"));
+        List<Point> merged=new ArrayList<>(before.points());merged.addAll(extra);
+        final Snapshot snapshot;
+        try{snapshot=new Snapshot(merged,before.claimed());}catch(RuntimeException invalid){throw new IOException("Invalid supply append",invalid);}
+        write(snapshot);
+    }
+    private void safe()throws IOException {        AtomicFiles.safe(worldFolder);
         if(!Files.isDirectory(worldFolder,LinkOption.NOFOLLOW_LINKS))throw new IOException("Missing supply world directory");
         AtomicFiles.safe(file);
     }

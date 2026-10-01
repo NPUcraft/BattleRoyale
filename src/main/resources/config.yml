@@ -17,7 +17,7 @@ combat:
     min-damage: 4.0
     min-damage-share: 0.20
 match:
-  winner-showcase-seconds: 60
+  winner-showcase-seconds: 30
 deathbox:
   interaction-distance: 6.0
 storage:
@@ -68,6 +68,9 @@ zone-ui:
     height-below-player: 4
     height-above-player: 12
     max-particles-per-player: 400
+  # Per-player blue edge override; never mutates the server world border. Set enabled: false to fully disable.
+  world-border:
+    enabled: true
 
 # Async chunk generation is bounded per maintenance operation.
 map-maintenance:

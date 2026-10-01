@@ -23,4 +23,11 @@ class AirdropAnnouncementTest {
         assertFalse(PaperAirdrops.announcementText(notice).contains("图腾"));
         assertFalse(PaperAirdrops.announcementText(notice).contains("奖励"));
     }
+    @Test void configuredCountdownIsHonoredAndSurvivesTextRendering() {
+        var notice=new PaperAirdrops.Announcement(0,1,81,2,0,120);
+        assertEquals(120,notice.seconds());
+        assertFalse(notice.ready(119_999_999_999L));assertEquals(1,notice.remainingSeconds(119_999_999_999L));
+        assertTrue(notice.ready(120_000_000_000L));assertEquals(0,notice.remainingSeconds(120_000_000_000L));
+        assertTrue(PaperAirdrops.announcementText(notice).contains("120 秒后开始降落"));
+    }
 }

@@ -8,12 +8,12 @@ public enum AirdropEnchantmentTier {
 
     public static AirdropEnchantmentTier roll(RandomGenerator random) {
         int roll=random.nextInt(100);
-        return roll<70?ENHANCED:roll<95?RARE:BEST;
+        return roll<85?ENHANCED:roll<98?RARE:BEST;
     }
     public int level(int maximum,RandomGenerator random) {
         if(maximum<1)throw new IllegalArgumentException("Enchantment maximum must be positive");
         return switch(this) {
-            case ENHANCED -> random.nextInt(Math.min(2,maximum),Math.min(3,maximum)+1);
+            case ENHANCED -> random.nextInt(1,Math.min(2,maximum)+1);
             case RARE -> random.nextInt(Math.max(1,maximum-1),maximum+1);
             case BEST -> maximum;
         };

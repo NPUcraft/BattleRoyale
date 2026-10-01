@@ -90,6 +90,16 @@ public final class RoomRuntimeService implements AutoCloseable {
     public List<RoomDefinition> rooms() { return configuration.get().rooms(); }
     public Optional<GameSession> session(String room) { return sessions.findByRoom(room); }
     public Optional<GameSession> participant(UUID id){return Optional.ofNullable(memberships.get(id)).flatMap(sessions::find);}
+    /** A running match that explicitly accepts external spectators, used to route mid-match joins. */
+    public Optional<GameSession> spectatable(String roomId){
+        var session=session(roomId).orElse(null);
+        return session!=null && session.state()==GameState.RUNNING && session.room().allowExternalSpectators() ? Optional.of(session) : Optional.empty();
+    }
+    /** First running spectator match, used as the auto-join fallback when no room can be queued. */
+    public Optional<GameSession> spectatorMatch(){
+        return rooms().stream().map(room->session(room.id())).flatMap(Optional::stream)
+                .filter(session->session.state()==GameState.RUNNING&&session.room().allowExternalSpectators()).findFirst();
+    }
     public int remaining(GameSession session) {
         Countdown countdown = countdowns.get(session.sessionId());
         return countdown == null ? -1 : countdown.remaining;
@@ -114,10 +124,9 @@ public final class RoomRuntimeService implements AutoCloseable {
         if(!ballots(session).isEmpty())players.notify(List.of(player),"region-vote-open");
         considerCountdown(session);
     }
-    /** Stable tie breaker is configuration order; equal counts never replace the earlier candidate. */
-    public String autojoin(UUID player) {
-        checkOpen();
-        if (memberships.containsKey(player)) throw new IllegalStateException("Already in room");
+    /** Fullest room still accepting players; configuration order breaks ties. Empty when none is queuable.
+     *  A running spectator match is deliberately not a candidate here: queuing must always win. */
+    public Optional<RoomDefinition> joinableRoom() {
         RoomDefinition best = null; int bestCount = -1;
         for (RoomDefinition room : rooms()) {
             GameSession session = session(room.id()).orElse(null);
@@ -126,7 +135,13 @@ public final class RoomRuntimeService implements AutoCloseable {
                 best = room; bestCount = count;
             }
         }
-        if (best == null) throw new IllegalStateException("No room available");
+        return Optional.ofNullable(best);
+    }
+    /** Stable tie breaker is configuration order; equal counts never replace the earlier candidate. */
+    public String autojoin(UUID player) {
+        checkOpen();
+        if (memberships.containsKey(player)) throw new IllegalStateException("Already in room");
+        RoomDefinition best = joinableRoom().orElseThrow(() -> new IllegalStateException("No room available"));
         join(player, best.id()); return best.id();
     }
     public void leave(UUID player) {

@@ -101,10 +101,10 @@ public final class Rc6AirdropProbe {
             tick(67_999_999_999L);require(crates().isEmpty(),"No crate before eight-second descent completes");
             tick(68_000_000_000L);var crates=crates();require(crates.size()==1,"Exactly one landed supply crate");var crate=crates.getFirst();
             require(crate.getX()==at.x()&&crate.getY()==at.y()&&crate.getZ()==at.z(),"Actual barrel uses the exact announced XYZ");
-            require(amount(crate.getInventory(),Material.TOTEM_OF_UNDYING)==1&&amount(crate.getInventory(),Material.BREAD)==6,"Guaranteed totem plus configured random supplies");
+            require(amount(crate.getInventory(),Material.TOTEM_OF_UNDYING)==0&&amount(crate.getInventory(),Material.BREAD)==6,"Totems are no longer guaranteed; random supplies still land");
             require(Arrays.stream(crate.getInventory().getContents()).filter(Objects::nonNull).anyMatch(Rc6AirdropProbe::guaranteedEquipment),"Landed crate contains enchanted diamond equipment or enchanted bow");
             require(tickets()==1&&visuals()==0&&drops.announcement().isEmpty(),"Landing retains only the native beacon ticket while supplies remain");
-            report.set("warning.seconds",60);report.set("warning.location",List.of(at.x(),at.y(),at.z()));report.set("warning.same-xyz-on-landing",true);report.set("guarantees.landed-totem",1);report.set("guarantees.landed-equipment",true);
+            report.set("warning.seconds",60);report.set("warning.location",List.of(at.x(),at.y(),at.z()));report.set("warning.same-xyz-on-landing",true);report.set("guarantees.landed-totem",0);report.set("guarantees.landed-equipment",true);
             return drops.stop();
         }).thenCompose(unused->{
             drops=new PaperAirdrops(plugin,session,sanitizer,content,io,true);
@@ -160,7 +160,7 @@ public final class Rc6AirdropProbe {
         for(int seed=0;seed<20;seed++){
             var items=PaperAirdrops.contents(crowded,new Random(seed));require(items.size()==27,"Container cap remains 27 stacks");
             require(guaranteedEquipment(items.getFirst())&&items.getFirst().getAmount()==1,"Guaranteed enchanted equipment takes capacity before random rolls");
-            require(items.get(1).getType()==Material.TOTEM_OF_UNDYING&&items.get(1).getAmount()==1,"Guaranteed totem cannot be evicted by overflow");
+            require(items.stream().noneMatch(item->item.getType()==Material.TOTEM_OF_UNDYING),"Totems are ordinary table rolls, not a guaranteed slot");
             require(items.stream().noneMatch(item->item.getType()==Material.ELYTRA),"No elytra in supply crate");
         }
         report.set("guarantees.overflow-protected",true);report.set("guarantees.capacity",27);

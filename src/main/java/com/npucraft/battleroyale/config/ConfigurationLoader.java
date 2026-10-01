@@ -43,12 +43,14 @@ public final class ConfigurationLoader {
                 wall.require("particle", type.getDataType() == Void.class, "particle must not require data");
             } catch (IllegalArgumentException error) { throw wall.error("particle", "unknown or unsupported data particle"); }
             try {
-                boolean navigation=true,colored=wall.values().containsKey("colored")?wall.bool("colored"):true;int navigationInterval=5;
+                boolean navigation=true,colored=wall.values().containsKey("colored")?wall.bool("colored"):true,worldBorder=true;int navigationInterval=5;
                 if(node.values().containsKey("navigation")){Node nav=node.section("navigation");navigation=nav.bool("enabled");navigationInterval=nav.integer("update-interval-ticks",1);}
+                // A missing world-border section keeps the per-player edge enabled; operators can disable it without a migration.
+                if(node.values().containsKey("world-border"))worldBorder=node.section("world-border").bool("enabled");
                 ui = new ZoneUiSettings(bar.bool("enabled"), bar.integer("update-interval-ticks",1), wall.bool("enabled"), particle,
                         wall.integer("interval-ticks",1), wall.number("view-distance",1), wall.number("spacing",.25),
                         wall.number("vertical-spacing",.25), wall.number("height-below-player",0), wall.number("height-above-player",0),
-                        wall.integer("max-particles-per-player",1),navigation,navigationInterval,colored);
+                        wall.integer("max-particles-per-player",1),navigation,navigationInterval,colored,worldBorder);
             } catch (IllegalArgumentException error) { throw node.error("",error.getMessage()); }
         }
         CombatSettings combat=CombatSettings.DEFAULT;

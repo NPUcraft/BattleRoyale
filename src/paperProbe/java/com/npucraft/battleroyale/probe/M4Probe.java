@@ -44,12 +44,13 @@ final class M4Probe {
         old.add(world.spawn(location,ExperienceOrb.class,orb->orb.setExperience(7)).getUniqueId());
         old.add(world.spawn(location,Cow.class,cow->cow.setAI(false)).getUniqueId());
         old.add(world.spawn(location,Zombie.class,zombie->{zombie.setAI(false); zombie.setShouldBurnInDay(false);}).getUniqueId());
+        // A full armor set must not be wearable after sanitation: equipment lives on slots, not an inventory.
+        old.add(world.spawn(location,ArmorStand.class,stand->stand.getEquipment().setHelmet(new ItemStack(Material.GOLDEN_HELMET))).getUniqueId());
         preserved.add(world.spawn(location,Villager.class,villager->{villager.setAI(false);villager.setInvulnerable(true);villager.setCanPickupItems(false);}).getUniqueId());
-        preserved.add(world.spawn(location,ArmorStand.class).getUniqueId());
         preserved.add(world.spawn(location,TextDisplay.class).getUniqueId());
-        StorageMinecart cart=world.spawn(location,StorageMinecart.class); cart.getInventory().addItem(new ItemStack(Material.DIAMOND,10)); preserved.add(cart.getUniqueId());
+        StorageMinecart cart=world.spawn(location,StorageMinecart.class); cart.getInventory().addItem(new ItemStack(Material.DIAMOND,10)); old.add(cart.getUniqueId());
         world.getBlockAt(12,-60,0).setType(Material.STONE,false);
-        ItemFrame frame=world.spawn(new Location(world,12,-60,1),ItemFrame.class,f->{f.setFixed(true);f.setInvulnerable(true);}); preserved.add(frame.getUniqueId());
+        ItemFrame frame=world.spawn(new Location(world,12,-60,1),ItemFrame.class,f->{f.setFixed(true);f.setInvulnerable(true);f.setItem(new ItemStack(Material.DIAMOND_SWORD));}); old.add(frame.getUniqueId());
         for(int x:new int[]{15,16}) {
             Block block=world.getBlockAt(x,-60,4); block.setType(Material.CHEST,false);
             var data=(org.bukkit.block.data.type.Chest)block.getBlockData(); data.setFacing(BlockFace.NORTH);

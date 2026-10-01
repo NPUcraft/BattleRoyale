@@ -12,12 +12,11 @@ import org.bukkit.Color;
 import org.bukkit.Server;
 import org.bukkit.Particle;
 import org.bukkit.entity.Player;
-import java.math.BigDecimal;
 import java.util.*;
 
 /** UUID-keyed per-viewer UI; no Player references or global world-border mutations. */
 public final class PaperZoneUi {
-    private static final Particle.DustOptions RED_EDGE=new Particle.DustOptions(Color.fromRGB(255,62,85),1.8f);
+    private static final Particle.DustOptions BLUE_EDGE=new Particle.DustOptions(Color.fromRGB(80,170,255),1.8f);
     private final Server server;
     private final ZoneUiSettings settings;
     private final Particle outlineParticle;
@@ -54,8 +53,8 @@ public final class PaperZoneUi {
             int sample=0;
             for (var point:ParticleWall.sample(zone.current(),location.getX(),location.getY(),location.getZ(),settings)) {
                 // Colored curtain and bright outline share the existing cap; never emit a second layer per sample.
-                if (settings.coloredWall() && sample++%5!=0)
-                    player.spawnParticle(Particle.DUST,point.x(),point.y(),point.z(),1,0,0,0,0,RED_EDGE);
+                if (settings.coloredWall() && sample++%4!=0)
+                    player.spawnParticle(Particle.DUST,point.x(),point.y(),point.z(),1,0,0,0,0,BLUE_EDGE);
                 else player.spawnParticle(outlineParticle,point.x(),point.y(),point.z(),1,0,0,0,0);
                 PerformanceMetricsService.LIVE.add(PerformanceMetricsService.Counter.PARTICLE_SAMPLES,1);
             }
@@ -92,7 +91,8 @@ public final class PaperZoneUi {
     }
     public static Component bossbarMessage(Locale locale,ZoneRuntime zone,long alive,int kills,long teams,boolean spectator,double x,double z) {
         Zone destination=zone.next()==null?zone.current():zone.next();
-        String area=BigDecimal.valueOf(destination.halfSize()).multiply(BigDecimal.valueOf(2)).stripTrailingZeros().toPlainString()+"²";
+        // Stage targets are scaled by initial/reference half-size, so round the displayed side length to hide float noise.
+        String area=Math.round(destination.halfSize()*2)+"²";
         String text=I18n.text(locale,"存活：%s","Alive: %s",alive)+(spectator?I18n.text(locale," | 队伍：%s"," | Teams: %s",teams):I18n.text(locale," | 击杀：%s"," | Kills: %s",kills))
                 +I18n.text(locale," | 第 %s/%s 阶段 | %s面积 %s ㎡"," | Stage %s/%s | %sarea %s m²",zone.stageNumber(),zone.stageCount(),I18n.text(locale,zone.next()==null?"安全区":"下圈",zone.next()==null?"Safe zone ":"Next zone "),area)
                 +" | "+I18n.state(locale,zone.phase())+" | "
@@ -104,6 +104,12 @@ public final class PaperZoneUi {
         if (navigationViewers.remove(player.getUniqueId())) player.sendActionBar(Component.empty());
     }
     public int size(){return bars.size();}
+    /** Every viewer currently owning a BossBar or navigation actionbar; bounded by active session players. */
+    public Set<UUID> viewers(){Set<UUID> all=new HashSet<>(bars.keySet());all.addAll(navigationViewers);return all;}
+    /** Detach exactly the viewers that stopped being rendered this cycle, so a spectator transition never flickers. */
+    public void retain(Collection<UUID> expected){
+        for(UUID id:viewers())if(!expected.contains(id))detach(id);
+    }
     public void detach(UUID id) {
         BossBar bar=bars.remove(id);
         boolean navigation=navigationViewers.remove(id);

@@ -51,6 +51,15 @@ public final class PaperGroundSupplies {
     private void add(GroundSupplyLedger.Point point){
         points.add(point);cells.computeIfAbsent(key(point.x()>>4,point.z()>>4),ignored->new ArrayList<>()).add(point);
     }
+    /** Adds a point after seal(); the durable append shares the same IO chain as claims. */
+    public void append(int x,int y,int z,LootTable table,long seed){
+        if(!sealed||closed)throw new IllegalStateException("Supply plan is open or closed");
+        if(points.size()>=MapLoot.MAX_GROUND_REQUESTS)throw new IllegalStateException("Supply point budget exceeded");
+        var point=new GroundSupplyLedger.Point(points.size(),x,y,z,table.id(),seed,table.minRolls(),table.maxRolls());
+        add(point);
+        // Sharing the writer chain guarantees every append reaches disk before any later claim.
+        writes=writes.thenRunAsync(()->{try{ledger.append(List.of(point));}catch(IOException error){throw new CompletionException(error);}},io);
+    }
     public CompletableFuture<Void> seal(){
         if(sealed||closed)throw new IllegalStateException("Supply plan already sealed");
         sealed=true;var copy=List.copyOf(points);

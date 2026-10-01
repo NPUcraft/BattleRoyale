@@ -17,7 +17,7 @@ import org.bukkit.potion.PotionEffectType;
 import org.bukkit.potion.PotionType;
 public final class NativeLootItems implements LootItemResolver<ItemStack> {
     public static final double ENCHANT_CHANCE=.35;
-    public static final double AIRDROP_ENCHANT_CHANCE=.80;
+    public static final double AIRDROP_ENCHANT_CHANCE=.55;
     private record Effect(PotionEffectType type,int ticks,String name,String duration,Color color){}
     private static final Map<String,Effect> POTIONS=Map.of(
             "invisibility",new Effect(PotionEffectType.INVISIBILITY,600,"隐身","30秒",Color.fromRGB(0xADB5C7)),
@@ -33,7 +33,10 @@ public final class NativeLootItems implements LootItemResolver<ItemStack> {
         String name=key.substring("battleroyale:".length());boolean splash=name.startsWith("splash_");
         if(splash)name=name.substring("splash_".length());
         if(!name.endsWith("_potion"))throw new IllegalArgumentException("Unknown native potion preset: "+key);
-        var type=POTIONS.get(name.substring(0,name.length()-"_potion".length()));
+        String preset=name.substring(0,name.length()-"_potion".length());
+        // Harming is attack-only: a drinkable instant-damage potion only lets a player hurt itself.
+        if(!splash&&preset.equals("harming"))throw new IllegalArgumentException("Unknown native potion preset: "+key);
+        var type=POTIONS.get(preset);
         if(type==null)throw new IllegalArgumentException("Unknown native potion preset: "+key);
         return new Potion(type,splash);
     }
@@ -72,15 +75,15 @@ public final class NativeLootItems implements LootItemResolver<ItemStack> {
     public ItemStack rollAirdrop(String key,RandomGenerator random){
         var item=resolve(key);if(random.nextDouble()<AIRDROP_ENCHANT_CHANCE)enchantAirdrop(item,random);return item;
     }
-    /** Exactly two amount-one stacks, independent of the random airdrop table and its capacity. */
+    /** Exactly one enchanted equipment stack; totems are ordinary low-weight table rolls, never guaranteed. */
     public List<ItemStack> airdropGuarantees(RandomGenerator random){
         var equipment=new ItemStack(GUARANTEES.get(random.nextInt(GUARANTEES.size())));
         if(!enchantAirdrop(equipment,random))throw new IllegalStateException("No applicable enchantment for guaranteed equipment "+equipment.getType());
-        return List.of(equipment,new ItemStack(Material.TOTEM_OF_UNDYING));
+        return List.of(equipment);
     }
     private boolean enchantAirdrop(ItemStack item,RandomGenerator random){
         String type=item.getType().name();Enchantment primary;
-        if(type.endsWith("_SWORD")||type.endsWith("_AXE"))primary=Enchantment.SHARPNESS;
+        if(type.endsWith("_SWORD")||type.endsWith("_AXE")||type.endsWith("_SPEAR"))primary=Enchantment.SHARPNESS;
         else if(type.endsWith("_HELMET")||type.endsWith("_CHESTPLATE")||type.endsWith("_LEGGINGS")||type.endsWith("_BOOTS"))primary=Enchantment.PROTECTION;
         else if(item.getType()==Material.BOW)primary=Enchantment.POWER;
         else if(item.getType()==Material.CROSSBOW)primary=Enchantment.QUICK_CHARGE;
@@ -96,7 +99,7 @@ public final class NativeLootItems implements LootItemResolver<ItemStack> {
             if(item.getType()==Material.BOW){addMaximum(item,Enchantment.FLAME,Enchantment.PUNCH,Enchantment.INFINITY);}
             else {
                 addMaximum(item,Enchantment.MENDING);
-                if(type.endsWith("_SWORD"))addMaximum(item,Enchantment.SWEEPING_EDGE,Enchantment.FIRE_ASPECT,Enchantment.LOOTING);
+                if(type.endsWith("_SWORD")||type.endsWith("_SPEAR"))addMaximum(item,Enchantment.SWEEPING_EDGE,Enchantment.FIRE_ASPECT,Enchantment.LOOTING);
                 if(type.endsWith("_AXE")||type.endsWith("_PICKAXE")||type.endsWith("_SHOVEL")||type.endsWith("_HOE"))addMaximum(item,Enchantment.EFFICIENCY,Enchantment.FORTUNE);
                 if(type.endsWith("_HELMET"))addMaximum(item,Enchantment.RESPIRATION,Enchantment.AQUA_AFFINITY);
                 if(type.endsWith("_BOOTS"))addMaximum(item,Enchantment.FEATHER_FALLING,Enchantment.DEPTH_STRIDER);
@@ -113,10 +116,10 @@ public final class NativeLootItems implements LootItemResolver<ItemStack> {
     }
     private boolean enchant(ItemStack item,RandomGenerator random){
         var choices=new ArrayList<Enchantment>();String type=item.getType().name();
-        if(type.endsWith("_SWORD")||type.endsWith("_AXE"))choices.add(Enchantment.SHARPNESS);
+        if(type.endsWith("_SWORD")||type.endsWith("_AXE")||type.endsWith("_SPEAR"))choices.add(Enchantment.SHARPNESS);
         if(type.endsWith("_HELMET")||type.endsWith("_CHESTPLATE")||type.endsWith("_LEGGINGS")||type.endsWith("_BOOTS"))choices.add(Enchantment.PROTECTION);
         if(type.endsWith("_BOOTS"))choices.add(Enchantment.FEATHER_FALLING);
-        if(item.getType()==Material.BOW)choices.add(Enchantment.POWER);
+        if(type.endsWith("_SPEAR"))choices.add(Enchantment.KNOCKBACK);
         if(item.getType()==Material.CROSSBOW)choices.add(Enchantment.QUICK_CHARGE);
         if(item.getType()==Material.TRIDENT)choices.add(Enchantment.IMPALING);
         if(item.getType()==Material.MACE)choices.add(Enchantment.DENSITY);

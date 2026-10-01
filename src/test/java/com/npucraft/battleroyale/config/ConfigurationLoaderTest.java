@@ -53,6 +53,7 @@ class ConfigurationLoaderTest {
         assertEquals("world", result.settings().lobbyWorld());
         assertEquals(60, result.rooms().getFirst().countdownDuration().getSeconds());
         assertEquals(CombatSettings.DEFAULT,result.settings().combat());
+        assertTrue(result.settings().zoneUi().worldBorderEnabled());
     }
     @ParameterizedTest @CsvSource(delimiter='|',value={
         "config.yml|reconnect-seconds: 120|reconnect-seconds: -1|disconnect.reconnect-seconds",
@@ -64,7 +65,7 @@ class ConfigurationLoaderTest {
         "config.yml|attribution-seconds: 15|attribution-seconds: 0|combat.attribution-seconds",
         "config.yml|min-damage: 4.0|min-damage: -1|combat.assist.min-damage",
         "config.yml|min-damage-share: 0.20|min-damage-share: 1.1|combat/match/deathbox",
-        "config.yml|winner-showcase-seconds: 60|winner-showcase-seconds: -1|match.winner-showcase-seconds",
+        "config.yml|winner-showcase-seconds: 30|winner-showcase-seconds: -1|match.winner-showcase-seconds",
         "config.yml|interaction-distance: 6.0|interaction-distance: .nan|deathbox.interaction-distance",
         "zones.yml|target-half-size: 600|target-half-size: 750|profiles.default.stages[0]",
         "zones.yml|target-half-size: 600|target-half-size: 800|profiles.default.stages[0]",
@@ -103,6 +104,15 @@ class ConfigurationLoaderTest {
         replace("config.yml","  navigation:\n    enabled: true\n    update-interval-ticks: 5\n","");
         replace("config.yml","    colored: true\n","");
         var ui=load().settings().zoneUi();assertTrue(ui.navigationEnabled());assertEquals(5,ui.navigationInterval());assertTrue(ui.coloredWall());
+    }
+    @Test void worldBorderSectionDefaultsOnAndCanBeDisabled()throws Exception{
+        assertTrue(load().settings().zoneUi().worldBorderEnabled());
+        replace("config.yml","  world-border:\n    enabled: true","  world-border:\n    enabled: false");
+        assertFalse(load().settings().zoneUi().worldBorderEnabled());
+    }
+    @Test void legacyZoneUiWithoutWorldBorderSectionKeepsThePerPlayerEdge()throws Exception{
+        replace("config.yml","  world-border:\n    enabled: true\n","");
+        assertTrue(load().settings().zoneUi().worldBorderEnabled());
     }
     @Test void runtimeIsolatesMalformedMapWithoutWritingConfiguration() throws Exception {
         replace("maps.yml", "min-x: -3000", "min-x: invalid");

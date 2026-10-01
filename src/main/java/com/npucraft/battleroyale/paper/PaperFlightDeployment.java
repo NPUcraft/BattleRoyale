@@ -1,5 +1,6 @@
 package com.npucraft.battleroyale.paper;
 
+import com.npucraft.battleroyale.flight.DeploymentPolicy;
 import com.npucraft.battleroyale.flight.FlightRoute;
 import com.npucraft.battleroyale.player.PlayerState;
 import com.npucraft.battleroyale.service.UiText;
@@ -96,9 +97,14 @@ public final class PaperFlightDeployment implements Listener,AutoCloseable {
             if(phase==Phase.FLYING&&tick%3==0){
                 double fraction=(double)(now-phaseStarted)/(FlightRoute.FLIGHT_SECONDS*SECOND);
                 move(route.center(fraction,height));
-                if(fraction>=1){for(UUID id:fallbacks.keySet())if(presence.get(id)==Presence.ONBOARD)eject(id,now);platform.close();phase=Phase.LANDING;phaseStarted=now;}
+                if(fraction>=1){evacuate(now);platform.close();phase=Phase.LANDING;phaseStarted=now;}
             }
+            // Bounded guarantee: once the aircraft has finished its route nobody stays on board.
+            if(phase==Phase.LANDING)evacuate(now);
         }catch(Throwable error){fail(error);}
+    }
+    private void evacuate(long now){
+        for(UUID id:fallbacks.keySet())if(presence.get(id)==Presence.ONBOARD)eject(id,now);
     }
     private void load(long now){
         if(now-started>FlightRoute.LOADING_SECONDS*SECOND)throw new IllegalStateException("Flight course loading exceeded 45 seconds");
@@ -152,30 +158,35 @@ public final class PaperFlightDeployment implements Listener,AutoCloseable {
                 if(!supported){depart(id,player,now);state=Presence.DESCENDING;}
             }
             if(state==Presence.DESCENDING){
-                if(player.isInLava()||at.getY()<world.getMinHeight()+4||session.initialZone().orElseThrow().distanceOutside(at.getX(),at.getZ())>256){
-                    safeReturn(id,player);continue;
-                }
-                // Player.isOnGround is client-controlled and may remain false while gliding on a
-                // fractional surface. Inspect actual collision components before the timeout fallback.
-                if(at.getY()<height-2&&(PaperPlayerLanding.safeStanding(at)||player.isInWater())){
-                    if(!session.initialZone().orElseThrow().contains(at.getX(),at.getZ()))safeReturn(id,player);else landed(id,player);
-                    continue;
-                }
-                if(now-departed.getOrDefault(id,now)>FlightRoute.LANDING_SECONDS*SECOND){safeReturn(id,player);continue;}
+                // Only genuinely broken end-states pull a player to the prepared fallback. A normal
+                // glide may finish anywhere; the shrinking zone already governs ground taken outside
+                // the initial square, so the old initial-zone containment gate yanked players who had
+                // simply landed where they steered.
+                var outcome=DeploymentPolicy.descending(at.getY(),world.getMinHeight(),height,player.isInLava(),
+                        PaperPlayerLanding.safeStanding(at)||player.isInWater(),now-departed.getOrDefault(id,now),FlightRoute.LANDING_SECONDS*SECOND);
+                if(outcome==DeploymentPolicy.Outcome.FALLBACK){safeReturn(id,player);continue;}
+                if(outcome==DeploymentPolicy.Outcome.LAND){landed(id,player);continue;}
                 if(!player.isInWater()&&!player.isGliding())player.setGliding(true);
             }
         }
     }
     private void depart(UUID id,Player player,long now){
         presence.put(id,Presence.DESCENDING);departed.put(id,now);player.setFallDistance(0);
-        if(!player.isOnGround())player.setGliding(true);
+        // Always deploy. The server still reports the platform edge as on-ground for the departure
+        // tick, so the previous conditional setGliding(true) left players in free fall over the map.
+        player.setGliding(true);
         player.sendMessage(UiText.message(player,"跳伞中：调整视角滑翔，落地后等待其他玩家。","Deploying: steer with your view; wait for the others after landing."));
     }
     private void eject(UUID id,long now){
         Player player=lookup.apply(id);if(player==null||!player.isOnline()){presence.put(id,Presence.DONE);return;}
         var center=route.center(1,height);var at=route.translate(center,FlightRoute.WING+3,-1,0);
         var location=new Location(world,at.x()+.5,at.y(),at.z()+.5,route.yaw(),15);
-        if(!player.teleport(location))throw new IllegalStateException("End-of-route deployment teleport rejected");
+        // A rejected wing-side teleport must not abort the whole match; fall back to the prepared ground spot.
+        if(!player.teleport(location)){
+            Location prepared=fallbacks.get(id);
+            if(!player.isDead()&&PaperPlayerLanding.safeStanding(prepared)){player.teleport(prepared);landed(id,player);return;}
+            throw new IllegalStateException("End-of-route deployment teleport rejected");
+        }
         depart(id,player,now);player.setVelocity(new Vector(route.dx()*.65,-.15,route.dz()*.65));player.setGliding(true);
     }
     private void landed(UUID id,Player player){
@@ -192,9 +203,12 @@ public final class PaperFlightDeployment implements Listener,AutoCloseable {
         var old=platform.center();if(next.equals(old))return;
         var passengers=new LinkedHashMap<Player,Location>();
         for(var entry:presence.entrySet())if(entry.getValue()==Presence.ONBOARD){
-            Player player=lookup.apply(entry.getKey());if(player!=null&&player.isOnline()){
-                Location target=player.getLocation().add(next.x()-old.x(),0,next.z()-old.z());passengers.put(player,target);
-            }
+            Player player=lookup.apply(entry.getKey());
+            if(player==null)continue;
+            // Only carry players still standing on the fuselage. Teleporting a player who already
+            // stepped off the edge dragged them back each move, so they could not leave the aircraft.
+            if(!DeploymentPolicy.carried(player.isOnline(),platform.supports(player.getLocation())))continue;
+            var at=player.getLocation();passengers.put(player,at.clone().add(next.x()-old.x(),0,next.z()-old.z()));
         }
         platform.move(next);
         for(var passenger:passengers.entrySet()){

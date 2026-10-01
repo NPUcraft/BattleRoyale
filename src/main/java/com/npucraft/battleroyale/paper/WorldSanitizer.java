@@ -90,6 +90,10 @@ public final class WorldSanitizer implements Listener,AutoCloseable {
                 if(registration.recovered)continue;
                 if(entity instanceof InventoryHolder holder) holder.getInventory().clear();
                 if(entity instanceof Villager) continue;
+                // Armor stands are not InventoryHolder: their gear lives on equipment slots, so a plain
+                // inventory clear would leave a full kit wearable. Clear every slot, then remove it.
+                if(entity instanceof ArmorStand stand){ stand.getEquipment().clear(); entity.remove(); continue; }
+                if(StorageGuardPolicy.removedEntity(entity.getType().name())){ entity.remove(); continue; }
                 if(entity instanceof Item && registration.session.toString().equals(entity.getPersistentDataContainer().get(groundLoot,PersistentDataType.STRING))) continue;
                 if(entity instanceof Item || entity instanceof ExperienceOrb || entity instanceof Mob) entity.remove();
             }

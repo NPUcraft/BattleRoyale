@@ -76,8 +76,11 @@ public final class BattleRoyaleCommand implements CommandExecutor, TabCompleter 
                 }
                 case "join", "autojoin", "leave" -> {
                     if (!(sender instanceof Player player)) { messages.send(sender, I18n.text(sender, "此命令只能由游戏内玩家执行。", "Only in-game players can use this command.")); break; }
-                    if (action.equals("join") && args.length == 2) rooms.join(player.getUniqueId(), args[1]);
-                    else if (action.equals("autojoin") && args.length == 1) rooms.autojoin(player.getUniqueId());
+                    if (action.equals("join") && args.length == 2) {
+                        var match = rooms.spectatable(args[1]);
+                        if (match.isPresent()) runtime.spectators().external(player, match.get()); else rooms.join(player.getUniqueId(), args[1]);
+                    }
+                    else if (action.equals("autojoin") && args.length == 1) autojoinOrSpectate(player, rooms);
                     else if (action.equals("leave") && args.length == 1) {
                         boolean ending=rooms.participant(player.getUniqueId()).map(session->session.state()==com.npucraft.battleroyale.session.GameState.ENDING).orElse(false);
                         if(ending || !runtime.spectators().leave(player.getUniqueId(),false))rooms.leave(player.getUniqueId());
@@ -135,6 +138,11 @@ public final class BattleRoyaleCommand implements CommandExecutor, TabCompleter 
             }
         } catch (IllegalArgumentException | IllegalStateException error) { messages.send(sender, error.getMessage()); }
         return true;
+    }
+    /** Quick join prioritises a queuable room; spectating a running match is only the fallback. */
+    private void autojoinOrSpectate(Player player, RoomRuntimeService rooms){
+        if(rooms.participant(player.getUniqueId()).isPresent()||rooms.joinableRoom().isPresent()){rooms.autojoin(player.getUniqueId());return;}
+        runtime.spectators().external(player,rooms.spectatorMatch().orElseThrow(()->new IllegalStateException("No room available")));
     }
     private boolean adminAccess(CommandSender sender){return java.util.stream.Stream.of("battleroyale.admin","battleroyale.admin.map","battleroyale.admin.config","battleroyale.admin.cosmetic","battleroyale.admin.diagnostics").anyMatch(sender::hasPermission);}
     @Override public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
