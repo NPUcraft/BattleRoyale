@@ -46,9 +46,32 @@ class PaperZoneUiTest {
     }
     @Test void bossbarUsesNextSquareAreaAndConfiguredStageFractionIncludingFinal(){
         var runtime=zone();String waiting=TEXT.serialize(PaperZoneUi.bossbarMessage(runtime,7,2,4,false,0,0));
-        assertTrue(waiting.contains("第 1/1 阶段"));assertTrue(waiting.contains("下圈面积 250000 ㎡"));assertTrue(waiting.contains("击杀：2"));assertFalse(waiting.contains("X:"));
-        runtime.update(30_000_000_000L);String end=TEXT.serialize(PaperZoneUi.bossbarMessage(runtime,2,0,1,true,0,0));
-        assertTrue(end.contains("第 1/1 阶段"));assertFalse(end.contains("第 2/"));assertTrue(end.contains("安全区面积 250000 ㎡"));assertTrue(end.contains("观战中"));
+        assertTrue(waiting.contains("第 1/1 阶段"));assertTrue(waiting.contains("下圈面积 500² ㎡"));assertTrue(waiting.contains("击杀：2"));assertFalse(waiting.contains("X:"));
+        runtime.update(50_000_000_000L);String end=TEXT.serialize(PaperZoneUi.bossbarMessage(runtime,2,0,1,true,0,0));
+        assertTrue(end.contains("第 1/1 阶段"));assertFalse(end.contains("第 2/"));assertTrue(end.contains("安全区面积 0² ㎡"));assertTrue(end.contains("观战中"));
+    }
+    @Test void squareNotationUsesSideLengthRatherThanSquaringTheAreaAgain(){
+        var profile=new ZoneProfile("small",List.of(new ZoneProfile.InitialSize(8,500)),List.of(new ZoneProfile.Stage(Duration.ofSeconds(1),Duration.ofSeconds(1),50,1,0,1)));
+        var runtime=new ZoneRuntime(new Zone(0,0,500),profile,new Random(4),0);
+        for(Locale locale:List.of(Locale.SIMPLIFIED_CHINESE,Locale.ENGLISH)){
+            String text=TEXT.serialize(PaperZoneUi.bossbarMessage(locale,runtime,4,0,4,false,0,0));
+            assertTrue(text.contains("100²"));assertFalse(text.contains("10000²"));assertFalse(text.contains("2500²"));
+        }
+    }
+    @Test void zeroCircleShowsNoSafeZoneAndRedBossbarEvenExactlyAtItsCenter(){
+        var viewer=new Viewer(Locale.ENGLISH);var settings=new ZoneUiSettings(true,5,true,"END_ROD",5,64,2.5,1.5,3,6,20,true,5,true);
+        var ui=new PaperZoneUi(viewer.server(),settings);var profile=new ZoneProfile("closed",List.of(new ZoneProfile.InitialSize(8,500)),List.of(new ZoneProfile.Stage(Duration.ZERO,Duration.ofSeconds(1),0,1,0,1)));
+        var zeroRandom=new Random(){@Override public double nextDouble(){return .5;}};
+        var runtime=new ZoneRuntime(new Zone(499,499,500),profile,zeroRandom,0);runtime.update(1_000_000_000L);
+        ui.render(viewer.player,runtime,0,2,0,2,false,null);
+        assertEquals("No safe zone remains",viewer.lastText());assertEquals(BossBar.Color.RED,viewer.shown.getFirst().color());assertTrue(viewer.particles.isEmpty());
+        assertTrue(TEXT.serialize(viewer.shown.getFirst().name()).contains("Safe zone area 0² m²"));assertTrue(TEXT.serialize(viewer.shown.getFirst().name()).contains("Outside zone"));
+        viewer.locale=Locale.SIMPLIFIED_CHINESE;ui.render(viewer.player,runtime,5,2,0,2,false,null);assertEquals("安全区已消失",viewer.lastText());ui.close();
+    }
+    @Test void nextZeroTargetGuidesToCollapsePointWithoutClaimingAnExistingSafeCenter(){
+        var current=new Zone(0,0,50);var next=new Zone(10,0,0);var hint=ZoneNavigation.guide(current,next,10,0,0);
+        assertEquals("● 最终收拢点 0 米",TEXT.serialize(PaperZoneUi.navigationMessage(hint,current,next)));
+        assertEquals("● Final collapse point 0 m",TEXT.serialize(PaperZoneUi.navigationMessage(Locale.ENGLISH,hint,current,next,null,10,0,0)));
     }
     @Test void newRenderOverloadPublishesBothNavigationTargetsAndKeepsBossbarOwnership(){
         for(Locale locale:List.of(Locale.SIMPLIFIED_CHINESE,Locale.ENGLISH)){
@@ -56,7 +79,7 @@ class PaperZoneUiTest {
         var viewer=new Viewer(locale);var settings=new ZoneUiSettings(true,5,false,"END_ROD",5,64,2.5,1.5,3,6,20,true,5,true);
         var ui=new PaperZoneUi(viewer.server(),settings);var runtime=zone();
         ui.render(viewer.player,runtime,0,8,3,4,false,new ZoneNavigation.Point(502,503));
-        assertTrue(viewer.lastText().contains(chinese?"空投 5 米":"Airdrop 5 m"));assertEquals(1,viewer.shown.size());assertTrue(TEXT.serialize(viewer.shown.getFirst().name()).contains(chinese?"下圈面积 250000 ㎡":"Next zone area 250000 m²"));
+        assertTrue(viewer.lastText().contains(chinese?"空投 5 米":"Airdrop 5 m"));assertEquals(1,viewer.shown.size());assertTrue(TEXT.serialize(viewer.shown.getFirst().name()).contains(chinese?"下圈面积 500² ㎡":"Next zone area 500² m²"));
         ui.render(viewer.player,runtime,5,8,3,4,false,null);assertFalse(viewer.lastText().contains(chinese?"空投":"Airdrop"));assertEquals(1,viewer.shown.size());
         ui.close();assertEquals(viewer.shown,viewer.hidden);assertEquals("",viewer.lastText());
         }

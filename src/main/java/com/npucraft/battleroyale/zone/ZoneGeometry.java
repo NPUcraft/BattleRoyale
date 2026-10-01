@@ -4,13 +4,13 @@ import java.util.random.RandomGenerator;
 public final class ZoneGeometry {
     private ZoneGeometry() {}
     public static Zone initial(PlayableArea area, double halfSize, RandomGenerator random) {
-        if (area.maxX() - area.minX() < 2 * halfSize || area.maxZ() - area.minZ() < 2 * halfSize)
+        if (!Double.isFinite(halfSize) || halfSize <= 0 || area.maxX() - area.minX() < 2 * halfSize || area.maxZ() - area.minZ() < 2 * halfSize)
             throw new IllegalArgumentException("Playable area cannot contain initial halfSize=" + halfSize);
         return new Zone(sample(area.minX()+halfSize, area.maxX()-halfSize, random),
                 sample(area.minZ()+halfSize, area.maxZ()-halfSize, random), halfSize);
     }
     public static Zone next(Zone current, double halfSize, RandomGenerator random) {
-        if (!(halfSize > 0 && halfSize < current.halfSize())) throw new IllegalArgumentException("Target must shrink");
+        if (!(halfSize >= 0 && halfSize < current.halfSize())) throw new IllegalArgumentException("Target must shrink");
         double inset = current.halfSize()-halfSize;
         return new Zone(sample(current.centerX()-inset, current.centerX()+inset, random),
                 sample(current.centerZ()-inset, current.centerZ()+inset, random), halfSize);

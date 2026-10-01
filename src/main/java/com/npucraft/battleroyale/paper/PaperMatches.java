@@ -66,9 +66,10 @@ public final class PaperMatches implements MatchLifecycle {
         session.initialZone(ZoneGeometry.initial(session.selectedMap().orElseThrow().playableArea(),
                 profile.initialHalfSize(session.players().size()), random));
         Entry entry=new Entry(session,profile,new PaperZoneUi(plugin.getServer(),configuration.settings().zoneUi()));entries.put(session.sessionId(),entry);
+        entry.preparationUi=new PaperPreparationUi(plugin.getServer(),scheduler,clock,session.players().keySet(),()->preparationStatus(entry));
         if(progression!=null)entry.progress=new com.npucraft.battleroyale.progression.SessionProgress(session.teams().keySet(),progression.freeze(session.players().keySet()));
         entry.offline=new PaperOfflineBodies(plugin,entry,configuration.settings().disconnect(),clock,bodySnapshots,messages,id->{isolation.defer(session.sessionId(),id);isolation.retry(id);});
-        return isolation.applyAsync(session.sessionId(),List.copyOf(session.players().keySet()),loadouts.definition(session.room().loadoutId()),()->session.state()==GameState.PREPARING && entries.get(session.sessionId())==entry).thenRun(()->players.notify(session.players().keySet(),"teams-assigned",session.teams().size()));
+        return isolation.applyAsync(session.sessionId(),List.copyOf(session.players().keySet()),loadouts.definition(session.room().loadoutId()),()->session.state()==GameState.PREPARING && entries.get(session.sessionId())==entry).thenRun(()->{entry.snapshotsPrepared=true;players.notify(session.players().keySet(),"teams-assigned",session.teams().size());});
     }
     @Override public void start(GameSession session,Runnable ready,Consumer<Throwable> failed) {
         var starters=List.copyOf(session.players().keySet());
@@ -79,12 +80,30 @@ public final class PaperMatches implements MatchLifecycle {
         if(closed || entries.get(session.sessionId())!=entry || session.state()!=GameState.STARTING)
             throw new IllegalStateException("Match cancelled during initial sanitation");
         entry.loot=new PaperLootRuntime(plugin,session,sanitizer,content,new NativeLootItems(),new java.util.Random(random.nextLong()),groundMarker,scheduler);
+        var fallbackLandings=new LinkedHashMap<UUID,org.bukkit.Location>();
         entry.preparation=new SpawnPreparation(new PaperSpawnTerrain(plugin,session,sanitizer,entry.loot::generate,
-                ()->{},(id,location)->entry.offline.planned(id,location)),new SpawnPlanner(initial,session.room().spawn(),starters.size(),random),
-                starters,()-> session.state()==GameState.STARTING && entries.get(session.sessionId())==entry,scheduler,clock,ready,failed);
+                ()->{},(id,location)->{fallbackLandings.put(id,location.clone());entry.offline.planned(id,location);}),new SpawnPlanner(initial,session.room().spawn(),starters.size(),random),
+                starters,()-> session.state()==GameState.STARTING && entries.get(session.sessionId())==entry,scheduler,clock,()->{
+                    if(closed||entries.get(session.sessionId())!=entry||session.state()!=GameState.STARTING)return;
+                    entry.flight=new PaperFlightDeployment(plugin,session,fallbackLandings,new java.util.Random(random.nextLong()));
+                    entry.flight.start(ready,failed);
+                },failed);
+    }
+    private PaperPreparationUi.Status preparationStatus(Entry entry){
+        if(!entry.snapshotsPrepared)return PaperPreparationUi.Status.phase(PaperPreparationUi.Phase.PLAYER_DATA);
+        if(entry.flight!=null){
+            var flight=entry.flight.progress();String phase=flight.phase().toString();
+            String zh=switch(phase){case "LOADING"->"加载随机航线";case "BOARDING"->"登机中";case "FLYING"->"走出平台即可跳伞";case "LANDING"->"等待队员着陆";default->"跳伞准备";};
+            String en=switch(phase){case "LOADING"->"Loading random route";case "BOARDING"->"Boarding";case "FLYING"->"Step off to deploy";case "LANDING"->"Waiting for landings";default->"Deployment";};
+            return new PaperPreparationUi.Status(PaperPreparationUi.Phase.FLIGHT,flight.completed(),flight.total(),zh,en);
+        }
+        if(entry.preparation==null)return PaperPreparationUi.Status.phase(PaperPreparationUi.Phase.MAP);
+        if(entry.preparation.preparingLoot())return PaperPreparationUi.Status.phase(PaperPreparationUi.Phase.LOOT);
+        return new PaperPreparationUi.Status(PaperPreparationUi.Phase.SPAWNS,entry.preparation.preparedCount(),entry.preparation.starterCount());
     }
     @Override public void running(GameSession session,Consumer<Throwable> failed) {
         Entry entry=Objects.requireNonNull(entries.get(session.sessionId()));
+        if(entry.preparationUi!=null)entry.preparationUi.close();
         long now=clock.nanoTime();
         session.runningZone(new ZoneRuntime(session.initialZone().orElseThrow(),entry.profile,random,now),
                 new ProtectionWindow(now,session.room().pvpProtectionDuration()));
@@ -218,9 +237,12 @@ public final class PaperMatches implements MatchLifecycle {
         Player player=plugin.getServer().getPlayer(id);if(player==null)return;
         if(entry.session.state()==GameState.ENDING){isolation.defer(entry.session.sessionId(),id);return;}
         if(!isolation.ready(entry.session.sessionId()))throw new IllegalStateException("Disconnected before durable preparation completed");
+        if(entry.preparationUi!=null)entry.preparationUi.detach(id);
+        var fallback=entry.flight==null?null:entry.flight.disconnect(player);
         entry.offline.disconnect(player);
+        if(fallback!=null)entry.offline.planned(id,fallback);
     }
-    public java.util.Map<String,Long> resourceCounts(){var all=new java.util.HashSet<Entry>(entries.values());all.addAll(draining);return java.util.Map.of("entries",(long)entries.size(),"draining",(long)draining.size(),"bossbars",all.stream().mapToLong(e->e.ui.size()).sum(),"deathboxes",all.stream().mapToLong(e->e.combat==null?0:e.combat.boxes().size()).sum(),"offlineBodies",all.stream().mapToLong(e->e.offline==null?0:e.offline.size()).sum());}
+    public java.util.Map<String,Long> resourceCounts(){var all=new java.util.HashSet<Entry>(entries.values());all.addAll(draining);return java.util.Map.of("entries",(long)entries.size(),"draining",(long)draining.size(),"cleanupFailed",all.stream().filter(e->e.cleanupFailed).count(),"bossbars",all.stream().mapToLong(e->e.ui.size()+(e.preparationUi==null?0:e.preparationUi.size())).sum(),"deathboxes",all.stream().mapToLong(e->e.combat==null?0:e.combat.boxes().size()).sum(),"offlineBodies",all.stream().mapToLong(e->e.offline==null?0:e.offline.size()).sum());}
     public Entry entry(UUID session){return entries.get(session);}
     public Entry participant(UUID id){return entries.values().stream().filter(e->e.session.players().containsKey(id)).findFirst().orElse(null);}
     public boolean joined(Player player){Entry entry=participant(player.getUniqueId());return entry!=null && entry.offline!=null && entry.offline.reconnect(player);}
@@ -245,7 +267,7 @@ public final class PaperMatches implements MatchLifecycle {
         if(spectators.registry().find(player).isPresent())throw new IllegalStateException("请先退出观战。");
         if(isolation.blocked(player)) throw new IllegalStateException("请等待上一局的玩家状态恢复完成后再加入。");
     }
-    @Override public void restore(GameSession session) { spectators.cleanup(session);var entry=entries.get(session.sessionId());if(entry!=null && entry.offline!=null)entry.offline.close();isolation.end(session.sessionId()); }
+    @Override public void restore(GameSession session) { spectators.cleanup(session);var entry=entries.get(session.sessionId());if(entry!=null){if(entry.preparationUi!=null)entry.preparationUi.close();if(entry.flight!=null)entry.flight.stop();if(entry.offline!=null)entry.offline.close();}isolation.end(session.sessionId()); }
     @Override public void leaveEnding(GameSession session,UUID player){
         Entry entry=entries.get(session.sessionId());
         if(entry==null||entry.session!=session||session.state()!=GameState.ENDING||session.outcome().isEmpty()||!session.players().containsKey(player))throw new IllegalStateException("只能在比赛结束后的展示阶段提前返回大厅。");
@@ -271,9 +293,20 @@ public final class PaperMatches implements MatchLifecycle {
             java.util.concurrent.CompletableFuture<Void> loot=entry.loot==null?java.util.concurrent.CompletableFuture.completedFuture(null):entry.loot.stop();
             var airdrops=entry.airdrops==null?java.util.concurrent.CompletableFuture.<Void>completedFuture(null):entry.airdrops.stop();
             var horses=entry.horses==null?java.util.concurrent.CompletableFuture.<Void>completedFuture(null):entry.horses.stop();
-            java.util.concurrent.CompletableFuture.allOf(loot,airdrops,horses).thenRun(()-> {
+            var flight=entry.flight==null?java.util.concurrent.CompletableFuture.<Void>completedFuture(null):entry.flight.stop();
+            java.util.concurrent.CompletableFuture.allOf(loot,airdrops,horses,flight).whenComplete((unused,error)-> {
                 if(closed)return;
-                Runnable finish=()->{if(!closed){sanitizer.remove(entry.worldId);draining.remove(entry);drained.run();}};
+                Runnable finish=()->{
+                    if(closed)return;
+                    if(error!=null){
+                        // A failed equipment/platform cleanup cannot safely authorize world deletion.
+                        // Keep the owned world and expose the failure instead of silently abandoning the callback.
+                        entry.cleanupFailed=true;
+                        players.error("Match cleanup failed; room and world retained for administrator recovery: "+session.sessionId(),error);
+                        return;
+                    }
+                    sanitizer.remove(entry.worldId);draining.remove(entry);drained.run();
+                };
                 if(plugin.getServer().isPrimaryThread())finish.run();else plugin.getServer().getScheduler().runTask(plugin,finish);
             });
         };
@@ -285,6 +318,7 @@ public final class PaperMatches implements MatchLifecycle {
             abortedResult(entry);
             spectators.cleanup(entry.session);if(entry.offline!=null)entry.offline.close();
             entry.closeCombat();celebrations.close(entry.session.sessionId());if(cosmeticEffects!=null)cosmeticEffects.close(entry.session.sessionId());
+            if(entry.preparationUi!=null)entry.preparationUi.close();if(entry.flight!=null)entry.flight.close();
             isolation.end(entry.session.sessionId());
             if(entry.loot!=null) entry.loot.close();
             if(entry.worldId!=null) sanitizer.remove(entry.worldId);
@@ -292,6 +326,7 @@ public final class PaperMatches implements MatchLifecycle {
         }
         entries.clear();
         for(Entry entry:List.copyOf(draining)) {
+            if(entry.preparationUi!=null)entry.preparationUi.close();if(entry.flight!=null)entry.flight.close();
             if(entry.loot!=null) entry.loot.close();
             if(entry.horses!=null) entry.horses.close();
             if(entry.worldId!=null) sanitizer.remove(entry.worldId);
@@ -323,6 +358,10 @@ public final class PaperMatches implements MatchLifecycle {
         final ZoneProfile profile;
         final PaperZoneUi ui;
         SpawnPreparation preparation;
+        PaperPreparationUi preparationUi;
+        PaperFlightDeployment flight;
+        boolean snapshotsPrepared;
+        boolean cleanupFailed;
         PaperLootRuntime loot;
         PaperAirdrops airdrops;
         PaperMatchHorses horses;
@@ -333,7 +372,7 @@ public final class PaperMatches implements MatchLifecycle {
         boolean protectionExpired;
         boolean recoveredLootComplete;
         Entry(GameSession session,ZoneProfile profile,PaperZoneUi ui) { this.session=session; this.profile=profile; this.ui=ui; }
-        void stopLoop() { if(task!=null) task.close();if(airdrops!=null)airdrops.close();if(horses!=null)horses.close();ui.close(); hazards.clear(); }
+        void stopLoop() { if(preparationUi!=null)preparationUi.close();if(flight!=null)flight.stop();if(task!=null) task.close();if(airdrops!=null)airdrops.close();if(horses!=null)horses.close();ui.close(); hazards.clear(); }
         void closeCombat() {if(showcase!=null)showcase.close();if(combat!=null)combat.close();}
     }
 }

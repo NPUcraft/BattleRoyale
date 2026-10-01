@@ -12,6 +12,7 @@ public final class ParticleWall {
     public static List<Point> sample(Zone zone,double x,double y,double z,ZoneUiSettings settings) {
         Objects.requireNonNull(zone); Objects.requireNonNull(settings);
         Checks.finite(x,"player x"); Checks.finite(y,"player y"); Checks.finite(z,"player z");
+        if (zone.halfSize()==0) return List.of();
         int cap=settings.maximumParticles();
         List<Double> heights=axis(y-settings.below(),y+settings.above(),y+1.6,settings.verticalSpacing(),cap);
         List<Edge> edges=new ArrayList<>(4);

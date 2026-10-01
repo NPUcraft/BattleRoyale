@@ -1,5 +1,6 @@
 config-version: 2
-# Square halfSize is half the side length. Every target is below every initial bucket.
+# Square halfSize is half the side length. Targets strictly decrease; only the final target may be 0.
+# Legacy positive final targets continue shrinking to 0 in the same final stage.
 profiles:
   default:
     initial-size-by-players:
@@ -31,7 +32,7 @@ profiles:
         max-damage-per-second: 14.0
       - wait-seconds: 120
         shrink-seconds: 45
-        target-half-size: 50
+        target-half-size: 0
         base-damage-per-second: 4.0
         extra-damage-per-block: 0.03
         max-damage-per-second: 20.0

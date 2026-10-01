@@ -73,7 +73,7 @@ public final class MatchContentLoader {
             }catch(Exception e){if(!isolateMapErrors)throw new IllegalArgumentException("Map "+map.id()+": "+e.getMessage(),e);mapErrors.put(map.id(),e.getMessage());maps.put(map.id(),new MapLoot(List.of(),List.of()));}
         }
         String defaultTable=tables.containsKey("basic")?"basic":tables.keySet().stream().findFirst().orElse("basic");
-        var auto=new AutoContainerLootSettings(!tables.isEmpty(),defaultTable,.9,2,5,16);
+        var auto=new AutoContainerLootSettings(!tables.isEmpty(),defaultTable,.4,1,3,16);
         if(lootConfig.contains("auto-containers")){
             var n=section(lootConfig,"auto-containers");
             auto=new AutoContainerLootSettings(bool(n,"enabled"),text(n,"loot-table"),number(n,"chance"),integer(n,"min-rolls"),integer(n,"max-rolls"),integer(n,"max-containers-per-tick"));

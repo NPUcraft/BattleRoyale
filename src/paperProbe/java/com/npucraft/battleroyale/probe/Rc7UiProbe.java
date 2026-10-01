@@ -75,12 +75,12 @@ public final class Rc7UiProbe {
             ui.render(player,zone,0,8,2,4,false,new ZoneNavigation.Point(502,503));
             require(shown.size()==1&&ui.size()==1,"One real BossBar object per viewer");
             String waiting=plain(shown.getFirst().name()),action=plain(messages.getLast());noCoordinates(waiting);noCoordinates(action);
-            require(waiting.contains("第 1/8 阶段")&&waiting.contains("下圈面积 640000 ㎡"),"BossBar reports stage fraction and next-square area");
+            require(waiting.contains("第 1/8 阶段")&&waiting.contains("下圈面积 800² ㎡"),"BossBar reports stage fraction and next-square area");
             require(action.contains("下圈边界")&&action.endsWith("↖ 空投 5 米"),"Bottom bar combines safe-square and independent airdrop navigation");
             report.set("waiting.bossbar",waiting);report.set("waiting.actionbar",action);
             locale[0]=Locale.ENGLISH;ui.render(player,zone,0,8,2,4,false,new ZoneNavigation.Point(502,503));
             String englishBar=plain(shown.getFirst().name()),englishAction=plain(messages.getLast());
-            require(englishBar.contains("Stage 1/8")&&englishBar.contains("Next zone area 640000 m²"),"English BossBar retains phase and area semantics");
+            require(englishBar.contains("Stage 1/8")&&englishBar.contains("Next zone area 800² m²"),"English BossBar retains phase and area semantics");
             require(englishAction.contains("Next zone edge")&&englishAction.endsWith("↖ Airdrop 5 m"),"English independent airdrop navigation");
             locale[0]=null;ui.render(player,zone,0,8,2,4,false,new ZoneNavigation.Point(502,503));
             require(plain(shown.getFirst().name()).equals(englishBar)&&plain(messages.getLast()).equals(englishAction)&&shown.size()==1,"Unknown locale falls back to English without replacing the owned BossBar");
@@ -92,10 +92,17 @@ public final class Rc7UiProbe {
             position.setYaw(90);ui.render(player,zone,10,8,2,4,false,new ZoneNavigation.Point(position.getX()+7,position.getZ()));
             require(plain(messages.getLast()).endsWith("↓ 空投 7 米"),"Airdrop arrow rotates with viewer yaw");
             for(int i=1;i<8;i++){zone.update(i*2_000_000_000L);require(zone.stageNumber()==i+1&&zone.stageCount()==8,"Configured stage progression");}
-            zone.update(16_000_000_000L);ui.render(player,zone,15,2,3,1,false,null);
+            zone.update(16_000_000_000L);
+            require(zone.phase()==ZonePhase.SHRINKING&&zone.stageNumber()==8&&zone.current().halfSize()==120&&zone.next().halfSize()==0,"Legacy last target continues to zero within stage eight");
+            var saved=zone.snapshot();var restored=ZoneRuntime.restore(saved,profile,new Random(99),100_000_000_000L);
+            require(restored.snapshot().equals(saved),"Final continuation recovers without moving its center or consuming downtime");
+            zone.update(19_000_000_000L);ui.render(player,zone,15,2,3,1,false,null);
             String finalBar=plain(shown.getFirst().name()),finalAction=plain(messages.getLast());noCoordinates(finalBar);noCoordinates(finalAction);
-            require(finalBar.contains("第 8/8 阶段")&&!finalBar.contains("第 9/")&&finalBar.contains("安全区面积 57600 ㎡"),"FINAL remains 8/8 with final-square area");
-            require(!finalAction.contains("空投")&&!finalAction.contains("下圈"),"Absent supply marker disappears and final guidance falls back to current");
+            require(finalBar.contains("第 8/8 阶段")&&!finalBar.contains("第 9/")&&finalBar.contains("安全区面积 0² ㎡"),"FINAL remains 8/8 with final-square area");
+            require(finalAction.equals("安全区已消失")&&zone.current().halfSize()==0,"Closed zone no longer advertises a safe center or stale supply marker");
+            position.setX(zone.current().centerX());position.setZ(zone.current().centerZ());ui.render(player,zone,20,2,3,1,false,null);
+            require(shown.getFirst().color()==BossBar.Color.RED&&ZoneDamage.amount(zone.current(),position.getX(),position.getZ(),zone.stage())>=1,"Collapsed center is outside and takes damage even with a zero-damage legacy profile");
+            report.set("final.zero-center-damage",true);report.set("final.legacy-tail-restored",true);
             report.set("final.bossbar",finalBar);report.set("final.actionbar",finalAction);
             ui.render(player,zone,20,2,3,1,true,new ZoneNavigation.Point(0,0));require(plain(messages.getLast()).isEmpty(),"Spectators clear both actionbar targets");
             ui.render(player,zone,25);require(!plain(messages.getLast()).contains("空投"),"Legacy overload remains usable without airdrop point");

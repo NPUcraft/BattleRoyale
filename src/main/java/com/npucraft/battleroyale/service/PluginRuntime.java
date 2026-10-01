@@ -75,7 +75,7 @@ public final class PluginRuntime implements AutoCloseable {
         lobby=new PaperLobby(plugin,this);plugin.getServer().getPluginManager().registerEvents(lobby,plugin);
         bottles=new StoredExperienceBottles(plugin);celebrations=new CelebrationEffects(plugin);
         groundMarker=new org.bukkit.NamespacedKey(plugin,"ground_loot_session");
-        sanitizer=new WorldSanitizer(groundMarker);
+        sanitizer=new WorldSanitizer(plugin,groundMarker);
         loadouts=new LoadoutEditor(plugin,itemSerializer);
         playerStates=new PaperPlayerIsolation(plugin,itemSerializer);
         durablePlayers=new PaperDurablePlayers(plugin,playerStates);
@@ -188,6 +188,7 @@ public final class PluginRuntime implements AutoCloseable {
                     plugin.getLogger().warning("World IO shutdown did not drain within the shutdown boundary; inspect retained runtime markers.");
             } catch (InterruptedException error) { Thread.currentThread().interrupt(); }
         }
+        sanitizer.close();
         foundation.close();
         isolation.close();
         loadouts.close();

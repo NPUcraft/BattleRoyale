@@ -51,6 +51,9 @@ public final class SpawnPreparation {
             if(!failureReported) { failureReported=true; failed.accept(error); }
         }
     }
+    public int preparedCount() { return planner.acceptedCount(); }
+    public int starterCount() { return starters.size(); }
+    public boolean preparingLoot() { return landing; }
     private void land() {
         terrain.teleport(starters,planner.plan(),()-> !cancelled && current.getAsBoolean());
         if(cancelled || !current.getAsBoolean()) return;

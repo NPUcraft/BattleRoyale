@@ -49,7 +49,8 @@ class ZoneRuntimeTest {
         Random low=new Random() { @Override public double nextDouble() { return 0; } };
         assertEquals(parent.minX(),ZoneGeometry.next(parent,125,low).minX());
         assertThrows(IllegalArgumentException.class,()->ZoneGeometry.next(parent,500,low));
-        assertThrows(IllegalArgumentException.class,()->ZoneGeometry.next(parent,0,low));
+        assertEquals(new Zone(parent.minX(),parent.minZ(),0),ZoneGeometry.next(parent,0,low));
+        assertThrows(IllegalArgumentException.class,()->ZoneGeometry.next(parent,-1,low));
     }
     @ParameterizedTest @CsvSource({"-1,0","0,0",".5,.5","1,1","2,1"})
     void interpolationClamps(double input,double progress) {
@@ -73,7 +74,7 @@ class ZoneRuntimeTest {
         clock.seconds(5); runtime.update(clock.nanoTime()); assertEquals(ZonePhase.WAITING,runtime.phase());
         assertSame(firstTarget,runtime.current()); assertEquals(1,runtime.stageIndex()); assertEquals(250,runtime.next().halfSize());
         clock.seconds(500); runtime.update(clock.nanoTime()); assertEquals(ZonePhase.FINAL,runtime.phase());
-        assertEquals(250,runtime.current().halfSize()); assertNull(runtime.next()); assertSame(initial,runtime.initial()); assertEquals(1,runtime.progress());
+        assertEquals(0,runtime.current().halfSize()); assertNull(runtime.next()); assertSame(initial,runtime.initial()); assertEquals(1,runtime.progress());
         assertEquals(profile().stages().getLast(),runtime.stage());
     }
     @Test void zeroWaitStartsShrinkingAndLongJumpMatchesFineTicks() {
@@ -91,7 +92,8 @@ class ZoneRuntimeTest {
         var zone=new ZoneRuntime(new Zone(0,0,500),profile,new Random(3),0);
         assertEquals(8,zone.stageCount());assertEquals(1,zone.stageNumber());
         for(int i=0;i<8;i++){zone.update(i*2_000_000_000L);assertEquals(i+1,zone.stageNumber());assertEquals(8,zone.stageCount());}
-        zone.update(16_000_000_000L);assertEquals(ZonePhase.FINAL,zone.phase());assertEquals(8,zone.stageNumber());assertEquals(8,zone.stageCount());
+        zone.update(16_000_000_000L);assertEquals(ZonePhase.SHRINKING,zone.phase());assertEquals(8,zone.stageNumber());
+        zone.update(19_000_000_000L);assertEquals(ZonePhase.FINAL,zone.phase());assertEquals(8,zone.stageNumber());assertEquals(8,zone.stageCount());
         var recovered=ZoneRuntime.restore(zone.snapshot(),profile,new Random(4),0);assertEquals(8,recovered.stageNumber());assertEquals(8,recovered.stageCount());
     }
     @Test void damageAtEdgesCornersCapsAndTrueHealth() {

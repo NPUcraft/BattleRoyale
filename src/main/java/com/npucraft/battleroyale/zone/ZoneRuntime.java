@@ -1,7 +1,10 @@
 package com.npucraft.battleroyale.zone;
+import java.time.Duration;
 import java.util.random.RandomGenerator;
 /** Session-owned deterministic timeline. Initial zone never changes. */
 public final class ZoneRuntime {
+    // Legacy profiles can have arbitrarily close positive targets. Bound their final continuation.
+    static final long MAX_FINAL_CLOSURE_NANOS=Duration.ofHours(24).toNanos();
     private final Zone initial;
     private final ZoneProfile profile;
     private final RandomGenerator random;
@@ -24,16 +27,37 @@ public final class ZoneRuntime {
         if(saved.stage()<0 || saved.stage()>=profile.stages().size() || saved.remainingNanos()<0)throw new IllegalArgumentException("Invalid zone snapshot");
         if(saved.phase()==ZonePhase.FINAL && saved.stage()!=profile.stages().size()-1)throw new IllegalArgumentException("Premature final zone");
         var zone=new ZoneRuntime(saved.initial(),profile,random,now);zone.stageIndex=saved.stage();zone.phase=saved.phase();zone.from=saved.from();zone.current=saved.current();zone.next=saved.next();
-        long duration=(zone.phase==ZonePhase.WAITING?zone.stage().waitDuration():zone.stage().shrinkDuration()).toNanos();
-        if(zone.phase!=ZonePhase.FINAL && (saved.remainingNanos()>duration || zone.next==null))throw new IllegalArgumentException("Invalid phase remaining");
-        zone.phaseStart=now-(duration-saved.remainingNanos());zone.update(now);
+        if(zone.phase==ZonePhase.FINAL && zone.current.halfSize()>0){
+            // Old versions persisted a stationary positive FINAL. Resume from that exact saved square.
+            zone.beginFinalClosure();zone.phaseStart=now;
+        }else{
+            long duration=zone.phaseDurationNanos();
+            if(zone.phase!=ZonePhase.FINAL && (saved.remainingNanos()>duration || zone.next==null))throw new IllegalArgumentException("Invalid phase remaining");
+            zone.phaseStart=now-(duration-saved.remainingNanos());
+        }
+        zone.update(now);
         if(Math.abs(zone.current.centerX()-saved.current().centerX())>1e-5 || Math.abs(zone.current.centerZ()-saved.current().centerZ())>1e-5 || Math.abs(zone.current.halfSize()-saved.current().halfSize())>1e-5)throw new IllegalArgumentException("Zone interpolation mismatch");
         return zone;
+    }
+    private boolean lastStage(){return stageIndex+1==profile.stages().size();}
+    private long phaseDurationNanos(){
+        if(phase==ZonePhase.WAITING)return stage().waitDuration().toNanos();
+        if(phase==ZonePhase.SHRINKING && lastStage() && stage().targetHalfSize()>0 && next!=null && next.halfSize()==0){
+            double previous=stageIndex==0?initial.halfSize():profile.stages().get(stageIndex-1).targetHalfSize();
+            double radiusPerStage=previous-stage().targetHalfSize();
+            // A continuation is represented entirely by existing from/next/remaining snapshot fields.
+            double duration=stage().shrinkDuration().toNanos()*(from.halfSize()/radiusPerStage);
+            return Math.clamp(Math.round(duration),1,MAX_FINAL_CLOSURE_NANOS);
+        }
+        return stage().shrinkDuration().toNanos();
+    }
+    private void beginFinalClosure(){
+        from=current;next=new Zone(current.centerX(),current.centerZ(),0);phase=ZonePhase.SHRINKING;
     }
     public void update(long now) {
         if (now-started < 0) throw new IllegalArgumentException("Clock moved backwards");
         while (phase != ZonePhase.FINAL) {
-            long duration = (phase == ZonePhase.WAITING ? stage().waitDuration() : stage().shrinkDuration()).toNanos();
+            long duration=phaseDurationNanos();
             long elapsed = now-phaseStart;
             if (elapsed < duration) {
                 remainingSeconds=(duration-elapsed)/1e9;
@@ -45,8 +69,10 @@ public final class ZoneRuntime {
             if (phase == ZonePhase.WAITING) phase=ZonePhase.SHRINKING;
             else {
                 current=next; from=next;
-                if (stageIndex+1 == profile.stages().size()) { phase=ZonePhase.FINAL; next=null; }
-                else { stageIndex++; next=ZoneGeometry.next(current,stage().targetHalfSize(),random); phase=ZonePhase.WAITING; }
+                if(lastStage()){
+                    if(current.halfSize()>0)beginFinalClosure();
+                    else{phase=ZonePhase.FINAL;next=null;}
+                }else{stageIndex++;next=ZoneGeometry.next(current,stage().targetHalfSize(),random);phase=ZonePhase.WAITING;}
             }
         }
         remainingSeconds=0; progress=1;
@@ -56,11 +82,10 @@ public final class ZoneRuntime {
     public Zone next() { return next; }
     public int stageIndex() { return stageIndex; }
     public int stageCount() { return profile.stages().size(); }
-    /** One-based visible round; FINAL remains the last configured round. */
+    /** One-based visible round; the final continuation and FINAL keep the last configured round. */
     public int stageNumber() { return Math.clamp(stageIndex+1,1,stageCount()); }
     public ZonePhase phase() { return phase; }
     public ZoneProfile.Stage stage() { return profile.stages().get(stageIndex); }
     public double remainingSeconds() { return remainingSeconds; }
     public double progress() { return Math.clamp(progress,0,1); }
 }
-

@@ -37,6 +37,7 @@ public final class SpawnPlanner {
         }
         pending=null;
     }
+    public int acceptedCount() { return accepted.size(); }
     public boolean done() { return accepted.size()==count; }
     public List<Position> plan() {
         if (!done()) throw new IllegalStateException("Incomplete spawn plan");

@@ -50,8 +50,8 @@ public record ZoneProfile(String id, List<InitialSize> initialSizes, List<Stage>
                 throw new IllegalArgumentException("wait duration >= 0 and shrink duration > 0 required");
             Checks.finite(targetHalfSize, "targetHalfSize"); Checks.finite(baseDamagePerSecond, "baseDamagePerSecond");
             Checks.finite(extraDamagePerBlock, "extraDamagePerBlock"); Checks.finite(maxDamagePerSecond, "maxDamagePerSecond");
-            if (targetHalfSize <= 0 || baseDamagePerSecond < 0 || extraDamagePerBlock < 0 || maxDamagePerSecond < baseDamagePerSecond)
-                throw new IllegalArgumentException("target size > 0, damages >= 0 and max damage >= base damage required");
+            if (targetHalfSize < 0 || baseDamagePerSecond < 0 || extraDamagePerBlock < 0 || maxDamagePerSecond < baseDamagePerSecond)
+                throw new IllegalArgumentException("target size >= 0, damages >= 0 and max damage >= base damage required");
         }
     }
 }

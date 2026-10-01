@@ -113,7 +113,7 @@ public final class ConfigurationLoader {
             double previousSize = sizes.stream().mapToDouble(ZoneProfile.InitialSize::halfSize).min().orElseThrow();
             for (Node stage : profile.nodes("stages")) {
                 double target = stage.number("target-half-size", 0);
-                stage.require("target-half-size", target > 0 && target < previousSize, "must be > 0 and strictly less than every initial half-size / previous target (" + previousSize + ")");
+                stage.require("target-half-size", target >= 0 && target < previousSize, "must be >= 0 and strictly less than every initial half-size / previous target (" + previousSize + ")");
                 double base = stage.number("base-damage-per-second", 0);
                 double extra = stage.number("extra-damage-per-block", 0);
                 double maximum = stage.number("max-damage-per-second", 0);

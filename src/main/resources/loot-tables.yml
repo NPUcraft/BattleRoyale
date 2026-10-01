@@ -3,9 +3,9 @@ config-version: 2
 auto-containers:
   enabled: true
   loot-table: basic
-  chance: 0.9
-  min-rolls: 2
-  max-rolls: 5
+  chance: 0.4
+  min-rolls: 1
+  max-rolls: 3
   max-containers-per-tick: 16
 # One supply crate when each shrinking phase starts. Locations are broadcast to that match world.
 airdrops:

@@ -52,6 +52,12 @@ class ZoneNavigationTest {
         var near=ZoneNavigation.guide(current,null,10.5,-20,0);assertFalse(near.arrived());assertEquals("→",near.arrow());assertEquals(.5,near.distance());
         assertFalse(ZoneNavigation.guide(new Zone(0,0,.1),null,.11,0,0).arrived());
     }
+    @Test void collapsedZoneNeverClaimsSafetyOrArrivalAndZeroTargetStaysFinite() {
+        var empty=new Zone(10,-20,0);var center=ZoneNavigation.guide(empty,null,10,-20,0);
+        assertTrue(center.outside());assertFalse(center.arrived());assertEquals(0,center.distance());assertEquals("●",center.arrow());
+        var approaching=ZoneNavigation.guide(new Zone(10,-20,50),empty,13,-16,0);
+        assertTrue(approaching.outside());assertFalse(approaching.arrived());assertEquals(5,approaching.distance());
+    }
     @Test void invalidCoordinatesCannotProduceNanInstructions() {
         var current=new Zone(0,0,100);
         assertThrows(IllegalArgumentException.class,()->ZoneNavigation.guide(current,null,Double.NaN,0,0));

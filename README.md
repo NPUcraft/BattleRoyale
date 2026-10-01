@@ -4,7 +4,7 @@
 
 BattleRoyale is a multi-room Battle Royale plugin for Paper.
 
-> Current version: **1.0.0-rc.8**
+> Current version: **1.0.0-rc.9**
 > Target: **Paper 26.2** · **Java 25**
 > Status: **Release Candidate**
 
@@ -13,7 +13,9 @@ BattleRoyale 是一个面向 Paper 的多房间 Battle Royale 插件，提供随
 ## Features
 
 - Independent multi-room matches using isolated template-world clones.
-- Random square safe zones, continuous shrinking and zone damage.
+- Random square safe zones that finish shrinking to zero; the BossBar displays the target side length squared (for example `100²`).
+- A bilingual preparation progress bar, followed by a randomly routed moving aircraft platform. Temporary elytra is removed and chest armor restored on landing.
+- Lower container loot chance (40%, 1–3 rolls) and a stratified ground-loot distribution; only match clones replace high-value storage blocks, preserving ores and ancient debris.
 - Coordinate-free center arrows, shortest distance to the next zone when outside, a separate supply-drop arrow, and stage totals with next-zone area.
 - Supply drops announced at fixed coordinates at least 60 seconds before descent, marked by real yellow beacon beams granting only Speed I to living participants within a 24-block sphere for 100 ticks per refresh.
 - Solo, Duo, Squad and configurable team sizes.
@@ -40,7 +42,7 @@ BattleRoyale 是一个面向 Paper 的多房间 Battle Royale 插件，提供随
 - Paper **26.2**.
 - Java **25 or newer**, subject to Paper and other installed plugins' requirements.
 
-Optional economy dependencies remain CoinsEngine 2.7.0, nightcore 2.15.0, Vault 1.7.3-b131 and PlaceholderAPI 2.12.3. Earlier rc.6/rc.7 checks verified startup, safe shutdown and economy persistence on Paper 26.2 / Java 25. These are historical results, not evidence for the renamed rc.8 artifact. CoinsEngine 2.7.0 with nightcore 2.16.6 failed startup checks and is not an interchangeable combination.
+Optional economy dependencies remain CoinsEngine 2.7.0, nightcore 2.15.0, Vault 1.7.3-b131 and PlaceholderAPI 2.12.3. The rc.9 isolated Paper 26.2 / Java 25 checks verified startup, safe shutdown and economy persistence; see the verification record for scope. CoinsEngine 2.7.0 with nightcore 2.16.6 failed startup checks and is not an interchangeable combination.
 
 The official [CoinsEngine 2.7.0 release](https://modrinth.com/plugin/excellenteconomy/version/2.7.0) and [NightCore 2.15.0 release](https://modrinth.com/plugin/nightcore/version/2.15.0) list Minecraft 1.21.8–1.21.11; both warn about Paper 26.2 at startup. The local checks do **not** establish official 26.2 support.
 
@@ -49,7 +51,7 @@ Without an economy provider, matches and free cosmetics remain available; paid p
 ## Installation
 
 1. Install Paper 26.2 and a compatible Java runtime.
-2. Build BattleRoyale and place `battleroyale-1.0.0-rc.8.jar` in `plugins/`.
+2. Build BattleRoyale and place `battleroyale-1.0.0-rc.9.jar` in `plugins/`.
 3. Start the server once to generate configuration files.
 4. Configure the lobby, rooms, maps, zones and storage.
 5. Install saved, unloaded map templates under `plugins/BattleRoyale/maps/`.
@@ -108,7 +110,7 @@ Windows:
 .\gradlew.bat clean check build
 ```
 
-Output: `build/libs/battleroyale-1.0.0-rc.8.jar`, with an adjacent `.sha256` file. Generated JARs are not committed. Runtime dependency versions are locked; Paper API is pinned to `26.2.build.129-stable` and is provided by the server.
+Output: `build/libs/battleroyale-1.0.0-rc.9.jar`, with an adjacent `.sha256` file. Generated JARs are not committed. Runtime dependency versions are locked; Paper API is pinned to `26.2.build.129-stable` and is provided by the server.
 
 The MySQL contracts require an isolated test database and `BATTLEROYALE_MYSQL_TEST_PORT`; otherwise they are explicitly excluded. See [Verification](docs/VERIFICATION.md) for test setup, evidence and measured scale.
 

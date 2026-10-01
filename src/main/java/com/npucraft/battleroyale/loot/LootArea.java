@@ -9,8 +9,8 @@ public record LootArea(String id, int minX, int maxX, int minY, int maxY, int mi
     public LootArea {
         if (minX > maxX || minY > maxY || minZ > maxZ || !Double.isFinite(activationChance)
                 || activationChance < 0 || activationChance > 1 || minSpawns < 0 || maxSpawns < minSpawns
-                || maxSpawns > 256 || maxAttempts < 1 || maxAttempts > 256)
-            throw new IllegalArgumentException("Invalid loot area bounds/chance/spawns/attempts (limits 256)");
+                || maxSpawns > 1024 || maxAttempts < 1 || maxAttempts > 256)
+            throw new IllegalArgumentException("Invalid loot area bounds/chance/spawns/attempts (spawns limit 1024, attempts limit 256)");
     }
     public record Bounds(int minX, int maxX, int minZ, int maxZ) {}
     /** Sample block centers only; their actual item coordinates must remain inside InitialZone. */

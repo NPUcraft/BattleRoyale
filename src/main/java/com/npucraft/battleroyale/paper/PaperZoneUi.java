@@ -36,13 +36,13 @@ public final class PaperZoneUi {
     public void render(Player player,ZoneRuntime zone,long tick,long alive,int kills,long teams,boolean spectator,ZoneNavigation.Point airdrop) {
         var location=player.getLocation();
         if (settings.bossbarEnabled() && tick%settings.bossbarInterval()==0) {
-            double distance=zone.current().distanceOutside(location.getX(),location.getZ());
+            boolean outside=!zone.current().contains(location.getX(),location.getZ());
             BossBar bar=bars.computeIfAbsent(player.getUniqueId(),id -> {
                 BossBar created=BossBar.bossBar(Component.empty(),1,BossBar.Color.BLUE,BossBar.Overlay.PROGRESS);
                 player.showBossBar(created); return created;
             });
             bar.name(bossbarMessage(I18n.locale(player),zone,alive,kills,teams,spectator,location.getX(),location.getZ()))
-                    .progress((float)zone.progress()).color(distance>0?BossBar.Color.RED:BossBar.Color.BLUE);
+                    .progress((float)zone.progress()).color(outside?BossBar.Color.RED:BossBar.Color.BLUE);
         }
         if (spectator || !settings.navigationEnabled()) clearNavigation(player);
         else if (tick%settings.navigationInterval()==0) {
@@ -70,10 +70,17 @@ public final class PaperZoneUi {
         return navigationMessage(Locale.SIMPLIFIED_CHINESE,hint,current,next,airdrop,x,z,yaw);
     }
     public static Component navigationMessage(Locale locale,ZoneNavigation.Hint hint,Zone current,Zone next,ZoneNavigation.Point airdrop,double x,double z,double yaw) {
-        String target=I18n.text(locale,next==null?"安全区":"下圈",next==null?"Safe zone ":"Next zone ")+I18n.text(locale,hint.outside()?"边界":"中心",hint.outside()?"edge":"center");
-        Component action=Component.text(hint.arrow()+" "+target,hint.outside()?UiText.ERROR:UiText.SUCCESS)
-                .decoration(TextDecoration.BOLD,hint.outside()).decoration(TextDecoration.ITALIC,false);
-        action=action.append(UiText.value(I18n.text(locale," %s 米"," %s m",(long)Math.ceil(hint.distance()))));
+        Component action;
+        if(current.halfSize()==0){
+            action=Component.text(I18n.text(locale,"安全区已消失","No safe zone remains"),UiText.ERROR)
+                    .decoration(TextDecoration.BOLD,true).decoration(TextDecoration.ITALIC,false);
+        }else{
+            String target=next!=null&&next.halfSize()==0?I18n.text(locale,"最终收拢点","Final collapse point"):
+                    I18n.text(locale,next==null?"安全区":"下圈",next==null?"Safe zone ":"Next zone ")+I18n.text(locale,hint.outside()?"边界":"中心",hint.outside()?"edge":"center");
+            action=Component.text(hint.arrow()+" "+target,hint.outside()?UiText.ERROR:UiText.SUCCESS)
+                    .decoration(TextDecoration.BOLD,hint.outside()).decoration(TextDecoration.ITALIC,false)
+                    .append(UiText.value(I18n.text(locale," %s 米"," %s m",(long)Math.ceil(hint.distance()))));
+        }
         if(airdrop!=null){
             double dx=airdrop.x()-x,dz=airdrop.z()-z;
             action=action.append(UiText.muted(" · ")).append(UiText.value(I18n.text(locale,"%s 空投 %s 米","%s Airdrop %s m",ZoneNavigation.arrow(dx,dz,yaw),(long)Math.ceil(Math.hypot(dx,dz)))));
@@ -85,7 +92,7 @@ public final class PaperZoneUi {
     }
     public static Component bossbarMessage(Locale locale,ZoneRuntime zone,long alive,int kills,long teams,boolean spectator,double x,double z) {
         Zone destination=zone.next()==null?zone.current():zone.next();
-        String area=BigDecimal.valueOf(destination.halfSize()).multiply(BigDecimal.valueOf(2)).pow(2).stripTrailingZeros().toPlainString();
+        String area=BigDecimal.valueOf(destination.halfSize()).multiply(BigDecimal.valueOf(2)).stripTrailingZeros().toPlainString()+"²";
         String text=I18n.text(locale,"存活：%s","Alive: %s",alive)+(spectator?I18n.text(locale," | 队伍：%s"," | Teams: %s",teams):I18n.text(locale," | 击杀：%s"," | Kills: %s",kills))
                 +I18n.text(locale," | 第 %s/%s 阶段 | %s面积 %s ㎡"," | Stage %s/%s | %sarea %s m²",zone.stageNumber(),zone.stageCount(),I18n.text(locale,zone.next()==null?"安全区":"下圈",zone.next()==null?"Safe zone ":"Next zone "),area)
                 +" | "+I18n.state(locale,zone.phase())+" | "

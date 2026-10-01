@@ -29,6 +29,8 @@ public final class PaperLootRuntime {
     private final GameScheduler scheduler;
     private final Queue<ContainerLootPoint> points=new ArrayDeque<>();
     private final Queue<GroundRequest> ground=new ArrayDeque<>();
+    private final GroundLootBudget groundBudget=new GroundLootBudget();
+    private boolean groundBudgetExhausted;
     private final Set<Long> tickets=new HashSet<>();
     private final Set<String> filled=new HashSet<>();
     private final CompletableFuture<Void> result=new CompletableFuture<>();
@@ -74,7 +76,10 @@ public final class PaperLootRuntime {
             var bounds=area.intersection(initial);
             if(bounds.isEmpty() || !area.activates(random)) { skippedAreas++; continue; }
             activeAreas++;
-            for(int i=0,n=area.count(random);i<n;i++) ground.add(new GroundRequest(area,bounds.orElseThrow()));
+            for(var cell:GroundLootDistribution.strata(bounds.orElseThrow(),area.count(random),random)) {
+                if(ground.size()>=MapLoot.MAX_GROUND_REQUESTS)throw new IllegalStateException("Ground candidate budget exceeded");
+                ground.add(new GroundRequest(area,cell));
+            }
         }
         task=scheduler.repeat(1,this::tick); return result;
     }
@@ -97,6 +102,10 @@ public final class PaperLootRuntime {
                 chunks.add(key(point.x()>>4,point.z()>>4));
                 for(int[] offset:new int[][]{{1,0},{-1,0},{0,1},{0,-1}}) chunks.add(key((point.x()+offset[0])>>4,(point.z()+offset[1])>>4));
                 request(chunks,()->fill(point)); return;
+            }
+            if(!ground.isEmpty()&&!groundBudget.request(System.nanoTime())){
+                groundBudgetExhausted=true;missedSpawns+=ground.size();ground.clear();
+                plugin.getLogger().info("Ground loot candidate budget reached; generated="+groundItems+" skipped="+missedSpawns+" attempts="+groundBudget.attempts());
             }
             if(!ground.isEmpty()) {
                 GroundRequest request=ground.peek(); var b=request.bounds;
@@ -185,7 +194,7 @@ public final class PaperLootRuntime {
     public void close() { cancelled=true;if(automatic!=null){automatic.close();automatic=null;} if(pending!=null) pending.cancel(false); finish(new CancellationException("Plugin stopped")); }
     public String diagnostics() {
         return "loot="+state+" active/skipped-points="+activePoints+"/"+skippedPoints+" active/skipped-areas="+activeAreas+"/"+skippedAreas
-                +" ground-items="+groundItems+" missed-spawns="+missedSpawns+" sanitized-chunks="+sanitizer.chunks(worldId)
+                +" ground-items="+groundItems+" missed-spawns="+missedSpawns+" candidate-attempts="+groundBudget.attempts()+" candidate-budget-exhausted="+groundBudgetExhausted+" sanitized-chunks="+sanitizer.chunks(worldId)
                 +" "+(automatic==null?"automatic-containers=inactive":automatic.diagnostics());
     }
     private static final class GroundRequest {

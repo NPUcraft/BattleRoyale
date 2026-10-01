@@ -9,6 +9,12 @@ class ParticleWallTest {
     private static ZoneUiSettings cap(int cap) {
         return new ZoneUiSettings(true,5,true,"END_ROD",5,64,2.5,1.5,3,6,cap);
     }
+    @Test void zeroCircleHasNoWallAndTinyPositiveCircleRemainsBounded() {
+        assertTrue(ParticleWall.sample(new Zone(10,-20,0),10,60,-20,cap(1000)).isEmpty());
+        var points=ParticleWall.sample(new Zone(10,-20,1e-6),10,60,-20,cap(1000));
+        assertFalse(points.isEmpty());assertTrue(points.size()<=1000);assertEquals(points.size(),new HashSet<>(points).size());
+        assertTrue(points.stream().allMatch(p->Double.isFinite(p.x())&&Double.isFinite(p.y())&&Double.isFinite(p.z())));
+    }
     @Test void tinyBudgetSharesNearbyCornerEdgesInsteadOfExhaustingTheFirstEdge() {
         var points=ParticleWall.sample(new Zone(0,0,100),98,60,98,cap(2));
         assertEquals(2,points.size());

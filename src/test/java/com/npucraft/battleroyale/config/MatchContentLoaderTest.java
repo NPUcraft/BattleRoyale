@@ -53,10 +53,10 @@ class MatchContentLoaderTest {
         Files.delete(directory.resolve("map-data/city/loot.yml")); assertTrue(assertThrows(IllegalArgumentException.class,this::load).getMessage().contains("map-data/city/loot.yml"));
     }
     @Test void newLootPoliciesValidateReferencesAndBudgets()throws Exception{
-        var content=load();assertEquals(.9,content.autoContainers().chance());assertEquals("airdrop",content.airdrops().table());
+        var content=load();assertEquals(.4,content.autoContainers().chance());assertEquals(1,content.autoContainers().minRolls());assertEquals(3,content.autoContainers().maxRolls());assertEquals("airdrop",content.airdrops().table());
         assertEquals(.35,content.mobLoot().chance());assertEquals(64,content.mobLoot().maxDropsPerSession());
         assertTrue(content.horses().enabled());assertEquals(16,content.horses().maxPerSession());assertEquals(15,content.horses().intervalSeconds());
-        replace("loot-tables.yml","chance: 0.9","chance: 1.1");assertThrows(IllegalArgumentException.class,this::load);
+        replace("loot-tables.yml","chance: 0.4","chance: 1.1");assertThrows(IllegalArgumentException.class,this::load);
     }
     @Test void legacyCustomTableGetsCompatibleDefaultsWithoutRequiringBasic()throws Exception{
         Path path=directory.resolve("loot-tables.yml");String original=Files.readString(path);String tables="config-version: 2\n"+original.substring(original.indexOf("loot-tables:"));

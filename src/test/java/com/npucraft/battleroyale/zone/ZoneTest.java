@@ -14,7 +14,7 @@ class ZoneTest {
     void outsideSidesAndCorners(double x, double z, double distance) {
         assertFalse(zone.contains(x, z)); assertEquals(distance, zone.distanceOutside(x, z), 1e-10);
     }
-    @ParameterizedTest @ValueSource(doubles = {0, -1, Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY})
+    @ParameterizedTest @ValueSource(doubles = {-1, Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY})
     void rejectsInvalidHalfSize(double value) { assertThrows(IllegalArgumentException.class, () -> new Zone(0, 0, value)); }
     @Test void rejectsInvalidCentersAndCoordinates() {
         assertThrows(IllegalArgumentException.class, () -> new Zone(Double.NaN, 0, 5));
@@ -22,6 +22,11 @@ class ZoneTest {
         assertThrows(IllegalArgumentException.class, () -> new Zone(Double.MAX_VALUE, 0, Double.MAX_VALUE));
         assertThrows(IllegalArgumentException.class, () -> zone.contains(Double.NaN, 0));
         assertThrows(IllegalArgumentException.class, () -> zone.distanceOutside(0, Double.NEGATIVE_INFINITY));
+    }
+    @Test void zeroSizeIsAnEmptyZoneEvenAtItsCenter() {
+        var empty=new Zone(10,-20,0);assertFalse(empty.contains(10,-20));assertFalse(empty.contains(10.01,-20));
+        assertEquals(0,empty.distanceOutside(10,-20));assertEquals(5,empty.distanceOutside(13,-16));
+        assertEquals(empty.minX(),empty.maxX());assertEquals(empty.minZ(),empty.maxZ());
     }
     @Test void bounds() { assertEquals(5, zone.minX()); assertEquals(15, zone.maxX()); assertEquals(-25, zone.minZ()); assertEquals(-15, zone.maxZ()); }
 }

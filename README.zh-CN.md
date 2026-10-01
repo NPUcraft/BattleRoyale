@@ -4,7 +4,7 @@
 
 BattleRoyale 是面向 Paper 的多房间 Battle Royale 插件，提供随机战区、连续缩圈、动态物资、队伍、观战、离线替身、崩溃恢复、排名、经济和外观系统。
 
-> 当前版本：**1.0.0-rc.8**
+> 当前版本：**1.0.0-rc.9**
 >
 > 目标平台：**Paper 26.2** · **Java 25**
 >
@@ -13,7 +13,9 @@ BattleRoyale 是面向 Paper 的多房间 Battle Royale 插件，提供随机战
 ## 主要功能
 
 - 独立多房间比赛与安全的地图模板副本。
-- 随机正方形安全区、连续缩圈和圈外伤害。
+- 随机正方形安全区，末圈持续缩到零；BossBar 用边长平方显示面积，例如 `100²`。
+- 开局准备进度条，随机航线的移动飞机平台；每人临时穿上鞘翅，落地立即回收并恢复原胸甲。
+- 容器默认 40% 概率抽取 1–3 次，地面物资分区随机投放；比赛副本中的贵重储存块改为石头/深板岩，保留矿石与远古残骸。
 - 无坐标的圈心方向导航：下圈内显示中心距离，圈外显示最短进圈距离，另有空投方向箭头；顶部显示阶段总数和下圈面积。
 - 空投在下降前至少 60 秒预告固定坐标，使用真正的黄色信标光柱，24 格三维球形范围内的存活参赛者仅获得速度 I，每次刷新持续 100 ticks。
 - Solo、Duo、Squad 及可配置队伍人数。
@@ -43,7 +45,7 @@ BattleRoyale 是面向 Paper 的多房间 Battle Royale 插件，提供随机战
 - **Paper 26.2**。
 - **Java 25 或更新版本**，同时满足 Paper 和其他插件的运行要求。
 
-可选经济组合保持 **CoinsEngine 2.7.0 + nightcore 2.15.0 + Vault 1.7.3-b131 + PlaceholderAPI 2.12.3**。此前 rc.6/rc.7 在隔离 Paper 26.2 / Java 25 环境验证了启动、正常关闭和余额持久化；这些属于历史结果，不替代改名后 rc.8 工件的验收。CoinsEngine 2.7.0 搭配 nightcore 2.16.6 的启动检查失败，不能随意互换依赖版本。
+可选经济组合保持 **CoinsEngine 2.7.0 + nightcore 2.15.0 + Vault 1.7.3-b131 + PlaceholderAPI 2.12.3**。rc.9 已在隔离 Paper 26.2 / Java 25 环境验证启动、正常关闭和余额持久化，具体范围见验证记录。CoinsEngine 2.7.0 搭配 nightcore 2.16.6 的启动检查失败，不能随意互换依赖版本。
 
 [CoinsEngine 2.7.0 官方发布页](https://modrinth.com/plugin/excellenteconomy/version/2.7.0)和 [NightCore 2.15.0 官方发布页](https://modrinth.com/plugin/nightcore/version/2.15.0)标注的游戏版本范围均为 1.21.8–1.21.11，在 26.2 启动时仍会输出不支持该版本的警告；上述是本地实测，**不代表上游官方支持 26.2**。
 
@@ -52,7 +54,7 @@ BattleRoyale 是面向 Paper 的多房间 Battle Royale 插件，提供随机战
 ## 安装
 
 1. 安装 Paper 26.2 和兼容的 Java 运行时。
-2. 构建 BattleRoyale，将 `battleroyale-1.0.0-rc.8.jar` 放入 `plugins/`。
+2. 构建 BattleRoyale，将 `battleroyale-1.0.0-rc.9.jar` 放入 `plugins/`。
 3. 首次启动服务器，生成默认配置。
 4. 配置大厅、房间、地图、圈规则和存储。
 5. 将已保存且未加载的地图模板放入 `plugins/BattleRoyale/maps/`。
@@ -122,7 +124,7 @@ Windows：
 .\gradlew.bat clean check build
 ```
 
-产物为 `build/libs/battleroyale-1.0.0-rc.8.jar`，旁边生成 `.sha256` 文件。构建 JAR 不提交到 Git。运行依赖版本已锁定；Paper API 固定为 `26.2.build.129-stable`，由服务器提供。
+产物为 `build/libs/battleroyale-1.0.0-rc.9.jar`，旁边生成 `.sha256` 文件。构建 JAR 不提交到 Git。运行依赖版本已锁定；Paper API 固定为 `26.2.build.129-stable`，由服务器提供。
 
 源码基础包名为 `com.npucraft.battleroyale`。MySQL 测试需要隔离测试数据库和 `BATTLEROYALE_MYSQL_TEST_PORT` 环境变量；未设置时明确排除对应测试。测试环境、证据及实际规模见[验证记录](docs/VERIFICATION.md)。
 

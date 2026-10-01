@@ -84,10 +84,12 @@ public final class PaperSpawnTerrain implements SpawnTerrain {
         applyLoadout.run();
         for(int i=0;i<starters.size();i++) {
             if(!current.getAsBoolean()) return;
-            var position=plan.get(i);
-            if(offlineLanding!=null && session.players().get(starters.get(i)).state()==com.npucraft.battleroyale.player.PlayerState.DISCONNECTED){offlineLanding.accept(starters.get(i),new Location(world,position.x(),position.y(),position.z()));continue;}
+            var position=plan.get(i);var target=new Location(world,position.x(),position.y(),position.z());
+            // Retain every verified fallback for the airborne deployment; reserved offline bodies use it too.
+            if(offlineLanding!=null)offlineLanding.accept(starters.get(i),target.clone());
+            if(offlineLanding!=null && session.players().get(starters.get(i)).state()==com.npucraft.battleroyale.player.PlayerState.DISCONNECTED)continue;
             var player=Objects.requireNonNull(plugin.getServer().getPlayer(starters.get(i)));
-            if(!player.teleport(new Location(world,position.x(),position.y(),position.z())))
+            if(!player.teleport(target))
                 throw new IllegalStateException("Safe spawn teleport rejected");
         }
     }

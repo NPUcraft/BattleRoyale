@@ -59,7 +59,8 @@ class ConfigurationLoaderTest {
         "config.yml|interaction-distance: 6.0|interaction-distance: .nan|deathbox.interaction-distance",
         "zones.yml|target-half-size: 400|target-half-size: 500|profiles.default.stages[0]",
         "zones.yml|target-half-size: 400|target-half-size: 700|profiles.default.stages[0]",
-        "zones.yml|target-half-size: 50|target-half-size: 0|profiles.default.stages[3]",
+        "zones.yml|target-half-size: 0|target-half-size: -1|profiles.default.stages[3]",
+        "zones.yml|target-half-size: 400|target-half-size: 0|profiles.default.stages[1]",
         "zones.yml|wait-seconds: 300|wait-seconds: -1|profiles.default.stages[0]",
         "zones.yml|shrink-seconds: 120|shrink-seconds: 0|profiles.default.stages[0]",
         "zones.yml|half-size: 500|half-size: 499|initial-size-by-players[0]",
@@ -81,6 +82,13 @@ class ConfigurationLoaderTest {
     void m3ValidationHasContext(String file,String from,String to,String context) throws Exception {
         replace(file,from,to);
         assertTrue(assertThrows(ConfigurationException.class,this::load).getMessage().contains(context));
+    }
+    @Test void finalZeroAndLegacyPositiveTargetBothLoadWithoutRewritingTheProfile()throws Exception{
+        assertEquals(0,load().zoneProfiles().getFirst().stages().getLast().targetHalfSize());
+        replace("zones.yml","target-half-size: 0","target-half-size: 50");
+        byte[] before=Files.readAllBytes(directory.resolve("zones.yml"));var legacy=load().zoneProfiles().getFirst();
+        assertEquals(50,legacy.stages().getLast().targetHalfSize());assertEquals(4,legacy.stages().size());
+        assertArrayEquals(before,Files.readAllBytes(directory.resolve("zones.yml")));
     }
     @Test void legacyZoneUiWithoutNavigationStillEnablesDirectionsAndColoredWalls()throws Exception{
         replace("config.yml","  navigation:\n    enabled: true\n    update-interval-ticks: 5\n","");

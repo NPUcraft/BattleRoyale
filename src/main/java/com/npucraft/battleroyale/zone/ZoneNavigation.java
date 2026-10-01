@@ -21,7 +21,7 @@ public final class ZoneNavigation {
         Checks.finite(x,"player x"); Checks.finite(z,"player z"); Checks.finite(yaw,"player yaw");
         Zone destination=next==null?current:next;
         double dx=destination.centerX()-x,dz=destination.centerZ()-z;
-        boolean inside=destination.contains(x,z),arrived=dx==0&&dz==0;
+        boolean inside=destination.contains(x,z),arrived=inside&&dx==0&&dz==0;
         Target target=inside?(next==null?Target.CURRENT_CENTER:Target.NEXT_CENTER):Target.ENTER_SAFE_ZONE;
         double distance=inside?Math.hypot(dx,dz):destination.distanceOutside(x,z);
         return new Hint(target,destination.centerX(),destination.centerZ(),distance,arrow(dx,dz,yaw),arrived);

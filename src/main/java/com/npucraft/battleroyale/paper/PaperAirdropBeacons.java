@@ -73,7 +73,7 @@ public final class PaperAirdropBeacons implements Listener,AutoCloseable {
     }
     private boolean clearEntities(int x,int y,int z){return world.getNearbyEntities(new BoundingBox(x-1,y-1,z-1,x+2,y+2,z+2)).stream().noneMatch(entity->entity instanceof LivingEntity);}
     private boolean replaceable(Block block){
-        Material type=block.getType();return !(block.getState() instanceof TileState)&&!PaperSpawnTerrain.hazard(type)
+        Material type=block.getType();return !com.npucraft.battleroyale.loot.ValuableBlockPolicy.replaces(type.name())&&!(block.getState() instanceof TileState)&&!PaperSpawnTerrain.hazard(type)
                 &&type!=Material.BEDROCK&&type!=Material.BARRIER&&(type.isAir()||type.isOccluding());
     }
     public CompletableFuture<Plan> persist(Plan plan){
@@ -88,7 +88,7 @@ public final class PaperAirdropBeacons implements Listener,AutoCloseable {
         var chunks=chunks(plan);for(var chunk:chunks){PaperChunkTickets.acquire(plugin,world,chunk.getX(),chunk.getZ());chunk.getPersistentDataContainer().set(ownerKey(plan),PersistentDataType.STRING,plan.identity());}
         active.put(plan.stage(),plan);for(var cell:plan.cells())blocks.put(new Position(cell.x(),cell.y(),cell.z()),plan);
         try{
-            for(var cell:plan.cells())world.getBlockAt(cell.x(),cell.y(),cell.z()).setBlockData(Bukkit.createBlockData(cell.placed()),false);
+            for(var cell:plan.cells()){var block=world.getBlockAt(cell.x(),cell.y(),cell.z());WorldSanitizer.preserveGenerated(plugin,block);block.setBlockData(Bukkit.createBlockData(cell.placed()),false);}
             var beacon=(org.bukkit.block.Beacon)world.getBlockAt(plan.x(),plan.y(),plan.z()).getState();
             beacon.setPrimaryEffect(PotionEffectType.SPEED);beacon.setSecondaryEffect(null);beacon.setEffectRange(BeaconBuffPolicy.RADIUS);beacon.update(true,false);
             return true;

@@ -31,6 +31,8 @@ public final class TestProbe extends JavaPlugin implements Listener {
     private final Rc7HorseCelebrationProbe rc7Horses=new Rc7HorseCelebrationProbe(this);
     private final Rc8LocaleProbe rc8Locale=new Rc8LocaleProbe(this);
     private final Rc8LobbyProbe rc8Lobby=new Rc8LobbyProbe(this);
+    private final Rc9LootProbe rc9Loot=new Rc9LootProbe(this);
+    private final FlightDeploymentProbe flight=new FlightDeploymentProbe(this);
     private final AirdropBuffProbe beaconBuff=new AirdropBuffProbe(this);
     @EventHandler
     public void isolatedWorld(org.bukkit.event.world.WorldLoadEvent event) {
@@ -48,6 +50,8 @@ public final class TestProbe extends JavaPlugin implements Listener {
         getServer().getPluginManager().registerEvents(m6,this);
         getCommand("brprobe").setExecutor((sender,command,label,args)-> {
             try {
+                if(args.length > 0 && args[0].equals("p26rc9loot")) { rc9Loot.command(sender,args); return true; }
+                if(args.length > 0 && args[0].equals("p26flight")) { flight.command(sender,args); return true; }
                 if(args.length > 0 && args[0].equals("p26rc8locale")) { rc8Locale.command(sender,args); return true; }
                 if(args.length > 0 && args[0].equals("p26rc8lobby")) { rc8Lobby.command(sender,args); return true; }
                 if(args.length > 0 && args[0].equals("p26beaconbuff")) { beaconBuff.command(sender,args); return true; }
