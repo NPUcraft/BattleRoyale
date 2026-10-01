@@ -10,7 +10,7 @@ class AirdropEnchantmentTierTest {
         for(var tier:AirdropEnchantmentTier.values())for(int maximum=1;maximum<=5;maximum++)for(int i=0;i<100;i++){
             int level=tier.level(maximum,random);
             assertTrue(level>=1&&level<=maximum);
-            if(tier==AirdropEnchantmentTier.ENHANCED)assertTrue(level>=Math.min(2,maximum)&&level<=3);
+            if(tier==AirdropEnchantmentTier.ENHANCED)assertTrue(level>=1&&level<=Math.min(2,maximum));
             if(tier==AirdropEnchantmentTier.BEST)assertEquals(maximum,level);
         }
         assertThrows(IllegalArgumentException.class,()->AirdropEnchantmentTier.BEST.level(0,random));
@@ -18,8 +18,8 @@ class AirdropEnchantmentTierTest {
     @Test void enhancedRareAndBestTiersAreReachableWithRareBestRolls(){
         var random=new Random(71);var counts=new int[3];
         for(int i=0;i<10_000;i++)counts[AirdropEnchantmentTier.roll(random).ordinal()]++;
-        assertTrue(counts[0]>6500&&counts[0]<7500);
-        assertTrue(counts[1]>2200&&counts[1]<2800);
-        assertTrue(counts[2]>350&&counts[2]<650);
+        assertTrue(counts[0]>8200&&counts[0]<8800);
+        assertTrue(counts[1]>1050&&counts[1]<1550);
+        assertTrue(counts[2]>120&&counts[2]<300);
     }
 }

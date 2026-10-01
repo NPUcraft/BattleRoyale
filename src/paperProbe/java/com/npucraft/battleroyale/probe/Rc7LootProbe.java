@@ -20,33 +20,43 @@ public final class Rc7LootProbe {
         require(args.length==2&&args[1].equals("all"),"p26rc7loot all");
         var factory=new NativeLootItems();var random=new Random(27);int maximum=0,stacked=0;
         for(int i=0;i<2000;i++){
-            var batch=factory.airdropGuarantees(random);require(batch.size()==2,"Two guarantee stacks");
+            var batch=factory.airdropGuarantees(random);require(batch.size()==1,"One guaranteed equipment stack");
             var gear=batch.getFirst();legal(gear);require(gear.getAmount()==1&&!gear.getEnchantments().isEmpty(),"Guaranteed enchanted equipment");
-            require(batch.getLast().getType()==Material.TOTEM_OF_UNDYING&&batch.getLast().getAmount()==1,"One totem");
+            require(gear.getType()!=Material.TOTEM_OF_UNDYING,"Totems are table rolls, never guaranteed");
             if(gear.getEnchantments().size()>1)stacked++;
             if(gear.getEnchantments().entrySet().stream().anyMatch(e->e.getKey().getMaxLevel()>=4&&e.getValue()==e.getKey().getMaxLevel()))maximum++;
             if(i%20==0)require(ItemStack.deserializeBytes(gear.serializeAsBytes()).isSimilar(gear),"Native byte round trip");
         }
-        require(maximum>100&&stacked>350,"High tiers and native maximum rolls reachable");
+        require(maximum>100&&stacked>150,"High tiers and native maximum rolls reachable");
         int enchanted=0;
         for(int i=0;i<1000;i++){var item=factory.rollAirdrop("minecraft:iron_sword",random);legal(item);if(!item.getEnchantments().isEmpty())enchanted++;}
-        require(enchanted>720&&enchanted<880,"Random supply equipment approximately 80 percent enchanted");
+        require(enchanted>470&&enchanted<630,"Random supply equipment approximately fifty-five percent enchanted");
         for(String key:List.of("minecraft:bread","minecraft:diamond","minecraft:gold_ingot","minecraft:oak_log","battleroyale:healing_potion"))
             for(int i=0;i<30;i++)require(factory.rollAirdrop(key,random).getEnchantments().isEmpty(),"Resources do not receive invalid enchantments");
         var main=Objects.requireNonNull(plugin.getServer().getPluginManager().getPlugin("BattleRoyale"));
         var catalog=YamlConfiguration.loadConfiguration(main.getDataFolder().toPath().resolve("loot-tables.yml").toFile());
-        int nativeBasicEntries=0;
+        var removedItems=Set.of("minecraft:ice","minecraft:packed_ice","minecraft:blue_ice","minecraft:coal","minecraft:fire_charge","battleroyale:harming_potion");
+        int nativeBasicEntries=0;boolean spears=false;
         for(String table:catalog.getConfigurationSection("loot-tables").getKeys(false)){
             var entries=catalog.getMapList("loot-tables."+table+".entries");var present=new HashSet<String>();
+            require(!entries.isEmpty(),"Every loot table carries entries: "+table);
             for(var entry:entries){String key=entry.get("item").toString();present.add(key);require(!key.equals("minecraft:elytra"),"No elytra");
+                require(!removedItems.contains(key)&&!(key.startsWith("minecraft:")&&key.endsWith("_spawn_egg")),"Removed loot item still present in "+table+": "+key);
+                if(key.endsWith("_spear"))spears=true;
                 if(key.equals("minecraft:diamond"))require(((Number)entry.get("weight")).intValue()==1&&((Number)entry.get("max-amount")).intValue()==1,"Diamonds are rare single-item rolls");}
             if(table.equals("native-basic"))nativeBasicEntries=nativeBasic(catalog,factory,entries,present);
             else if(table.equals(catalog.getString("region-quality.natural-table")))
-                require(present.containsAll(List.of("minecraft:oak_log","minecraft:cobblestone","minecraft:iron_ingot","minecraft:coal","minecraft:stone_sword","minecraft:bow")),"Natural area retains basic combat and resource supplies");
+                require(present.containsAll(List.of("minecraft:oak_log","minecraft:cobblestone","minecraft:iron_ingot","minecraft:stone_sword","minecraft:bow")),"Natural area retains basic combat and resource supplies");
             else if(table.equals(catalog.getString("region-quality.built-table")))
-                require(present.containsAll(List.of("minecraft:iron_chestplate","minecraft:iron_sword","minecraft:diamond","minecraft:iron_ingot","minecraft:coal")),"Built area improves equipment while retaining resources");
-            else require(present.containsAll(List.of("minecraft:oak_log","minecraft:cobblestone","minecraft:stone","minecraft:iron_ingot","minecraft:gold_ingot","minecraft:coal","minecraft:diamond")),"Requested materials in "+table);
+                require(present.containsAll(List.of("minecraft:iron_chestplate","minecraft:iron_sword","minecraft:diamond","minecraft:iron_ingot")),"Built area improves equipment while retaining resources");
+            else if(table.equals("ground-early"))
+                require(present.containsAll(List.of("minecraft:leather_chestplate","minecraft:copper_chestplate","minecraft:stone_sword","minecraft:bread"))
+                        &&present.stream().noneMatch(key->key.contains("iron")||key.contains("diamond")||key.contains("shield")||key.contains("netherite")),"Opening ground tier stays low");
+            else if(table.equals("ground-mid")||table.equals("ground-late"))
+                require(present.stream().anyMatch(key->key.contains("iron")),"Later ground tiers introduce iron");
+            else require(present.stream().anyMatch(key->key.endsWith("_potion")||key.contains("diamond")||key.endsWith("_spear")||key.contains("bread")||key.contains("beef")||key.contains("iron")),"Table "+table+" carries supplies");
         }
+        require(spears,"Spears appear in the deployed loot catalog");
         require(nativeBasicEntries>0,"rc11 native-basic table must be present and independently verified");
         var report=new YamlConfiguration();report.set("status","passed");report.set("guarantee-samples",2000);report.set("native-max-samples",maximum);report.set("multi-enchanted-samples",stacked);report.set("random-airdrop-enchanted",enchanted);
         report.set("native-basic.entries",nativeBasicEntries);report.set("native-basic.basic-only",true);report.set("native-basic.chance",.15);
@@ -58,7 +68,7 @@ public final class Rc7LootProbe {
     /** This deployed table is intentionally poorer than field and airdrop catalogs; never skip its checks. */
     private static int nativeBasic(YamlConfiguration catalog,NativeLootItems factory,List<Map<?,?>> entries,Set<String> present){
         var allowed=Set.of("minecraft:bread","minecraft:apple","minecraft:cooked_chicken","minecraft:stick",
-                "minecraft:oak_log","minecraft:cobblestone","minecraft:coal","minecraft:torch","minecraft:string",
+                "minecraft:oak_log","minecraft:cobblestone","minecraft:torch","minecraft:string",
                 "minecraft:flint","minecraft:arrow","minecraft:stone_sword","minecraft:stone_pickaxe","minecraft:stone_axe",
                 "minecraft:leather_helmet","minecraft:leather_boots");
         require(present.equals(allowed)&&entries.size()==allowed.size(),"Native basic table contains exactly the survival whitelist without duplicates or advanced supplies: "+present);

@@ -74,4 +74,13 @@ class AirdropRoundsTest {
         assertThrows(IllegalArgumentException.class,()->new AirdropRounds(-1,ZonePhase.FINAL));
         assertEquals(0,rounds.poll(0,ZonePhase.SHRINKING).orElseThrow());
     }
+    @Test void configuredLeadWindowMovesTheAnnouncementBoundary() {
+        var rounds=new AirdropRounds(120);
+        assertTrue(rounds.poll(0,ZonePhase.WAITING,121).isEmpty());
+        assertEquals(0,rounds.poll(0,ZonePhase.WAITING,120).orElseThrow());
+        var recovered=new AirdropRounds(2,ZonePhase.WAITING,120);
+        assertTrue(recovered.poll(2,ZonePhase.WAITING,121).isEmpty());
+        assertEquals(2,recovered.poll(2,ZonePhase.WAITING,120).orElseThrow());
+        assertThrows(IllegalArgumentException.class,()->new AirdropRounds(0));
+    }
 }

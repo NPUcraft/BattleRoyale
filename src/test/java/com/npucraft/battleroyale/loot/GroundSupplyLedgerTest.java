@@ -115,6 +115,31 @@ class GroundSupplyLedgerTest {
         Files.delete(file(world));Files.createDirectory(file(world));assertThrows(IOException.class,ledger::read);assertThrows(IOException.class,()->ledger.seal(List.of()));
         assertThrows(IOException.class,()->ledger(root.resolve("missing")).read());assertThrows(IOException.class,()->ledger(root.resolve("missing")).seal(List.of()));
     }
+    @Test void appendContinuesThePlanAndPreservesClaims()throws Exception{
+        var world=world("append");var ledger=ledger(world);
+        ledger.seal(List.of(point(0)));assertTrue(ledger.claim(0));
+        ledger.append(List.of(point(1),point(2)));
+        var saved=ledger.read().orElseThrow();
+        assertEquals(List.of(point(0),point(1),point(2)),saved.points());
+        assertEquals(Set.of(0),saved.claimed());
+        assertFalse(ledger.claim(0));assertTrue(ledger.claim(2));
+        var second=ledger(world);second.append(List.of(point(3)));
+        var finalState=second.read().orElseThrow();
+        assertEquals(4,finalState.points().size());assertEquals(Set.of(0,2),finalState.claimed());
+    }
+    @Test void appendRequiresACommittedContinuousPlan()throws Exception{
+        var world=world("append-guard");var ledger=ledger(world);
+        assertThrows(IOException.class,()->ledger.append(List.of(point(0))));assertFalse(Files.exists(file(world)));
+        ledger.seal(List.of(point(0)));String before=Files.readString(file(world));
+        assertThrows(IOException.class,()->ledger.append(List.of(point(2))));
+        assertThrows(IOException.class,()->ledger.append(List.of(point(0))));
+        assertEquals(before,Files.readString(file(world)));
+    }
+    @Test void appendCannotExceedThePointBudget()throws Exception{
+        var world=world("append-max");var ledger=ledger(world);
+        ledger.seal(IntStream.range(0,GroundSupplyLedger.MAX_POINTS).mapToObj(this::point).toList());
+        assertThrows(IOException.class,()->ledger.append(List.of(point(0))));
+    }
     @Test void uncommittedTemporaryFileIsNeverAPlanOrClaim()throws Exception{
         var world=world("temporary");var ledger=ledger(world);Path temporary=world.resolve(GroundSupplyLedger.FILE+".tmp-"+UUID.randomUUID());
         Files.writeString(temporary,"uncommitted");assertTrue(ledger.read().isEmpty());assertThrows(IOException.class,()->ledger.claim(0));

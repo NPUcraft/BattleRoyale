@@ -4,6 +4,7 @@ import com.npucraft.battleroyale.config.MatchContent;
 import com.npucraft.battleroyale.loot.*;
 import com.npucraft.battleroyale.service.GameScheduler;
 import com.npucraft.battleroyale.session.GameSession;
+import com.npucraft.battleroyale.zone.*;
 import org.bukkit.*;
 import org.bukkit.block.*;
 import org.bukkit.inventory.*;
@@ -46,6 +47,16 @@ public final class PaperLootRuntime {
     private PaperLootRegionQuality quality;
     private final PaperGroundSupplies supplies;
     private boolean sealing;
+    private static final int REFILL_MAX_ATTEMPTS=16,REFILL_MAX_IN_FLIGHT=4;
+    private final GroundLootStages groundStages;
+    private final Queue<RefillRequest> refillQueue=new ArrayDeque<>();
+    private final List<RefillCandidate> refillCandidates=new ArrayList<>();
+    private Zone refillZone;private LootTable refillTable;private int refillNeeded,refillResolved;
+    private record RefillRequest(LootTable table,int points) {}
+    private static final class RefillCandidate {
+        final int x,z;int attempts;CompletableFuture<Chunk> chunk;
+        RefillCandidate(int x,int z){this.x=x;this.z=z;}
+    }
     private NamespacedKey automaticSessionKey(){return new NamespacedKey(plugin,"automatic_loot_session");}
     public State state(){return state;}
     private boolean cancelled;private long generationStarted;
@@ -59,6 +70,7 @@ public final class PaperLootRuntime {
         this.plugin=plugin; this.session=session; this.sanitizer=sanitizer; this.content=content; this.items=items; this.random=random; this.marker=marker; this.scheduler=scheduler;
         worldId=Objects.requireNonNull(plugin.getServer().getWorld(session.gameWorld().orElseThrow().worldName())).getUID();
         supplies=new PaperGroundSupplies(plugin,session,content,items,marker,io);
+        groundStages=new GroundLootStages(content.groundLoot());
     }
     private World world() { return Objects.requireNonNull(plugin.getServer().getWorld(worldId),"Match world unloaded"); }
     private void activateAutomatic(){
@@ -181,7 +193,9 @@ public final class PaperLootRuntime {
         boolean safe=y>=request.area.minY() && y<=request.area.maxY() && y>world.getMinHeight() && y<world.getMaxHeight()
                 && safeGround(world.getBlockAt(x,y-1,z),world.getBlockAt(x,y,z));
         if(safe) {
-            var table=quality.resolve(world.getChunkAt(x>>4,z>>4),content.tables().get(request.area.table()),content.tables());
+            // Staged ground loot ignores the region sample: the opening tier is fixed and refilled later on stage changes.
+            var table=content.groundLoot().enabled()?Objects.requireNonNull(content.tables().get(content.groundLoot().initialTable()))
+                    :quality.resolve(world.getChunkAt(x>>4,z>>4),content.tables().get(request.area.table()),content.tables());
             supplies.plan(x,y,z,table,random.nextLong());groundPoints++;
         } else if(++request.attempts>=request.area.maxAttempts()||groundBudgetExhausted) { missedSpawns++; }
         else ground.add(request);
@@ -201,6 +215,7 @@ public final class PaperLootRuntime {
     }
     private void beginDrain(Throwable error){
         cancelled=true;if(terminalFailure==null)terminalFailure=error;ground.clear();points.clear();
+        refillQueue.clear();refillCandidates.clear();refillTable=null;
         if(draining==null)draining=CompletableFuture.allOf(pipeline.stop(),pending==null?CompletableFuture.completedFuture(null):pending.handle((unused,failure)->null));
     }
     private void finish(Throwable error) {
@@ -226,6 +241,70 @@ public final class PaperLootRuntime {
         if(!result.isDone()){state=State.FAILED;result.completeExceptionally(terminalFailure);}
     }
     public void tickSupplies(){supplies.tick();}
+    /** Driven by the match loop every tick; refills higher-tier ground points on stage changes. */
+    public void tickZone(ZoneRuntime zone){
+        if(state!=State.COMPLETE||!content.groundLoot().enabled()||cancelled)return;
+        for(var refill:groundStages.onStage(zone.stageNumber())){
+            var table=content.tables().get(refill.table());
+            if(table==null){plugin.getLogger().warning("Ground loot refill table missing: "+refill.table());continue;}
+            refillQueue.add(new RefillRequest(table,refill.points()));
+        }
+        if(refillTable==null&&!refillQueue.isEmpty())startRefill(zone);
+        if(refillTable!=null)advanceRefill();
+    }
+    private void startRefill(ZoneRuntime zone){
+        var request=refillQueue.poll();if(request==null)return;
+        refillTable=request.table();refillNeeded=request.points();refillResolved=0;refillCandidates.clear();
+        // Future safe zone when it still has area (the final continuation shrinks to zero), otherwise the current one.
+        var next=zone.next();refillZone=next!=null&&next.halfSize()>0?next:zone.current();
+        fillRefillWindow();
+    }
+    private void fillRefillWindow(){
+        while(refillResolved+refillCandidates.size()<refillNeeded&&refillCandidates.size()<REFILL_MAX_IN_FLIGHT){
+            var candidate=spawnRefillCandidate();
+            // A degenerate (zero-size) zone abandons the batch instead of retrying forever.
+            if(candidate==null){refillResolved=refillNeeded;break;}
+            refillCandidates.add(candidate);
+        }
+    }
+    private RefillCandidate spawnRefillCandidate(){
+        var target=refillZone;if(target==null||target.halfSize()<=0)return null;
+        double radius=Math.max(.01,target.halfSize()-Math.min(8,target.halfSize()*.15));
+        int minX=(int)Math.ceil(target.centerX()-radius-.5),maxX=(int)Math.floor(target.centerX()+radius-.5);
+        int minZ=(int)Math.ceil(target.centerZ()-radius-.5),maxZ=(int)Math.floor(target.centerZ()+radius-.5);
+        if(minX>maxX||minZ>maxZ)return null;
+        var candidate=new RefillCandidate(random.nextInt(minX,maxX+1),random.nextInt(minZ,maxZ+1));
+        candidate.chunk=world().getChunkAtAsync(candidate.x>>4,candidate.z>>4,true);
+        return candidate;
+    }
+    private void advanceRefill(){
+        for(int i=refillCandidates.size()-1;i>=0;i--){
+            var candidate=refillCandidates.get(i);
+            if(!candidate.chunk.isDone())continue;
+            refillCandidates.remove(i);boolean placed=false;
+            try{
+                Chunk chunk=candidate.chunk.join();
+                if(tickets.add(chunk.getChunkKey()))PaperChunkTickets.acquire(plugin,chunk.getWorld(),chunk.getX(),chunk.getZ());
+                sanitizer.ensure(chunk);
+                if(!cancelled&&placeRefill(candidate.x,candidate.z)){placed=true;refillResolved++;}
+            }catch(RuntimeException error){
+                plugin.getLogger().warning("Ground refill chunk failed at "+candidate.x+","+candidate.z+": "+error.getMessage());
+            }finally{releaseTickets();}
+            if(cancelled)return;
+            if(!placed){
+                var retry=candidate.attempts+1<REFILL_MAX_ATTEMPTS?spawnRefillCandidate():null;
+                if(retry!=null){retry.attempts=candidate.attempts+1;refillCandidates.add(retry);}else refillResolved++;
+            }
+        }
+        if(refillResolved>=refillNeeded){refillTable=null;refillCandidates.clear();}
+        else fillRefillWindow();
+    }
+    private boolean placeRefill(int x,int z){
+        World world=world();int y=world.getHighestBlockYAt(x,z,HeightMap.MOTION_BLOCKING_NO_LEAVES)+1;
+        if(y<=world.getMinHeight()||y>=world.getMaxHeight())return false;
+        if(!safeGround(world.getBlockAt(x,y-1,z),world.getBlockAt(x,y,z)))return false;
+        supplies.append(x,y,z,refillTable,random.nextLong());return true;
+    }
     public int progressCompleted(){return Math.min(totalProgress,explicitCompleted+groundPoints+missedSpawns);}
     public int progressTotal(){return totalProgress;}
     public String diagnostics() {

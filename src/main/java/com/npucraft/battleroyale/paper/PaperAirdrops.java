@@ -17,11 +17,12 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
 
-/** Session-owned drops: claim, pin a safe location, announce for 60 seconds, descend, then fill once. */
+/** Session-owned drops: claim, pin a safe spaced location, announce for the configured countdown, descend, then fill once. */
 public final class PaperAirdrops implements AutoCloseable {
-    public record Announcement(int stage,int x,int y,int z,long startedNanos){
-        public boolean ready(long now){return now-startedNanos>=AirdropSettings.ANNOUNCEMENT_SECONDS*1_000_000_000L;}
-        public long remainingSeconds(long now){return Math.max(0,(long)Math.ceil(AirdropSettings.ANNOUNCEMENT_SECONDS-(now-startedNanos)/1e9));}
+    public record Announcement(int stage,int x,int y,int z,long startedNanos,int seconds){
+        public Announcement(int stage,int x,int y,int z,long startedNanos){this(stage,x,y,z,startedNanos,AirdropSettings.ANNOUNCEMENT_SECONDS);}
+        public boolean ready(long now){return now-startedNanos>=seconds*1_000_000_000L;}
+        public long remainingSeconds(long now){return Math.max(0,(long)Math.ceil(seconds-(now-startedNanos)/1e9));}
         public String coordinates(){return "X="+x+" Y="+y+" Z="+z;}
     }
     private final JavaPlugin plugin;
@@ -35,6 +36,7 @@ public final class PaperAirdrops implements AutoCloseable {
     private final NamespacedKey marker;
     private final AirdropRounds rounds;
     private final List<Beacon> beacons=new ArrayList<>();
+    private final List<AirdropPlacement.Point> usedSites=new ArrayList<>();
     private final PaperAirdropBeacons signals;
     private CompletableFuture<com.npucraft.battleroyale.loot.AirdropBeaconLedger.Plan> pendingSignal;
     private CompletableFuture<Boolean> claim;
@@ -48,6 +50,8 @@ public final class PaperAirdrops implements AutoCloseable {
     private double startY;
     private Zone destination;
     private boolean claimed,closed,failed;
+    private static final double SPACING_FACTOR=.5;
+    private static final int SPACING_ATTEMPTS=24;
     private record Beacon(Location location,long expires,String identity,int stage){}
 
     public PaperAirdrops(JavaPlugin plugin,GameSession session,WorldSanitizer sanitizer,MatchContent content,Executor io,boolean recovered){
@@ -57,7 +61,7 @@ public final class PaperAirdrops implements AutoCloseable {
         var world=Objects.requireNonNull(plugin.getServer().getWorld(session.gameWorld().orElseThrow().worldName()));worldId=world.getUID();worldPath=world.getWorldPath();
         signals=new PaperAirdropBeacons(plugin,world,session.sessionId(),io,player->session.state()==GameState.RUNNING&&Optional.ofNullable(session.players().get(player.getUniqueId())).map(value->value.state()==com.npucraft.battleroyale.player.PlayerState.ALIVE).orElse(false));
         marker=new NamespacedKey(plugin,"airdrop");var zone=session.zone().orElseThrow();
-        rounds=recovered?new AirdropRounds(zone.stageIndex(),zone.phase()):new AirdropRounds();
+        rounds=recovered?new AirdropRounds(zone.stageIndex(),zone.phase(),settings.announcementSeconds()):new AirdropRounds(settings.announcementSeconds());
     }
     public void tick(ZoneRuntime zone,long now){
         if(closed||failed||session.state()!=GameState.RUNNING)return;
@@ -91,8 +95,9 @@ public final class PaperAirdrops implements AutoCloseable {
                 var plan=pendingSignal.join();pendingSignal=null;
                 if(valid(zone)&&signals.install(plan)){
                     // Both the fixed location and its real beacon exist before the public countdown.
-                    announcement=new Announcement(stage,x,y,z,now);
-                    announce("第 %s 轮空投预告：%s，%s 秒后开始降落。","Supply drop %s announced: %s. Descent begins in %s seconds.",announcement.stage()+1,announcement.coordinates(),AirdropSettings.ANNOUNCEMENT_SECONDS);
+                    announcement=new Announcement(stage,x,y,z,now,settings.announcementSeconds());
+                    usedSites.add(new AirdropPlacement.Point(x,z));
+                    announce("第 %s 轮空投预告：%s，%s 秒后开始降落。","Supply drop %s announced: %s. Descent begins in %s seconds.",announcement.stage()+1,announcement.coordinates(),settings.announcementSeconds());
                     plugin.getLogger().info("AIRDROP_ANNOUNCED room="+session.room().id()+" stage="+stage+" x="+x+" y="+y+" z="+z+" warning-seconds="+settings.announcementSeconds()+" native-beacon=true");
                     return;
                 }
@@ -129,7 +134,10 @@ public final class PaperAirdrops implements AutoCloseable {
                 int minX=(int)Math.ceil(destination.centerX()-radius-.5),maxX=(int)Math.floor(destination.centerX()+radius-.5);
                 int minZ=(int)Math.ceil(destination.centerZ()-radius-.5),maxZ=(int)Math.floor(destination.centerZ()+radius-.5);
                 if(minX>maxX||minZ>maxZ){attempts=settings.maxAttempts();return;}
-                x=random.nextInt(minX,maxX+1);z=random.nextInt(minZ,maxZ+1);
+                // Spread rounds apart: keep a real separation from every earlier site while staying in-bounds.
+                double spacing=Math.max(settings.minDistance(),radius*SPACING_FACTOR);
+                var site=AirdropPlacement.choose(minX,maxX,minZ,maxZ,spacing,usedSites,random,SPACING_ATTEMPTS);
+                x=site.x();z=site.z();
                 pending=world().getChunkAtAsync(x>>4,z>>4,true).thenApply(chunk->{
                     if(closed||failed||session.state()!=GameState.RUNNING||!plugin.isEnabled())throw new CancellationException("Airdrop stopped");
                     ticket=chunk;PaperChunkTickets.acquire(plugin,chunk.getWorld(),chunk.getX(),chunk.getZ());return chunk;
@@ -142,7 +150,7 @@ public final class PaperAirdrops implements AutoCloseable {
         }
     }
     public Optional<Announcement> announcement(){return Optional.ofNullable(announcement);}
-    public static String announcementText(Announcement at){return "第 "+(at.stage()+1)+" 轮空投预告："+at.coordinates()+"，"+AirdropSettings.ANNOUNCEMENT_SECONDS+" 秒后开始降落。";}
+    public static String announcementText(Announcement at){return "第 "+(at.stage()+1)+" 轮空投预告："+at.coordinates()+"，"+at.seconds()+" 秒后开始降落。";}
     private World world(){return Objects.requireNonNull(plugin.getServer().getWorld(worldId),"Airdrop world unloaded");}
     private String identity(){return session.sessionId()+":"+stage;}
     private String coordinates(){return "X="+x+" Y="+y+" Z="+z;}
@@ -156,7 +164,7 @@ public final class PaperAirdrops implements AutoCloseable {
     public static List<ItemStack> contents(LootTable table,RandomGenerator random){
         var items=new NativeLootItems();List<ItemStack> result=new ArrayList<>(27);
         var guaranteed=items.airdropGuarantees(random);
-        if(guaranteed.size()<2||guaranteed.size()>27)throw new IllegalStateException("Invalid airdrop guarantee batch");
+        if(guaranteed.isEmpty()||guaranteed.size()>27)throw new IllegalStateException("Invalid airdrop guarantee batch");
         for(var item:guaranteed)result.add(item.clone());
         for(var roll:table.roll(random)){
             ItemStack prototype=items.rollAirdrop(roll.item(),random);

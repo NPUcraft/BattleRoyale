@@ -81,7 +81,9 @@ public final class MatchContentLoader {
         var airdrops=new AirdropSettings(!tables.isEmpty(),defaultTable,8,12,8,24,120);
         if(lootConfig.contains("airdrops")){
             var n=section(lootConfig,"airdrops");
-            airdrops=new AirdropSettings(bool(n,"enabled"),text(n,"loot-table"),integer(n,"min-rolls"),integer(n,"max-rolls"),integer(n,"fall-seconds"),integer(n,"max-attempts"),integer(n,"marker-seconds"));
+            airdrops=new AirdropSettings(bool(n,"enabled"),text(n,"loot-table"),integer(n,"min-rolls"),integer(n,"max-rolls"),integer(n,"fall-seconds"),integer(n,"max-attempts"),integer(n,"marker-seconds"),
+                    n.contains("announcement-seconds")?integer(n,"announcement-seconds"):AirdropSettings.ANNOUNCEMENT_SECONDS,
+                    n.contains("min-distance")?integer(n,"min-distance"):0);
         }
         if(auto.enabled()){require(tables,auto.table(),"auto-containers");new LootTable("auto",auto.minRolls(),auto.maxRolls(),tables.get(auto.table()).entries());}
         if(airdrops.enabled()){require(tables,airdrops.table(),"airdrops");new LootTable("airdrop",airdrops.minRolls(),airdrops.maxRolls(),tables.get(airdrops.table()).entries());}
@@ -110,7 +112,16 @@ public final class MatchContentLoader {
             }
             for(String source:regionalSources)for(var level:LootRegionQuality.values())quality.resolve(level,tables.get(source),tables);
         }
-        return new MatchContent(loadouts,tables,maps,mapErrors,auto,airdrops,mobs,horses,quality);
+        var groundLoot=GroundLootSettings.DISABLED;
+        if(lootConfig.contains("ground-loot")){
+            var n=section(lootConfig,"ground-loot");
+            List<GroundLootSettings.Refill> refills=new ArrayList<>();
+            if(n.contains("refills"))for(ConfigurationSection entry:list(n,"refills"))
+                refills.add(new GroundLootSettings.Refill(integer(entry,"after-stage"),text(entry,"table"),integer(entry,"points")));
+            groundLoot=new GroundLootSettings(bool(n,"enabled"),n.contains("initial-table")?text(n,"initial-table"):"",refills);
+        }
+        groundLoot.validate(tables);
+        return new MatchContent(loadouts,tables,maps,mapErrors,auto,airdrops,mobs,horses,quality,groundLoot);
     }
     public static String loadoutYaml(Map<String,LoadoutDefinition> definitions) {
         YamlConfiguration yaml = new YamlConfiguration();
