@@ -31,6 +31,7 @@ public final class FlightDeploymentProbe {
     private final JavaPlugin plugin;
     private final YamlConfiguration report=new YamlConfiguration();
     private final Map<UUID,Viewer> viewers=new LinkedHashMap<>();
+    private final Set<Integer> forcedFixtureChunks=new HashSet<>();
     private World world;private PaperFlightDeployment flight;private long now;private int ready,failures;private Throwable flightFailure;private boolean busy,throwReady;
     public FlightDeploymentProbe(JavaPlugin plugin){this.plugin=plugin;}
     public void command(CommandSender sender,String[] args){
@@ -38,13 +39,13 @@ public final class FlightDeploymentProbe {
         require(plugin.getServer().getOnlinePlayers().isEmpty(),"No native players online");require(!busy,"Probe already running");
         if(args.length!=2||!args[1].equals("all"))throw new IllegalArgumentException("p26flight all");
         busy=true;CompletableFuture<Void> work;
-        try{setup();platform();equipment();work=success().thenCompose(unused->cancel()).thenCompose(unused->disconnect()).thenCompose(unused->rejectedTeleport()).thenCompose(unused->loadingCancellation()).thenCompose(unused->readyFailure());}
+        try{setup();platform();equipment();surfaceGeometry();work=success().thenCompose(unused->partialLandings()).thenCompose(unused->cancel()).thenCompose(unused->disconnect()).thenCompose(unused->rejectedTeleport()).thenCompose(unused->loadingCancellation()).thenCompose(unused->readyFailure());}
         catch(Throwable error){work=CompletableFuture.failedFuture(error);}
         work.whenComplete((unused,error)->main(()->{
             try{
                 if(flight!=null)flight.close();
                 require(world==null||tickets()==0,"Flight released every plugin chunk ticket");
-                if(world!=null)require(plugin.getServer().unloadWorld(world,true),"Flight fixture unloads normally");
+                if(world!=null){for(int chunkX:forcedFixtureChunks)world.setChunkForceLoaded(chunkX,0,false);forcedFixtureChunks.clear();require(plugin.getServer().unloadWorld(world,true),"Flight fixture unloads normally");}
                 report.set("status",error==null?"passed":"failed");if(error!=null)report.set("failure",error.toString());
                 report.set("limits",List.of("Dedicated generated local world; no production map or native player is used.","Platform collision blocks, world mutation, native item serialization and event objects use actual Paper APIs.","Player movement, glide state and clock are interface recorders; this is not a client physics, passenger packet or multiplayer match validation."));
                 var file=plugin.getDataFolder().toPath().resolve("flight/report.yml");AtomicFiles.write(file,report.saveToString().getBytes(StandardCharsets.UTF_8));
@@ -58,7 +59,7 @@ public final class FlightDeploymentProbe {
         var key=new NamespacedKey("battleroyale_probe","flight_"+UUID.randomUUID().toString().replace("-",""));
         world=Objects.requireNonNull(plugin.getServer().createWorld(WorldCreator.ofKey(key).type(WorldType.FLAT).generateStructures(false)));
         world.setDifficulty(Difficulty.PEACEFUL);world.setGameRule(GameRules.SPAWN_MOBS,false);
-        for(int x=-4;x<=8;x++)for(int z=-4;z<=4;z++)world.getBlockAt(x,80,z).setType(Material.STONE,false);
+        for(int x=-4;x<=16;x++)for(int z=-4;z<=4;z++)world.getBlockAt(x,80,z).setType(Material.STONE,false);
         report.set("platform",plugin.getServer().getVersion());report.set("world",world.getName());
     }
     private void platform(){
@@ -96,8 +97,34 @@ public final class FlightDeploymentProbe {
         require(errors.isEmpty(),"No equipment guard failures");item.remove();
         report.set("native-equipment","Original item bytes and metadata; bound elytra; drop/swap/damage/pickup/hopper guards; duplicate removal; exactly-once restore");
     }
-    private void begin(int count,boolean reject){
-        viewers.clear();for(int i=0;i<count;i++){var viewer=new Viewer(i);viewer.rejectTeleport=reject;viewers.put(viewer.id,viewer);}
+    private void surfaceGeometry(){
+        for(int chunkX=1;chunkX<=3;chunkX++){world.setChunkForceLoaded(chunkX,0,true);forcedFixtureChunks.add(chunkX);}
+        for(int x=19;x<=48;x++)for(int y=80;y<=84;y++)world.getBlockAt(x,y,0).setType(Material.AIR,false);
+        String[] data={"stone_slab[type=bottom]","stone_slab[type=top]","oak_stairs[facing=east,half=bottom,shape=straight]",
+                "oak_stairs[facing=east,half=top,shape=straight]","stone_slab[type=double]","oak_trapdoor[half=top,open=false]","oak_fence"};
+        double[] heights={80.5,81,81,81,81,81,81.5};
+        for(int i=0;i<data.length;i++){
+            int x=20+i*2;var block=world.getBlockAt(x,80,0);block.setBlockData(Bukkit.createBlockData("minecraft:"+data[i]),false);
+            require(PaperPlayerLanding.safeStanding(new Location(world,x+.5,heights[i],.5)),"Actual collision top accepts "+data[i]);
+            require(Objects.equals(heights[i],PaperPlayerLanding.safeSurface(block)),"Fractional fallback planning accepts "+data[i]);
+        }
+        world.getBlockAt(34,80,0).setType(Material.STONE,false);world.getBlockAt(34,81,0).setType(Material.WHITE_CARPET,false);
+        require(PaperPlayerLanding.safeStanding(new Location(world,34.5,81.0625,.5)),"Carpet fractional support");
+        world.getBlockAt(36,80,0).setType(Material.GLASS,false);require(PaperPlayerLanding.safeStanding(new Location(world,36.5,81,.5)),"Transparent collision support");
+        world.getBlockAt(38,80,0).setBlockData(Bukkit.createBlockData("minecraft:stone_slab[type=bottom,waterlogged=true]"),false);
+        require(!PaperPlayerLanding.safeStanding(new Location(world,38.5,80.5,.5)),"Waterlogged fallback remains rejected");
+        world.getBlockAt(40,80,0).setType(Material.MAGMA_BLOCK,false);require(!PaperPlayerLanding.safeStanding(new Location(world,40.5,81,.5)),"Hazardous floor rejected");
+        world.getBlockAt(42,80,0).setType(Material.STONE,false);world.getBlockAt(42,82,0).setType(Material.STONE,false);
+        require(!PaperPlayerLanding.safeStanding(new Location(world,42.5,81,.5)),"Standing headroom required after flight gear removal");
+        world.getBlockAt(46,80,0).setBlockData(Bukkit.createBlockData("minecraft:oak_stairs[facing=east,half=bottom,shape=straight]"),false);
+        require(PaperPlayerLanding.safeStanding(new Location(world,46.15,80.5,.5)),"Lower stair step is not replaced by its full bounding envelope");
+        report.set("native-landing-surfaces",List.of("Bottom/top/double slabs, normal/upside-down stairs, trapdoor, fence, carpet and glass accepted at their real collision top.","Lower stair half tested separately; wet/hazardous/blocked headroom remain rejected."));
+    }
+    private void begin(int count,boolean reject){begin(count,reject,false);}
+    private void begin(int count,boolean reject,boolean fractionalFallback){
+        viewers.clear();for(int i=0;i<count;i++){var viewer=new Viewer(i);viewer.rejectTeleport=reject;
+            if(fractionalFallback&&i==count-1)viewer.location=new Location(world,20.5,80.5,.5);
+            viewers.put(viewer.id,viewer);}
         var room=new RoomDefinition("flight","Flight fixture",1,Math.max(2,count),1,Duration.ZERO,List.of("fixture"),"starter","probe",true,Duration.ofSeconds(1));
         var map=new MapTemplate("fixture","Flight fixture",world.getWorldPath(),new PlayableArea(-1000,1000,-1000,1000));
         var session=GameSession.waiting(UUID.randomUUID(),room,Instant.now());viewers.keySet().forEach(session::join);session.prepare(map,new Random(1));session.initialZone(new Zone(0,0,500));
@@ -132,6 +159,32 @@ public final class FlightDeploymentProbe {
               require(flight.platformBlocks()==0&&tickets()==0&&flight.stop()==flight.stop(),"Success cleans platform/tickets and stop is idempotent");
               report.set("recorded-lifecycle","Actual platform movement with Player API recorders; walk-off gliding; immediate landing restore; end-route ejection; 90s fallback; one ready callback");
           });
+    }
+    private CompletableFuture<Void> partialLandings(){
+        begin(5,false,true);var all=List.copyOf(viewers.values());
+        return boarding().thenCompose(unused->{
+            for(var viewer:all){viewer.groundOverride=false;viewer.location.add(flight.route().dz()*20,-4,-flight.route().dx()*20);}
+            return await(()->all.stream().allMatch(viewer->viewer.gliding),30);
+        }).thenCompose(unused->{
+            all.get(0).location=new Location(world,20.5,80.5,.5);
+            all.get(1).location=new Location(world,46.15,80.5,.5);
+            all.get(2).location=new Location(world,22.5,81,.5);
+            all.get(3).location=new Location(world,36.5,100,.5);all.get(3).groundOverride=true;
+            int[] teleports=all.stream().mapToInt(viewer->viewer.teleports).toArray();
+            return await(()->flight.progress().completed()==3||flightFailure!=null,30).thenCompose(value->delay(3)).thenRun(()->{
+                require(flightFailure==null&&ready==0&&flight.progress().completed()==3,"False ground flags still land on actual slabs/stairs; true airborne flag does not count");
+                for(int i=0;i<3;i++)require(all.get(i).teleports==teleports[i]&&Arrays.equals(all.get(i).original,all.get(i).items[38].serializeAsBytes()),"Partial landing restores armor in place with no fallback teleport");
+                require(all.get(3).items[38].getType()==Material.ELYTRA,"Spoofed airborne ground flag keeps flight equipment until supported");
+            });
+        }).thenCompose(unused->{
+            all.get(3).groundOverride=false;all.get(3).location=new Location(world,36.5,81,.5);
+            return await(()->flight.progress().completed()==4,30);
+        }).thenCompose(unused->{now=91_000_000_000L;return await(()->ready==1||flightFailure!=null,30);}).thenRun(()->{
+            require(flightFailure==null&&ready==1,"Remaining airborne participant uses bounded fractional fallback");
+            var last=all.get(4);require(last.location.equals(new Location(world,20.5,80.5,.5)),"Fallback keeps half-block Y instead of flooring to another block");
+            require(Arrays.equals(last.original,last.items[38].serializeAsBytes())&&tickets()==0,"Fractional fallback restores original chest item and drains production tickets");
+            report.set("recorded-partial-landings","False on-ground flag on lower slab/lower stair/top slab lands without teleport; true unsupported airborne flag rejected; fractional timeout fallback restored; all ready only after final participant");
+        });
     }
     private CompletableFuture<Void> cancel(){
         begin(1,false);var viewer=viewers.values().iterator().next();
@@ -192,7 +245,7 @@ public final class FlightDeploymentProbe {
     private static void require(boolean value,String message){if(!value)throw new IllegalStateException("Flight assertion: "+message);}
     private final class Viewer {
         final UUID id=UUID.randomUUID();final ItemStack[] items=new ItemStack[41];final byte[] original;final PlayerInventory inventory;final Player player;
-        Location location;ItemStack cursor;boolean online=true,gliding,rejectTeleport;int writes;
+        Location location;ItemStack cursor;Boolean groundOverride;boolean online=true,gliding,rejectTeleport;int writes,teleports;
         Viewer(int index){
             location=new Location(world,index*3+.5,81,.5);
             ItemStack chest=new ItemStack(Material.DIAMOND_CHESTPLATE);var meta=chest.getItemMeta();meta.displayName(Component.text("Original <literal> armor "+index));meta.setUnbreakable(true);chest.setItemMeta(meta);items[38]=chest;original=chest.serializeAsBytes();
@@ -206,8 +259,8 @@ public final class FlightDeploymentProbe {
                 case "getUniqueId"->id;case "getName"->"FlightRecorder";case "getServer"->plugin.getServer();case "locale"->Locale.ENGLISH;
                 case "isOnline"->online;case "isDead"->false;case "getWorld"->world;case "getLocation"->location.clone();
                 case "getInventory"->inventory;case "getItemOnCursor"->cursor;case "setItemOnCursor"->{cursor=(ItemStack)args[0];writes++;yield null;}
-                case "teleport"->{if(rejectTeleport)yield false;location=((Location)args[0]).clone();yield true;}
-                case "isOnGround"->onGround();case "isInWater","isInLava"->false;case "isGliding"->gliding;
+                case "teleport"->{if(rejectTeleport)yield false;teleports++;location=((Location)args[0]).clone();yield true;}
+                case "isOnGround"->groundOverride==null?onGround():groundOverride;case "isInWater","isInLava"->false;case "isGliding"->gliding;
                 case "setGliding"->{gliding=(boolean)args[0];yield null;}case "setVelocity","setFallDistance","sendMessage"->null;
                 case "toString"->"FlightPlayerInterfaceRecorder";case "hashCode"->id.hashCode();case "equals"->self==args[0];
                 default->throw new UnsupportedOperationException("Unexpected player API "+method);

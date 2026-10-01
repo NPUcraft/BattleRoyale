@@ -14,7 +14,7 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.random.RandomGenerator;
 
-/** One candidate per tick, async requested chunks, one generation per immutable InitialZone. */
+/** Bounded parallel chunk requests and main-thread terrain inspections; one immutable plan per match. */
 public final class PaperLootRuntime {
     public enum State { NOT_STARTED, GENERATING, COMPLETE, FAILED }
     private final JavaPlugin plugin;
@@ -29,6 +29,10 @@ public final class PaperLootRuntime {
     private final Queue<ContainerLootPoint> points=new ArrayDeque<>();
     private final Queue<GroundRequest> ground=new ArrayDeque<>();
     private final GroundLootBudget groundBudget=new GroundLootBudget();
+    private final GroundLootPipeline<GroundCandidate,Chunk> pipeline=new GroundLootPipeline<>(GroundLootBudget.MAX_IN_FLIGHT);
+    private CompletableFuture<Void> draining;private Throwable terminalFailure;
+    private int maximumInFlight;
+    private record GroundCandidate(GroundRequest request,int x,int z) {}
     private boolean groundBudgetExhausted;
     private final Set<Long> tickets=new HashSet<>();
     private final Set<String> filled=new HashSet<>();
@@ -45,7 +49,7 @@ public final class PaperLootRuntime {
     private NamespacedKey automaticSessionKey(){return new NamespacedKey(plugin,"automatic_loot_session");}
     public State state(){return state;}
     private boolean cancelled;private long generationStarted;
-    private int activePoints,skippedPoints,activeAreas,skippedAreas,groundPoints,missedSpawns;
+    private int activePoints,skippedPoints,activeAreas,skippedAreas,groundPoints,missedSpawns,explicitCompleted,totalProgress;
     public PaperLootRuntime(JavaPlugin plugin,GameSession session,WorldSanitizer sanitizer,MatchContent content,NativeLootItems items,
             RandomGenerator random,NamespacedKey marker,GameScheduler scheduler) {
         this(plugin,session,sanitizer,content,items,random,marker,scheduler,Runnable::run);
@@ -91,11 +95,11 @@ public final class PaperLootRuntime {
                 ground.add(new GroundRequest(area,cell));
             }
         }
-        task=scheduler.repeat(1,this::tick); return result;
+        totalProgress=points.size()+ground.size();task=scheduler.repeat(1,this::tick); return result;
     }
     private void tick() {
         try {
-            if(cancelled) { if(pending==null || pending.isDone()) finish(new CancellationException("Loot generation cancelled")); return; }
+            if(cancelled) { if(draining==null||draining.isDone())finish(terminalFailure==null?new CancellationException("Loot generation cancelled"):terminalFailure); return; }
             if(pending!=null) {
                 if(!pending.isDone()) return;
                 pending.join(); pending=null;
@@ -112,24 +116,36 @@ public final class PaperLootRuntime {
                 Set<Long> chunks=new LinkedHashSet<>();
                 chunks.add(key(point.x()>>4,point.z()>>4));
                 for(int[] offset:new int[][]{{1,0},{-1,0},{0,1},{0,-1}}) chunks.add(key((point.x()+offset[0])>>4,(point.z()+offset[1])>>4));
-                request(chunks,()->fill(point)); return;
+                request(chunks,()->{fill(point);explicitCompleted++;}); return;
             }
-            if(!ground.isEmpty()&&!groundBudget.request(System.nanoTime())){
-                groundBudgetExhausted=true;missedSpawns+=ground.size();ground.clear();
-                plugin.getLogger().info("Ground loot candidate budget reached; generated="+groundPoints+" skipped="+missedSpawns+" attempts="+groundBudget.attempts());
+            var tickBudget=new GroundLootBudget.Tick(System.nanoTime());
+            while(pipeline.size()>0&&tickBudget.inspect(System.nanoTime())){
+                var ready=pipeline.takeReady();if(ready.isEmpty())break;
+                var value=ready.orElseThrow();Chunk chunk=value.future().join();
+                try{
+                    if(tickets.add(chunk.getChunkKey()))PaperChunkTickets.acquire(plugin,chunk.getWorld(),chunk.getX(),chunk.getZ());
+                    sanitizer.ensure(chunk);if(cancelled)return;
+                    var candidate=value.candidate();drop(candidate.request(),candidate.x(),candidate.z());
+                }finally{releaseTickets();}
             }
-            if(!ground.isEmpty()) {
-                GroundRequest request=ground.peek(); var b=request.bounds;
-                int x=random.nextInt(b.minX(),b.maxX()+1),z=random.nextInt(b.minZ(),b.maxZ()+1);
-                request(Set.of(key(x>>4,z>>4)),()->drop(request,x,z)); return;
+            while(!ground.isEmpty()&&pipeline.available()&&tickBudget.request(System.nanoTime())){
+                if(!groundBudget.request(System.nanoTime())){
+                    groundBudgetExhausted=true;missedSpawns+=ground.size();ground.clear();
+                    plugin.getLogger().info("Ground loot candidate budget reached; generated="+groundPoints+" skipped="+missedSpawns+" attempts="+groundBudget.attempts());break;
+                }
+                GroundRequest request=ground.remove();var bounds=request.bounds;
+                int x=random.nextInt(bounds.minX(),bounds.maxX()+1),z=random.nextInt(bounds.minZ(),bounds.maxZ()+1);
+                var candidate=new GroundCandidate(request,x,z);
+                pipeline.submit(candidate,()->world().getChunkAtAsync(x>>4,z>>4,true));
+                maximumInFlight=Math.max(maximumInFlight,pipeline.size());
             }
-            sealing=true;pending=supplies.seal();
+            if(ground.isEmpty()&&pipeline.size()==0){sealing=true;pending=supplies.seal();}
         } catch(RuntimeException error) { finish(error); }
     }
     private void request(Set<Long> chunks,Runnable inspect) {
         this.inspect=inspect; List<CompletableFuture<Chunk>> futures=new ArrayList<>();
-        for(long key:chunks) futures.add(world().getChunkAtAsync((int)key,(int)(key>>32),true));
-        requested=List.copyOf(futures); pending=CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new));
+        try{for(long key:chunks)futures.add(world().getChunkAtAsync((int)key,(int)(key>>32),true));}
+        finally{requested=List.copyOf(futures);pending=CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new));}
     }
     private void fill(ContainerLootPoint point) {
         World world=world();
@@ -167,8 +183,8 @@ public final class PaperLootRuntime {
         if(safe) {
             var table=quality.resolve(world.getChunkAt(x>>4,z>>4),content.tables().get(request.area.table()),content.tables());
             supplies.plan(x,y,z,table,random.nextLong());groundPoints++;
-            ground.remove();
-        } else if(++request.attempts>=request.area.maxAttempts()) { ground.remove(); missedSpawns++; }
+        } else if(++request.attempts>=request.area.maxAttempts()||groundBudgetExhausted) { missedSpawns++; }
+        else ground.add(request);
     }
     static boolean safeGround(Block floor,Block space) {
         return PaperSpawnTerrain.safeItemGround(floor,space);
@@ -183,7 +199,12 @@ public final class PaperLootRuntime {
         if(world!=null) for(long key:tickets) PaperChunkTickets.release(plugin,world,(int)key,(int)(key>>32));
         tickets.clear();
     }
+    private void beginDrain(Throwable error){
+        cancelled=true;if(terminalFailure==null)terminalFailure=error;ground.clear();points.clear();
+        if(draining==null)draining=CompletableFuture.allOf(pipeline.stop(),pending==null?CompletableFuture.completedFuture(null):pending.handle((unused,failure)->null));
+    }
     private void finish(Throwable error) {
+        if(error!=null){beginDrain(error);if(!draining.isDone())return;}
         if(generationStarted!=0&&!result.isDone())com.npucraft.battleroyale.admin.PerformanceMetricsService.LIVE.record(com.npucraft.battleroyale.admin.PerformanceMetricsService.Timer.LOOT,System.nanoTime()-generationStarted);
         if(result.isDone()) return;
         if(task!=null) task.cancel(); releaseTickets();
@@ -192,17 +213,24 @@ public final class PaperLootRuntime {
         if(error==null) result.complete(null); else result.completeExceptionally(error);
     }
     public CompletableFuture<Void> stop() {
-        cancelled=true;
+        beginDrain(new CancellationException("Loot stopped"));
         if(automatic!=null){automatic.close();automatic=null;}
-        if(pending==null || pending.isDone()) finish(new CancellationException("Loot stopped"));
         if(quality!=null)quality.close();
-        return CompletableFuture.allOf(result.handle((ignored,error)->null),supplies.stop());
+        if(draining.isDone())finish(terminalFailure);
+        return CompletableFuture.allOf(result.handle((ignored,error)->null),draining,supplies.stop());
     }
-    public void close() { cancelled=true;supplies.close();if(quality!=null)quality.close();if(automatic!=null){automatic.close();automatic=null;} if(pending!=null&&!sealing) pending.cancel(false); finish(new CancellationException("Plugin stopped")); }
+    /** Disable closes every mutation path synchronously; underlying chunk futures are never cancelled to fake a drain. */
+    public void close() {
+        beginDrain(new CancellationException("Plugin stopped"));supplies.close();if(quality!=null)quality.close();
+        if(automatic!=null){automatic.close();automatic=null;}if(task!=null)task.cancel();releaseTickets();
+        if(!result.isDone()){state=State.FAILED;result.completeExceptionally(terminalFailure);}
+    }
     public void tickSupplies(){supplies.tick();}
+    public int progressCompleted(){return Math.min(totalProgress,explicitCompleted+groundPoints+missedSpawns);}
+    public int progressTotal(){return totalProgress;}
     public String diagnostics() {
         return "loot="+state+" active/skipped-points="+activePoints+"/"+skippedPoints+" active/skipped-areas="+activeAreas+"/"+skippedAreas
-                +" ground-points="+groundPoints+" missed-spawns="+missedSpawns+" candidate-attempts="+groundBudget.attempts()+" candidate-budget-exhausted="+groundBudgetExhausted+" sanitized-chunks="+sanitizer.chunks(worldId)
+                +" ground-points="+groundPoints+" missed-spawns="+missedSpawns+" candidate-attempts="+groundBudget.attempts()+" candidate-budget-exhausted="+groundBudgetExhausted+" max-in-flight="+maximumInFlight+" in-flight="+pipeline.size()+" sanitized-chunks="+sanitizer.chunks(worldId)
                 +" "+supplies.diagnostics()+" "+(quality==null?"region-quality=inactive":quality.diagnostics())
                 +" "+(automatic==null?"automatic-containers=inactive":automatic.diagnostics());
     }

@@ -119,11 +119,30 @@ public final class ConfigurationLoader {
                     candidates.require(mapId, maps.stream().anyMatch(map -> map.id().equals(mapId)), "unknown map id: " + mapId);
                     Node configured = candidates.section(mapId);
                     double jitter = configured.values().containsKey("jitter-radius") ? configured.number("jitter-radius", 0) : 0;
-                    var points = new ArrayList<InitialZoneCenters.Point>();
-                    for (Node point : configured.nodes("points"))
-                        points.add(new InitialZoneCenters.Point(point.number("x", -Double.MAX_VALUE), point.number("z", -Double.MAX_VALUE)));
-                    configured.require("points", points.size() <= 256, "at most 256 center points supported");
-                    centers.put(mapId, new InitialZoneCenters(jitter, points));
+                    if (configured.values().containsKey("regions")) {
+                        configured.require("points", !configured.values().containsKey("points"), "points and regions are mutually exclusive");
+                        configured.require("jitter-radius", jitter == 0, "rectangular regions cannot use jitter-radius");
+                        var regions = new ArrayList<InitialZoneCenters.Region>();
+                        var regionIds = new HashSet<String>();
+                        for (Node region : configured.nodes("regions")) {
+                            for (String field : region.keys()) region.require(field, Set.of("id", "name", "min-x", "max-x", "min-z", "max-z").contains(field), "unknown region field");
+                            String regionId = region.text("id");
+                            region.require("id", regionIds.add(regionId), "duplicate initial center region id: " + regionId);
+                            try {
+                                regions.add(new InitialZoneCenters.Region(regionId, region.text("name"),
+                                        region.number("min-x", -Double.MAX_VALUE), region.number("max-x", -Double.MAX_VALUE),
+                                        region.number("min-z", -Double.MAX_VALUE), region.number("max-z", -Double.MAX_VALUE)));
+                            } catch (IllegalArgumentException error) { throw region.error("", error.getMessage()); }
+                        }
+                        configured.require("regions", regions.size() <= InitialZoneCenters.MAX_REGIONS, "at most " + InitialZoneCenters.MAX_REGIONS + " center regions supported");
+                        centers.put(mapId, new InitialZoneCenters(regions));
+                    } else {
+                        var points = new ArrayList<InitialZoneCenters.Point>();
+                        for (Node point : configured.nodes("points"))
+                            points.add(new InitialZoneCenters.Point(point.number("x", -Double.MAX_VALUE), point.number("z", -Double.MAX_VALUE)));
+                        configured.require("points", points.size() <= 256, "at most 256 center points supported");
+                        centers.put(mapId, new InitialZoneCenters(jitter, points));
+                    }
                 }
             }
             List<ZoneProfile.Stage> stages = new ArrayList<>();

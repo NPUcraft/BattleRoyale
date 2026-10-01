@@ -152,12 +152,17 @@ public final class PaperFlightDeployment implements Listener,AutoCloseable {
                 if(!supported){depart(id,player,now);state=Presence.DESCENDING;}
             }
             if(state==Presence.DESCENDING){
-                if(player.isInLava()||now-departed.getOrDefault(id,now)>FlightRoute.LANDING_SECONDS*SECOND||at.getY()<world.getMinHeight()+4||session.initialZone().orElseThrow().distanceOutside(at.getX(),at.getZ())>256){
+                if(player.isInLava()||at.getY()<world.getMinHeight()+4||session.initialZone().orElseThrow().distanceOutside(at.getX(),at.getZ())>256){
                     safeReturn(id,player);continue;
                 }
-                if(at.getY()<height-2&&(player.isOnGround()||player.isInWater())){
+                // Player.isOnGround is client-controlled and may remain false while gliding on a
+                // fractional surface. Inspect actual collision components before the timeout fallback.
+                if(at.getY()<height-2&&(PaperPlayerLanding.safeStanding(at)||player.isInWater())){
                     if(!session.initialZone().orElseThrow().contains(at.getX(),at.getZ()))safeReturn(id,player);else landed(id,player);
-                }else if(!player.isOnGround()&&!player.isInWater()&&!player.isGliding())player.setGliding(true);
+                    continue;
+                }
+                if(now-departed.getOrDefault(id,now)>FlightRoute.LANDING_SECONDS*SECOND){safeReturn(id,player);continue;}
+                if(!player.isInWater()&&!player.isGliding())player.setGliding(true);
             }
         }
     }
@@ -179,9 +184,7 @@ public final class PaperFlightDeployment implements Listener,AutoCloseable {
     }
     private void safeReturn(UUID id,Player player){
         Location target=fallbacks.get(id);
-        var floor=world.getBlockAt(target.getBlockX(),target.getBlockY()-1,target.getBlockZ());
-        var feet=floor.getRelative(org.bukkit.block.BlockFace.UP);var head=feet.getRelative(org.bukkit.block.BlockFace.UP);
-        if(!PaperSpawnTerrain.safeItemGround(floor,feet)||!head.isPassable()||head.isLiquid()||PaperSpawnTerrain.hazard(head.getType()))throw new IllegalStateException("Prepared flight fallback is no longer safe");
+        if(!PaperPlayerLanding.safeStanding(target))throw new IllegalStateException("Prepared flight fallback is no longer safe");
         if(!player.teleport(target))throw new IllegalStateException("Flight fallback teleport rejected");
         player.setVelocity(new Vector());landed(id,player);
     }

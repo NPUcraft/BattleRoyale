@@ -104,7 +104,8 @@ public final class Rc3Probe {
         report.set("game-copy-buffer-blocks", WorldFiles.GAME_COPY_BUFFER_BLOCKS);
         var metadata = new MapMetadataStore(data());
         var map = metadata.overlay(configuration.maps().stream().filter(m -> m.id().equals(expectedMap)).findFirst().orElseThrow());
-        require(map.playableArea().equals(new PlayableArea(-10000,10000,-10000,10000)), "Effective playable area must be X/Z +/-10000");
+        int expectedExtent=Boolean.getBoolean("battleroyale.probe.rc11")?5000:10000;
+        require(map.playableArea().equals(new PlayableArea(-expectedExtent,expectedExtent,-expectedExtent,expectedExtent)), "Effective playable area must be X/Z +/-"+expectedExtent);
         report.set("map.id", map.id()); report.set("map.path", map.templatePath().toString());
         report.set("map.min-x", map.playableArea().minX()); report.set("map.max-x", map.playableArea().maxX());
         report.set("map.min-z", map.playableArea().minZ()); report.set("map.max-z", map.playableArea().maxZ());
@@ -138,7 +139,7 @@ public final class Rc3Probe {
             report.set(prefix + ".max-player-initial-half-size", half); report.set(prefix + ".random-zone-checks", 32);
             report.set(prefix + ".loadout", room.loadoutId()); report.set(prefix + ".decoded-items", inventory);
         }
-        return save("rooms-report.yml", report.saveToString()).thenApply(path -> "rooms=3 map=" + expectedMap + " area=+-10000 nativeLoadouts=OK path=" + path);
+        return save("rooms-report.yml", report.saveToString()).thenApply(path -> "rooms=3 map=" + expectedMap + " area=+-"+expectedExtent+" nativeLoadouts=OK path=" + path);
     }
     private static void assertStarter(LoadoutDefinition definition, NativeItemSerializer serializer) {
         var amounts = new EnumMap<Material,Integer>(Material.class);

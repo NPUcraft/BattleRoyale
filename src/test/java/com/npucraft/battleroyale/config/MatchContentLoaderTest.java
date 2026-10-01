@@ -53,14 +53,14 @@ class MatchContentLoaderTest {
         Files.delete(directory.resolve("map-data/city/loot.yml")); assertTrue(assertThrows(IllegalArgumentException.class,this::load).getMessage().contains("map-data/city/loot.yml"));
     }
     @Test void newLootPoliciesValidateReferencesAndBudgets()throws Exception{
-        var content=load();assertEquals(.4,content.autoContainers().chance());assertEquals(1,content.autoContainers().minRolls());assertEquals(3,content.autoContainers().maxRolls());assertEquals("airdrop",content.airdrops().table());
+        var content=load();assertEquals(.15,content.autoContainers().chance());assertEquals("native-basic",content.autoContainers().table());assertEquals(1,content.autoContainers().minRolls());assertEquals(2,content.autoContainers().maxRolls());assertEquals("airdrop",content.airdrops().table());
         assertEquals(.35,content.mobLoot().chance());assertEquals(64,content.mobLoot().maxDropsPerSession());
         assertTrue(content.horses().enabled());assertEquals(16,content.horses().maxPerSession());assertEquals(15,content.horses().intervalSeconds());
-        replace("loot-tables.yml","chance: 0.4","chance: 1.1");assertThrows(IllegalArgumentException.class,this::load);
+        replace("loot-tables.yml","chance: 0.15","chance: 1.1");assertThrows(IllegalArgumentException.class,this::load);
     }
     @Test void legacyCustomTableGetsCompatibleDefaultsWithoutRequiringBasic()throws Exception{
         Path path=directory.resolve("loot-tables.yml");String original=Files.readString(path);String tables="config-version: 2\n"+original.substring(original.indexOf("loot-tables:"));
-        Files.writeString(path,tables.replace("  basic:","  survival:"));
+        Files.writeString(path,tables.substring(0,tables.indexOf("  native-basic:")).replace("  basic:","  survival:"));
         for(String map:new String[]{"city","desert"})replace("map-data/"+map+"/loot.yml","loot-table: basic","loot-table: survival");
         var content=load();assertTrue(content.autoContainers().enabled());assertEquals("survival",content.autoContainers().table());assertEquals("survival",content.airdrops().table());assertEquals("survival",content.mobLoot().table());assertEquals(com.npucraft.battleroyale.loot.HorseSettings.DEFAULT,content.horses());assertFalse(content.regionQuality().enabled());
     }
@@ -89,5 +89,11 @@ class MatchContentLoaderTest {
     }
     @Test void regionQualityThresholdIsStrictlyValidated()throws Exception{
         replace("loot-tables.yml","built-threshold: 0.25","built-threshold: 0");assertThrows(IllegalArgumentException.class,this::load);
+    }
+    @Test void nativeStorageHasIndependentLowTierSurvivalEntries()throws Exception{
+        var content=load();var settings=content.autoContainers();assertEquals("native-basic",settings.table());assertEquals(.15,settings.chance());assertEquals(2,settings.maxRolls());
+        var entries=content.tables().get(settings.table()).entries().stream().map(com.npucraft.battleroyale.loot.LootTable.Entry::item).toList();
+        assertTrue(entries.contains("minecraft:bread"));assertTrue(entries.contains("minecraft:stone_pickaxe"));assertTrue(entries.contains("minecraft:oak_log"));
+        assertFalse(entries.stream().anyMatch(item->item.contains("iron")||item.contains("diamond")||item.contains("netherite")||item.contains("totem")||item.contains("potion")));
     }
 }

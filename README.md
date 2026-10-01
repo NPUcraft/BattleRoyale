@@ -4,7 +4,7 @@
 
 BattleRoyale is a multi-room Battle Royale plugin for Paper.
 
-> Current version: **1.0.0-rc.10**
+> Current version: **1.0.0-rc.11**
 > Target: **Paper 26.2** · **Java 25**
 > Status: **Release Candidate**
 
@@ -14,11 +14,11 @@ BattleRoyale 是一个面向 Paper 的多房间 Battle Royale 插件，提供随
 
 - Independent multi-room matches using isolated template-world clones.
 - Random square safe zones that finish shrinking to zero; the BossBar displays the target side length squared (for example `100²`).
-- A bilingual preparation progress bar, followed by a randomly routed moving aircraft platform. Temporary elytra is removed and chest armor restored on landing.
-- Lower container loot chance (40%, 1–3 rolls) and stratified field supply points; only match clones replace high-value storage blocks, preserving ores and ancient debris.
+- A bilingual preparation bar includes completed/total supply points. Bounded parallel terrain preparation precedes the moving aircraft; landing detects actual foot contact, including slabs and stairs, before removing the temporary elytra and restoring chest armor.
+- Native map containers have a 15% chance of 1–2 rolls from an independent basic-survival table, without random enchantments or regional upgrades. Only match clones replace high-value storage blocks, preserving ores and ancient debris.
 - Field supply points show colored particle rings and nearby chimes; items only appear within 4 blocks after a durable, one-time claim. No unopened item or display entities.
-- Cached surface samples select natural or built-area loot for containers and field supplies, without changing ordinary enchantment limits.
-- Population-scaled initial squares (400/600/1000/1500 blocks wide), optional map-specific opening centers, and a 7m10s four-stage default zone schedule; later centers still move randomly.
+- Cached surface samples select natural or built-area loot for explicitly configured containers and field supplies, without changing ordinary enchantment limits. Higher-value supplies remain in the field and in supply drops.
+- Population-scaled initial squares (400/600/1000/1500 blocks wide), named rectangular starting-region votes through `/br vote` or the queued player’s compass, and a 7m10s four-stage default zone schedule. Each player has one vote per map; only the chosen map is tallied, with random tie-breaking and a random choice when nobody votes. Later centers still move randomly.
 - Coordinate-free center arrows, shortest distance to the next zone when outside, a separate supply-drop arrow, and stage totals with next-zone area.
 - Supply drops announced at fixed coordinates at least 60 seconds before descent, marked by real yellow beacon beams granting only Speed I to living participants within a 24-block sphere for 100 ticks per refresh.
 - Solo, Duo, Squad and configurable team sizes.
@@ -54,7 +54,7 @@ Without an economy provider, matches and free cosmetics remain available; paid p
 ## Installation
 
 1. Install Paper 26.2 and a compatible Java runtime.
-2. Build BattleRoyale and place `battleroyale-1.0.0-rc.10.jar` in `plugins/`.
+2. Build BattleRoyale and place `battleroyale-1.0.0-rc.11.jar` in `plugins/`.
 3. Start the server once to generate configuration files.
 4. Configure the lobby, rooms, maps, zones and storage.
 5. Install saved, unloaded map templates under `plugins/BattleRoyale/maps/`.
@@ -84,6 +84,7 @@ On Paper 26.2, match copies live in `<level-name>/dimensions/battleroyale_game/`
 /br rooms
 /br join <room>
 /br autojoin
+/br vote
 /br spectate <room>
 /br profile
 /br leaderboard
@@ -113,7 +114,7 @@ Windows:
 .\gradlew.bat clean check build
 ```
 
-Output: `build/libs/battleroyale-1.0.0-rc.10.jar`, with an adjacent `.sha256` file. Generated JARs are not committed. Runtime dependency versions are locked; Paper API is pinned to `26.2.build.129-stable` and is provided by the server.
+Output: `build/libs/battleroyale-1.0.0-rc.11.jar`, with an adjacent `.sha256` file. Generated JARs are not committed. Runtime dependency versions are locked; Paper API is pinned to `26.2.build.129-stable` and is provided by the server.
 
 The MySQL contracts require an isolated test database and `BATTLEROYALE_MYSQL_TEST_PORT`; otherwise they are explicitly excluded. See [Verification](docs/VERIFICATION.md) for test setup, evidence and measured scale.
 
@@ -125,7 +126,7 @@ External economy providers and BattleRoyale's SQL database cannot participate in
 
 ## Project Status and Limitations
 
-`1.0.0-rc.8` is a **release candidate**. Its clean build passed 606 unit tests and 8 stress tests; 3 Windows symlink tests were skipped. Current real-Paper checks and their client-test limitations are recorded in [Verification](docs/VERIFICATION.md). M1–M9 and previous release-candidate results remain historical evidence. The official artifact checksum and deployment receipt belong to the corresponding [GitHub release](https://github.com/NPUcraft/BattleRoyale/releases); this source document does not claim that rc.8 is already deployed. Production-scale long-term use is still being evaluated.
+`1.0.0-rc.11` is a **release candidate**. The current build, automated tests and isolated native Paper acceptance have passed. See [Verification](docs/VERIFICATION.md) for confirmed evidence and client-test limitations. M1–M9 and previous release-candidate results remain historical evidence. The official artifact checksum and deployment receipt belong to the corresponding [GitHub release](https://github.com/NPUcraft/BattleRoyale/releases); this document does not claim that rc.11 is deployed. Production-scale long-term use is still being evaluated.
 
 - No Party provider integration, season system or skill-based matchmaking yet.
 - OfflineBody is an attackable surrogate, not a real player-skin NPC.

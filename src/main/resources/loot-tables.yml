@@ -2,10 +2,10 @@ config-version: 2
 # Map-authored empty storage containers are considered once per match, inside the initial zone.
 auto-containers:
   enabled: true
-  loot-table: basic
-  chance: 0.4
+  loot-table: native-basic
+  chance: 0.15
   min-rolls: 1
-  max-rolls: 3
+  max-rolls: 2
   max-containers-per-tick: 16
 # One immutable 4x4 surface sample per loaded chunk/session; no neighbour chunk loads.
 # Regional entries preserve the caller's roll count and use only ordinary low-tier enchanting.
@@ -215,3 +215,25 @@ loot-tables:
       - { item: minecraft:skeleton_spawn_egg, weight: 1, min-amount: 1, max-amount: 1 }
       - { item: minecraft:spider_spawn_egg, weight: 1, min-amount: 1, max-amount: 1 }
       - { item: battleroyale:splash_harming_potion, weight: 1, min-amount: 1, max-amount: 1 }
+
+  # Sparse unenchanted survival supplies in map-native containers; region-quality never replaces this table.
+  native-basic:
+    min-rolls: 1
+    max-rolls: 2
+    entries:
+      - { item: minecraft:bread, weight: 8, min-amount: 1, max-amount: 3 }
+      - { item: minecraft:apple, weight: 5, min-amount: 1, max-amount: 3 }
+      - { item: minecraft:cooked_chicken, weight: 4, min-amount: 1, max-amount: 2 }
+      - { item: minecraft:stick, weight: 5, min-amount: 2, max-amount: 6 }
+      - { item: minecraft:oak_log, weight: 5, min-amount: 2, max-amount: 4 }
+      - { item: minecraft:cobblestone, weight: 5, min-amount: 4, max-amount: 8 }
+      - { item: minecraft:coal, weight: 4, min-amount: 1, max-amount: 3 }
+      - { item: minecraft:torch, weight: 3, min-amount: 2, max-amount: 6 }
+      - { item: minecraft:string, weight: 3, min-amount: 1, max-amount: 3 }
+      - { item: minecraft:flint, weight: 2, min-amount: 1, max-amount: 2 }
+      - { item: minecraft:arrow, weight: 2, min-amount: 2, max-amount: 4 }
+      - { item: minecraft:stone_sword, weight: 2, min-amount: 1, max-amount: 1 }
+      - { item: minecraft:stone_pickaxe, weight: 2, min-amount: 1, max-amount: 1 }
+      - { item: minecraft:stone_axe, weight: 2, min-amount: 1, max-amount: 1 }
+      - { item: minecraft:leather_helmet, weight: 1, min-amount: 1, max-amount: 1 }
+      - { item: minecraft:leather_boots, weight: 1, min-amount: 1, max-amount: 1 }

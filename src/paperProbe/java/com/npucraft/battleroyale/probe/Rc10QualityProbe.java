@@ -38,7 +38,7 @@ public final class Rc10QualityProbe {
                 if(failure!=null)report.set("failure",failure.toString());
                 var path=plugin.getDataFolder().toPath().resolve("rc10/quality-report.yml");AtomicFiles.write(path,report.saveToString().getBytes(StandardCharsets.UTF_8));
                 if(failure!=null)throw new CompletionException(failure);
-                sender.sendMessage("RC10 QUALITY SUCCESS sampled=bounded cached=stable containers=regional recovery=durable path="+path.toAbsolutePath());
+                sender.sendMessage("RC10 QUALITY SUCCESS sampled=bounded cached=stable containers=basic recovery=durable path="+path.toAbsolutePath());
             }catch(Throwable failed){sender.sendMessage("RC10 QUALITY FAILED "+failed);plugin.getLogger().log(Level.SEVERE,"RC10 QUALITY FAILED",failed);}finally{busy=false;}
         });
     }
@@ -76,9 +76,9 @@ public final class Rc10QualityProbe {
     private void checkContainers(){
         var built=Arrays.stream(chest(4).getBlockInventory().getContents()).filter(Objects::nonNull).toList();
         var natural=Arrays.stream(chest(5).getBlockInventory().getContents()).filter(Objects::nonNull).toList();
-        require(built.size()==1&&built.getFirst().getType()==Material.IRON_SWORD,"Built container uses built entries and retains one requested roll");
-        require(natural.size()==1&&natural.getFirst().getType()==Material.STONE_SWORD,"Wilderness still supplies combat gear without increasing rolls");
-        for(var item:List.of(built.getFirst(),natural.getFirst()))require(item.getEnchantments().size()<=1&&item.getEnchantments().values().stream().allMatch(level->level<=2),"Regional contents use ordinary low-tier enchanting");
+        require(built.size()==1&&built.getFirst().getType()==Material.BREAD,"Built map-native container retains its independent basic table");
+        require(natural.size()==1&&natural.getFirst().getType()==Material.BREAD,"Natural map-native container uses the same independent basic table");
+        for(var item:List.of(built.getFirst(),natural.getFirst()))require(item.getEnchantments().isEmpty(),"Map-native containers add no regional or random enchantments");
         report.set("containers.built",built.getFirst().getType().name());report.set("containers.natural",natural.getFirst().getType().name());report.set("containers.exactly-one-stack",true);
     }
     private CompletableFuture<Void> repeatContainerPass(){

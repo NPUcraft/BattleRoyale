@@ -15,15 +15,15 @@ profiles:
         half-size: 500
       - max-players: 32
         half-size: 750
-    # Optional map-specific opening centers; no entry means random across the playable area.
-    # Each point plus the full jitter radius and every reachable initial circle must fit its map.
-    # Later circles still move randomly; this setting never pins their centers.
+    # Named rectangles are possible opening-center locations (not the safe-square boundary).
+    # Players vote with /br vote before preparation. Most votes wins; ties/no votes are random.
+    # Each map has its own ballot. Full rectangle plus the largest initial half-size must fit its map.
+    # Later circles remain random. Do not mix regions with legacy points/jitter-radius.
     # initial-centers:
-    #   city:
-    #     jitter-radius: 150
-    #     points:
-    #       - {x: 0, z: 0}
-    #       - {x: 500, z: 500}
+    #   survival:
+    #     regions:
+    #       - {id: spawn, name: "Near spawn", min-x: 751, max-x: 1151, min-z: 662, max-z: 1062}
+    #       - {id: west, name: "West sector", min-x: -500, max-x: -100, min-z: 500, max-z: 900}
     # Four stages, 430 seconds total, independent of starting player count.
     stages:
       - wait-seconds: 90

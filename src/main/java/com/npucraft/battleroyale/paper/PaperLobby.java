@@ -29,6 +29,7 @@ public final class PaperLobby implements Listener, AutoCloseable {
     private PaperLobbyStructure structure;
     private PaperLobbyDataBoard dataBoard;
     private PaperLobbySidebar sidebar;
+    private final PaperRegionVoteMenu regionVoting;
     private com.npucraft.battleroyale.config.LobbySidebarSettings sidebarSettings=com.npucraft.battleroyale.config.LobbySidebarSettings.DEFAULT;
     private String sidebarWorld;
     private final long sidebarStarted=System.nanoTime();
@@ -66,7 +67,7 @@ public final class PaperLobby implements Listener, AutoCloseable {
         if(runtime.rooms().participant(id).isEmpty())try{restoreQueueExit(event.getPlayer());}catch(RuntimeException error){plugin.getLogger().warning("玩家退出时无法恢复按钮原物品，已保留现状："+id+" "+error.getMessage());}
     }
     @EventHandler(priority=EventPriority.MONITOR)public void changedWorld(PlayerChangedWorldEvent event){if(sidebar!=null)sidebar.hide(event.getPlayer());}
-    public PaperLobby(JavaPlugin plugin,PluginRuntime runtime){this.plugin=plugin;this.runtime=runtime;actionKey=new NamespacedKey(plugin,"lobby_action");queueExitKey=new NamespacedKey(plugin,"queue_exit_original");}
+    public PaperLobby(JavaPlugin plugin,PluginRuntime runtime){this.plugin=plugin;this.runtime=runtime;regionVoting=new PaperRegionVoteMenu(plugin,runtime);actionKey=new NamespacedKey(plugin,"lobby_action");queueExitKey=new NamespacedKey(plugin,"queue_exit_original");}
     private PaperProgression data(){return runtime.progression();}
     public boolean eligible(Player player) {
         UUID id=player.getUniqueId();if(runtime.editing(id))return false;if(!runtime.recoveryReady() || player.isDead() || runtime.pendingRestore(id) || runtime.matches().frozen(id) || runtime.spectators().registry().find(id).isPresent())return false;
@@ -75,6 +76,7 @@ public final class PaperLobby implements Listener, AutoCloseable {
     }
     public void tick() {
         lobby.removeIf(id->plugin.getServer().getPlayer(id)==null);
+        for(var player:plugin.getServer().getOnlinePlayers())regionVoting.tick(player);
         // Visibility cleanup always runs, including bootstrap, profile loading and lobby-build failure.
         sidebarTick();
         if(structure!=null)structure.viewers();
@@ -138,7 +140,24 @@ public final class PaperLobby implements Listener, AutoCloseable {
                 UUID id=player.getUniqueId();var session=runtime.rooms().participant(id).orElse(null);
                 boolean visible=LobbySidebarModel.visible(new LobbySidebarModel.Audience(!deferredJoins.contains(id),player.getWorld().getName().equals(sidebarWorld),
                         player.isDead(),runtime.pendingRestore(id),runtime.editing(id),runtime.matches().frozen(id),runtime.spectators().registry().find(id).isPresent(),session==null?null:session.state(),eligible(player)));
-                sidebar.update(player,visible,I18n.chinese(player)?chinese:english);
+                var page=I18n.chinese(player)?chinese:english;
+                if(visible&&session!=null&&session.joinable()){
+                    var options=runtime.rooms().regionOptions(id);
+                    if(!options.isEmpty()){
+                        var lines=new ArrayList<Component>();
+                        lines.add(UiText.heading(LobbyText.defaultLabel(player,session.room().displayName())));
+                        lines.add(UiText.text(I18n.text(player,"人数：%s/%s","Players: %s/%s",session.players().size(),session.room().maxPlayers())));
+                        int remaining=runtime.rooms().remaining(session);
+                        lines.add(UiText.value(remaining<0?I18n.text(player,"等待玩家","Waiting for players"):I18n.text(player,"%s 秒后开始","Starting in %s s",remaining)));
+                        var selected=options.stream().filter(com.npucraft.battleroyale.service.RoomRuntimeService.RegionOption::selected).toList();
+                        lines.add(UiText.text(I18n.text(player,"区域投票 · %s 票","Region vote · %s votes",options.stream().mapToInt(com.npucraft.battleroyale.service.RoomRuntimeService.RegionOption::votes).sum())));
+                        lines.add(selected.isEmpty()?UiText.muted(I18n.text(player,"你还未投票","You have not voted")):UiText.success(I18n.text(player,"已投：%s","Voted: %s",selected.size()==1?LobbyText.defaultLabel(player,selected.getFirst().region().name()):selected.size()+I18n.text(player," 张地图"," maps"))));
+                        lines.add(UiText.value(I18n.text(player,"指南针 · 投票 /br vote","Compass · Vote /br vote")));
+                        lines.add(UiText.muted(I18n.text(player,"床 · 退出房间","Bed · Leave room")));
+                        page=new LobbySidebarModel.Page(lines,1,1);
+                    }
+                }
+                sidebar.update(player,visible,page);
             }catch(RuntimeException error){sidebar.suspend(player);plugin.getLogger().log(java.util.logging.Level.WARNING,"玩家大厅计分板更新失败："+player.getUniqueId(),error);}
         }
     }
@@ -159,6 +178,9 @@ public final class PaperLobby implements Listener, AutoCloseable {
     public void command(Player player,String action,String argument) {
         if(!player.hasPermission("battleroyale.play"))throw new IllegalStateException(I18n.text(player,"你没有使用大厅菜单的权限。","You do not have permission to use lobby menus."));
         if(action.equals("leave")){leaveQueue(player);return;}
+        if(action.equals("vote") || action.equals("rooms")&&runtime.rooms().participant(player.getUniqueId()).map(s->s.joinable()).orElse(false)){
+            regionVoting.open(player);return;
+        }
         if(!ready())throw new IllegalStateException(I18n.text(player,"大厅正在准备或需要管理员修复，请稍后再试。","The lobby is preparing or needs administrator attention. Please try again later."));
         if(!eligible(player))throw new IllegalStateException(I18n.text(player,"请先离开房间或结束观战，再使用大厅菜单。","Leave your room or stop spectating before using lobby menus."));
         if(action.equals("lobby")){canonical(player);lobby.add(player.getUniqueId());return;}
@@ -232,6 +254,7 @@ public final class PaperLobby implements Listener, AutoCloseable {
         var originals=new LinkedHashMap<Player,ItemStack>();
         for(UUID id:players){var player=plugin.getServer().getPlayer(id);if(player!=null){var current=player.getInventory().getItem(8);if(exitControl(current))originals.put(player,originalQueueItem(current,id));}}
         originals.forEach((player,item)->player.getInventory().setItem(8,item));
+        for(UUID id:players){var player=plugin.getServer().getPlayer(id);if(player!=null)player.closeInventory();}
         if(sidebar!=null)for(UUID id:players){var player=plugin.getServer().getPlayer(id);if(player!=null)sidebar.hide(player);}
     }
     private ItemStack originalQueueItem(ItemStack bed,UUID owner){

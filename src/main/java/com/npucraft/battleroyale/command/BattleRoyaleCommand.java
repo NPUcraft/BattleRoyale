@@ -18,13 +18,13 @@ public final class BattleRoyaleCommand implements CommandExecutor, TabCompleter 
         if (!sender.hasPermission("battleroyale.command")) { messages.denied(sender); return true; }
         String action = args.length == 0 ? "help" : args[0].toLowerCase(Locale.ROOT);
         if (Set.of("reload", "debug").contains(action) && !sender.hasPermission("battleroyale.admin")
-                || Set.of("rooms", "join", "autojoin", "leave", "team", "spectate", "lobby", "profile", "leaderboard", "shop", "cosmetics").contains(action) && !sender.hasPermission("battleroyale.play")) {
+                || Set.of("rooms", "join", "autojoin", "leave", "team", "spectate", "lobby", "profile", "leaderboard", "shop", "cosmetics", "vote").contains(action) && !sender.hasPermission("battleroyale.play")) {
             messages.denied(sender); return true;
         }
         try {
             var rooms = runtime.rooms();
             switch (action) {
-                case "lobby", "profile", "leaderboard", "shop", "cosmetics" -> {
+                case "lobby", "profile", "leaderboard", "shop", "cosmetics", "vote" -> {
                     if(!(sender instanceof Player player))throw new IllegalArgumentException(I18n.text(sender, "此命令只能由游戏内玩家执行。", "Only in-game players can use this command."));
                     runtime.lobby().command(player,action,args.length>1?args[1]:null);
                 }
@@ -142,7 +142,7 @@ public final class BattleRoyaleCommand implements CommandExecutor, TabCompleter 
         List<String> choices = new ArrayList<>();
         if (args.length == 1) {
             choices.addAll(List.of("help", "version"));
-            if (sender.hasPermission("battleroyale.play")) choices.addAll(List.of("rooms", "join", "autojoin", "leave", "team", "spectate", "lobby", "profile", "leaderboard", "shop", "cosmetics"));
+            if (sender.hasPermission("battleroyale.play")) choices.addAll(List.of("rooms", "join", "autojoin", "leave", "team", "spectate", "lobby", "profile", "leaderboard", "shop", "cosmetics", "vote"));
             if (sender.hasPermission("battleroyale.admin")) choices.addAll(List.of("reload", "debug"));
             if(adminAccess(sender))choices.add("admin");
         } else if (args.length == 2 && args[0].equalsIgnoreCase("debug") && sender.hasPermission("battleroyale.admin"))

@@ -2,7 +2,7 @@ package com.npucraft.battleroyale.loot;
 
 /** Automatic storage-container generation; work and item rolls remain bounded. */
 public record AutoContainerLootSettings(boolean enabled,String table,double chance,int minRolls,int maxRolls,int maxContainersPerTick) {
-    public static final AutoContainerLootSettings DEFAULT=new AutoContainerLootSettings(true,"basic",.4,1,3,16);
+    public static final AutoContainerLootSettings DEFAULT=new AutoContainerLootSettings(true,"native-basic",.15,1,2,16);
     public AutoContainerLootSettings {
         if(table==null||!table.matches("[a-z0-9_.-]+"))throw new IllegalArgumentException("Invalid automatic container loot table");
         if(!Double.isFinite(chance)||chance<0||chance>1)throw new IllegalArgumentException("Automatic container chance must be in [0,1]");

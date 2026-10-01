@@ -34,10 +34,15 @@ public record ZoneProfile(String id, List<InitialSize> initialSizes, List<Stage>
     }
     /** Chooses only the initial square; later targets retain unrestricted contained random centers. */
     public Zone initialZone(MapTemplate map, int actualPlayers, RandomGenerator random) {
+        return initialZone(map, actualPlayers, random, null);
+    }
+    /** The optional region ID was selected once from the opening vote; it never constrains later circles. */
+    public Zone initialZone(MapTemplate map, int actualPlayers, RandomGenerator random, String regionId) {
         double half = initialHalfSize(actualPlayers);
         var centers = initialCenters.get(map.id());
+        if (centers == null && regionId != null) throw new IllegalArgumentException("Named initial region is not configured for map: " + map.id());
         return centers == null ? ZoneGeometry.initial(map.playableArea(), half, random)
-                : centers.choose(map.playableArea(), half, random);
+                : centers.choose(map.playableArea(), half, random, regionId);
     }
     /** Validate all initial buckets reachable by this room, including nonmonotonic custom buckets. */
     public void validateInitialCenters(MapTemplate map, int roomMaximum) {

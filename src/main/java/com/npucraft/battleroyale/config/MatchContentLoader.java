@@ -73,7 +73,7 @@ public final class MatchContentLoader {
             }catch(Exception e){if(!isolateMapErrors)throw new IllegalArgumentException("Map "+map.id()+": "+e.getMessage(),e);mapErrors.put(map.id(),e.getMessage());maps.put(map.id(),new MapLoot(List.of(),List.of()));}
         }
         String defaultTable=tables.containsKey("basic")?"basic":tables.keySet().stream().findFirst().orElse("basic");
-        var auto=new AutoContainerLootSettings(!tables.isEmpty(),defaultTable,.4,1,3,16);
+        var auto=new AutoContainerLootSettings(!tables.isEmpty(),tables.containsKey("native-basic")?"native-basic":defaultTable,.15,1,2,16);
         if(lootConfig.contains("auto-containers")){
             var n=section(lootConfig,"auto-containers");
             auto=new AutoContainerLootSettings(bool(n,"enabled"),text(n,"loot-table"),number(n,"chance"),integer(n,"min-rolls"),integer(n,"max-rolls"),integer(n,"max-containers-per-tick"));
@@ -103,7 +103,6 @@ public final class MatchContentLoader {
         }
         quality.validate(tables);
         if(quality.enabled()){
-            if(auto.enabled())for(var level:LootRegionQuality.values())quality.resolve(level,auto.resolvedTable(tables),tables);
             var regionalSources=new HashSet<String>();
             for(var metadata:maps.values()){
                 for(var point:metadata.containers())regionalSources.add(point.table());

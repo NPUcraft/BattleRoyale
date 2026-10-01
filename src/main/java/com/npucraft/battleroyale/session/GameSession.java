@@ -46,6 +46,13 @@ public final class GameSession {
         GamePlayer p=Objects.requireNonNull(players.get(id));
         players.put(id,new GamePlayer(id,p.state(),p.teamId(),p.kills()+(kill?1:0),p.assists()+(kill?0:1)));
     }
+    private String initialRegionId,initialRegionName;
+    public Optional<String> initialRegionId(){return Optional.ofNullable(initialRegionId);}
+    public Optional<String> initialRegionName(){return Optional.ofNullable(initialRegionName);}
+    public void initialRegion(String id,String name){
+        if(state!=GameState.PREPARING||initialRegionId!=null||initialZone!=null)throw new IllegalStateException("Initial region can only be frozen once before zone selection");
+        initialRegionId=Objects.requireNonNull(id);initialRegionName=Objects.requireNonNull(name);
+    }
     private MapTemplate selectedMap;
     private GameWorld gameWorld;
     private com.npucraft.battleroyale.zone.Zone initialZone;

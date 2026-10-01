@@ -10,7 +10,7 @@ public final class LobbyText {
     private static final Map<String,Label> DEFAULTS=new HashMap<>();
     static {
         label("单人竞技","Solo");label("双人组队","Duo");label("四人小队","Squad");
-        label("大逃杀","BattleRoyale");
+        label("大逃杀","BattleRoyale");label("出生点附近","Near spawn");
         for(var pair:List.of(new String[]{"选择房间","Select a room"},new String[]{"我的战绩","My stats"},new String[]{"排行榜","Leaderboards"},new String[]{"外观商店","Cosmetic shop"},new String[]{"我的外观","My cosmetics"})){
             label(pair[0],pair[1]);label("大逃杀 · "+pair[0],"BattleRoyale · "+pair[1]);
         }

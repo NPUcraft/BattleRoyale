@@ -107,20 +107,44 @@ public final class Rc9LootProbe {
         var table=new LootTable("basic",1,1,List.of(new LootTable.Entry("minecraft:bread",1,1,1)));
         var content=new MatchContent(Map.of(),Map.of("basic",table),Map.of("fixture",new MapLoot(List.of(),List.of(ground))),Map.of(),new AutoContainerLootSettings(false,"basic",.4,1,3,16),new AirdropSettings(false,"basic",2,2,8,24,120));
         loot=new PaperLootRuntime(plugin,session,sanitizer,content,new NativeLootItems(),new Random(9),new NamespacedKey(plugin,"ground_loot_session"),new PaperScheduler(plugin),io);
+        // Establish the exact loaded-chunk benchmark separately from terrain generation latency.
+        for(int x=0;x<=8;x++)for(int z=0;z<=8;z++)world.getChunkAt(x,z).addPluginChunkTicket(plugin);
         long started=System.nanoTime();var generated=loot.generate();
         return until(generated::isDone,1800,"Production ground runtime finishes within preparation budget").thenRun(()->{
-            generated.join();double elapsed=(System.nanoTime()-started)/1_000_000_000.0;require(elapsed<80,"Ground preparation stays bounded on actual local Paper");
+            generated.join();require(loot.progressCompleted()==400&&loot.progressTotal()==400,"Completed preparation reports all four hundred resolved candidate points");double elapsed=(System.nanoTime()-started)/1_000_000_000.0;require(elapsed<20,"Four hundred points on loaded native chunks prepare within twenty seconds");
             // Controlled sample chunks are reloaded before counting persistent item entities; production does not pin them.
             long drops=0;var positions=new HashSet<String>();for(int x=0;x<=8;x++)for(int z=0;z<=8;z++)for(var entity:world.getChunkAt(x,z).getEntities())if(entity instanceof Item item&&sessionId.toString().equals(item.getPersistentDataContainer().get(new NamespacedKey(plugin,"ground_loot_session"),org.bukkit.persistence.PersistentDataType.STRING))){drops++;positions.add(item.getLocation().getBlockX()+":"+item.getLocation().getBlockZ());}
             require(drops==0,"Unopened field supplies contain no item entities");
             try{var saved=new GroundSupplyLedger(world.getWorldPath(),sessionId,world.getUID()).read().orElseThrow();
                 for(var point:saved.points())positions.add(point.x()+":"+point.z());
-                require(!saved.points().isEmpty()&&saved.points().size()<=400,"Finite requested ground point count");
+                require(saved.points().size()==400,"All four hundred safe fixture points are durably sealed");
                 require(saved.points().size()==positions.size(),"Stratified points do not stack on the same column");
             }catch(java.io.IOException error){throw new CompletionException(error);}
             var restored=new PaperLootRuntime(plugin,session,sanitizer,content,new NativeLootItems(),new Random(9),new NamespacedKey(plugin,"ground_loot_session"),new PaperScheduler(plugin),io);restored.recoverAutomatic();require(restored.state()==PaperLootRuntime.State.COMPLETE,"Recovery skips static ground generation");restored.close();
-            report.set("ground.requested",400);report.set("ground.actual-item-entities",drops);report.set("ground.distinct-columns",positions.size());report.set("ground.real-elapsed-seconds",elapsed);report.set("ground.diagnostics",loot.diagnostics());
+            report.set("ground.requested",400);report.set("ground.actual-item-entities",drops);report.set("ground.distinct-columns",positions.size());report.set("ground.real-elapsed-seconds",elapsed);report.set("ground.benchmark","400 safe points on 81 explicitly loaded native chunks; under 20 seconds");report.set("ground.diagnostics",loot.diagnostics());
             report.set("container.defaults.chance",AutoContainerLootSettings.DEFAULT.chance());report.set("container.defaults.min-rolls",AutoContainerLootSettings.DEFAULT.minRolls());report.set("container.defaults.max-rolls",AutoContainerLootSettings.DEFAULT.maxRolls());
+        }).thenCompose(unused->stopDuringRequests(room));
+    }
+    private CompletableFuture<Void> stopDuringRequests(RoomDefinition room){
+        loot.close();byte[] original;
+        try{original=java.nio.file.Files.readAllBytes(world.getWorldPath().resolve(GroundSupplyLedger.FILE));}catch(java.io.IOException error){return CompletableFuture.failedFuture(error);}
+        var map=new MapTemplate("fixture","Local cancellation fixture",world.getWorldPath(),new PlayableArea(4000,4400,4000,4400));
+        UUID cancelId=UUID.randomUUID();var session=GameSession.waiting(cancelId,room,Instant.now());session.join(UUID.randomUUID());session.prepare(map,new Random(11));
+        session.initialZone(new Zone(4160,4160,64));session.starting(new GameWorld(cancelId,room.id(),world.getName(),world.getWorldPath(),map));
+        var area=new LootArea("cancel",4096,4223,-64,319,4096,4223,"basic",1,400,400,10);
+        var table=new LootTable("basic",1,1,List.of(new LootTable.Entry("minecraft:bread",1,1,1)));
+        var content=new MatchContent(Map.of(),Map.of("basic",table),Map.of("fixture",new MapLoot(List.of(),List.of(area))),Map.of(),new AutoContainerLootSettings(false,"basic",0,1,1,16),new AirdropSettings(false,"basic",1,1,8,24,120));
+        Runnable[] action=new Runnable[1];boolean[] scheduled={true};
+        com.npucraft.battleroyale.service.GameScheduler manual=(period,task)->{action[0]=task;return ()->scheduled[0]=false;};
+        loot=new PaperLootRuntime(plugin,session,sanitizer,content,new NativeLootItems(),new Random(11),new NamespacedKey(plugin,"ground_loot_session"),manual,io);
+        var generated=loot.generate();action[0].run();String before=loot.diagnostics();
+        require(before.matches(".*max-in-flight=[1-8] .*"),"Production runtime issued a bounded window of native asynchronous chunk requests");
+        var stopped=loot.stop();
+        return until(()->{if(scheduled[0])action[0].run();return stopped.isDone();},600,"Outstanding native chunk requests drain after stop").thenRun(()->{
+            stopped.join();require(generated.isCompletedExceptionally(),"Stopped preparation cannot complete successfully");
+            require(loot.diagnostics().contains("ground-points=0 "),"Stopped candidates never inspect or plan points");
+            try{require(Arrays.equals(original,java.nio.file.Files.readAllBytes(world.getWorldPath().resolve(GroundSupplyLedger.FILE))),"Stop does not reseal or overwrite the previously committed plan");}catch(java.io.IOException error){throw new CompletionException(error);}
+            report.set("ground.stop-native-requests",before);report.set("ground.stop-no-late-plan-or-reseal",true);
         });
     }
     private CompletableFuture<Void> until(BooleanSupplier condition,int maximum,String description){var future=new CompletableFuture<Void>();new BukkitRunnable(){int ticks;public void run(){try{if(condition.getAsBoolean()){cancel();future.complete(null);}else if(++ticks>=maximum)throw new IllegalStateException("Timed out: "+description);}catch(Throwable error){cancel();future.completeExceptionally(error);}}}.runTaskTimer(plugin,1,1);return future;}

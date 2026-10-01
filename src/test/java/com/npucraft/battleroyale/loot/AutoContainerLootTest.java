@@ -43,7 +43,7 @@ class AutoContainerLootTest {
         assertThrows(IllegalArgumentException.class,()->new AutoContainerLootSettings(true,"basic",.9,0,5,16));
         assertThrows(IllegalArgumentException.class,()->new AutoContainerLootSettings(true,"basic",.9,2,5,0));
         assertThrows(IllegalArgumentException.class,()->AutoContainerLootSettings.DEFAULT.resolvedTable(Map.of()));
-        var large=new LootTable("basic",1,1,List.of(new LootTable.Entry("minecraft:bread",1,4096,4096)));
-        assertThrows(IllegalArgumentException.class,()->AutoContainerLootSettings.DEFAULT.resolvedTable(Map.of("basic",large)));
+        var large=new LootTable("native-basic",1,1,List.of(new LootTable.Entry("minecraft:bread",1,4096,4096)));
+        assertThrows(IllegalArgumentException.class,()->AutoContainerLootSettings.DEFAULT.resolvedTable(Map.of("native-basic",large)));
     }
 }

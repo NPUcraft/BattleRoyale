@@ -33,6 +33,7 @@ public final class TestProbe extends JavaPlugin implements Listener {
     private final Rc8LobbyProbe rc8Lobby=new Rc8LobbyProbe(this);
     private final Rc10QualityProbe rc10Quality=new Rc10QualityProbe(this);
     private final Rc10GroundProbe rc10Ground=new Rc10GroundProbe(this);
+    private final Rc11VotingProbe rc11Voting=new Rc11VotingProbe(this);
     private final Rc9LootProbe rc9Loot=new Rc9LootProbe(this);
     private final FlightDeploymentProbe flight=new FlightDeploymentProbe(this);
     private final AirdropBuffProbe beaconBuff=new AirdropBuffProbe(this);
@@ -54,6 +55,7 @@ public final class TestProbe extends JavaPlugin implements Listener {
             try {
                 if(args.length > 0 && args[0].equals("p26rc10quality")) { rc10Quality.command(sender,args); return true; }
                 if(args.length > 0 && args[0].equals("p26rc10ground")) { rc10Ground.command(sender,args); return true; }
+                if(args.length > 0 && args[0].equals("p26rc11voting")) { rc11Voting.command(sender,args); return true; }
                 if(args.length > 0 && args[0].equals("p26rc9loot")) { rc9Loot.command(sender,args); return true; }
                 if(args.length > 0 && args[0].equals("p26flight")) { flight.command(sender,args); return true; }
                 if(args.length > 0 && args[0].equals("p26rc8locale")) { rc8Locale.command(sender,args); return true; }

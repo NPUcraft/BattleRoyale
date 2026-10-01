@@ -63,7 +63,7 @@ public final class PaperMatches implements MatchLifecycle {
         var profile=configuration.zoneProfiles().stream().filter(p->p.id().equals(session.room().zoneProfileId())).findFirst().orElseThrow();
         // Freeze the same random initial square before filesystem preparation, so a large template
         // can be copied by selected regions. All later shrinking and spawn planning use this square.
-        session.initialZone(profile.initialZone(session.selectedMap().orElseThrow(),session.players().size(),random));
+        session.initialZone(profile.initialZone(session.selectedMap().orElseThrow(),session.players().size(),random,session.initialRegionId().orElse(null)));
         Entry entry=new Entry(session,profile,new PaperZoneUi(plugin.getServer(),configuration.settings().zoneUi()));entries.put(session.sessionId(),entry);
         entry.preparationUi=new PaperPreparationUi(plugin.getServer(),scheduler,clock,session.players().keySet(),()->preparationStatus(entry));
         if(progression!=null)entry.progress=new com.npucraft.battleroyale.progression.SessionProgress(session.teams().keySet(),progression.freeze(session.players().keySet()));
@@ -97,7 +97,7 @@ public final class PaperMatches implements MatchLifecycle {
             return new PaperPreparationUi.Status(PaperPreparationUi.Phase.FLIGHT,flight.completed(),flight.total(),zh,en);
         }
         if(entry.preparation==null)return PaperPreparationUi.Status.phase(PaperPreparationUi.Phase.MAP);
-        if(entry.preparation.preparingLoot())return PaperPreparationUi.Status.phase(PaperPreparationUi.Phase.LOOT);
+        if(entry.preparation.preparingLoot())return new PaperPreparationUi.Status(PaperPreparationUi.Phase.LOOT,entry.loot.progressCompleted(),entry.loot.progressTotal());
         return new PaperPreparationUi.Status(PaperPreparationUi.Phase.SPAWNS,entry.preparation.preparedCount(),entry.preparation.starterCount());
     }
     @Override public void running(GameSession session,Consumer<Throwable> failed) {

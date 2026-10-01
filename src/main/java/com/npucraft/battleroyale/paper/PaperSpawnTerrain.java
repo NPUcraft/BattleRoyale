@@ -46,8 +46,9 @@ public final class PaperSpawnTerrain implements SpawnTerrain {
         sanitizer.ensure(world.getChunkAt(cx,cz));
         int y=world.getHighestBlockYAt(column.x(),column.z(),HeightMap.MOTION_BLOCKING_NO_LEAVES);
         if(y<world.getMinHeight() || y+2>=world.getMaxHeight()) return null;
-        return SafeSpawnPolicy.safe(cell(world.getBlockAt(column.x(),y,column.z())),
-                cell(world.getBlockAt(column.x(),y+1,column.z())),cell(world.getBlockAt(column.x(),y+2,column.z()))) ? (double)y+1 : null;
+        Block floor=world.getBlockAt(column.x(),y,column.z());
+        if(Tag.LEAVES.isTagged(floor.getType()))return null;
+        return PaperPlayerLanding.safeSurface(floor);
     }
     private static SafeSpawnPolicy.Cell cell(Block block) {
         Material type=block.getType();

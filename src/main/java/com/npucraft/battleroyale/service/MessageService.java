@@ -24,6 +24,7 @@ public final class MessageService {
         send(sender, "帮助：/br help　版本：/br version", "Help: /br help | Version: /br version");
         if(sender.hasPermission("battleroyale.play")) {
             send(sender,"大厅：/br lobby　个人档案：/br profile　排行榜：/br leaderboard [rating|kill_score|wins|kills|assists|damage]","Lobby: /br lobby | Profile: /br profile | Leaderboard: /br leaderboard [rating|kill_score|wins|kills|assists|damage]");
+            send(sender,"开局区域投票：/br vote（加入房间后）","Starting region vote: /br vote (after joining a room)");
             send(sender,"商店：/br shop　已拥有外观：/br cosmetics　房间列表：/br rooms","Shop: /br shop | Owned cosmetics: /br cosmetics | Rooms: /br rooms");
             send(sender,"加入：/br join <房间ID>　自动加入：/br autojoin　离开：/br leave　队伍：/br team　观战：/br spectate <房间ID>","Join: /br join <room-id> | Auto-join: /br autojoin | Leave: /br leave | Team: /br team | Spectate: /br spectate <room-id>");
         }
@@ -71,6 +72,9 @@ public final class MessageService {
             case "spectator-joined" -> "正在观战房间 %s，使用 /br leave 返回大厅。";
             case "spectator-left" -> "已退出观战，大厅状态已恢复。";
             case "joined" -> "已加入房间 %s。";
+            case "region-vote-open" -> "开局区域投票已开放：右键指南针或 /br vote。开始准备时截止。";
+            case "region-selected" -> "本局开局区域：%s（%s 票）。后续缩圈仍随机。";
+            case "region-random" -> "无人投票，随机选中开局区域：%s。后续缩圈仍随机。";
             case "left" -> "已离开房间 %s。";
             case "countdown-started" -> "比赛倒计时开始：%s 秒。";
             case "countdown-cancelled" -> "人数不足，倒计时已取消并重置。";
@@ -95,6 +99,9 @@ public final class MessageService {
             case "offline-timeout" -> "%s did not reconnect in time and was eliminated.";
             case "spectator-joined" -> "Spectating room %s. Use /br leave to return to the lobby.";
             case "spectator-left" -> "Stopped spectating. Your lobby state was restored.";
+            case "region-vote-open" -> "Starting region voting is open: right-click your compass or use /br vote. Closes at preparation.";
+            case "region-selected" -> "Starting region: %s (%s votes). Later zones remain random.";
+            case "region-random" -> "No votes. Random starting region: %s. Later zones remain random.";
             case "joined" -> "Joined room %s.";case "left" -> "Left room %s.";
             case "countdown-started" -> "Match countdown started: %s seconds.";
             case "countdown-cancelled" -> "Not enough players. The countdown was cancelled and reset.";
@@ -108,7 +115,10 @@ public final class MessageService {
             case "returned" -> "Returned to the lobby.";
             default -> throw new IllegalArgumentException("Unknown runtime message: "+event);
         };
-        send(sender,pattern,english,displayed);
+        if(event.equals("region-selected")||event.equals("region-random"))displayed[0]=com.npucraft.battleroyale.paper.LobbyText.defaultLabel(sender,String.valueOf(displayed[0]));
+        if(event.equals("region-vote-open")){
+            sender.sendMessage(UiText.message(sender,pattern,english,displayed).clickEvent(net.kyori.adventure.text.event.ClickEvent.runCommand("/br vote")));
+        }else send(sender,pattern,english,displayed);
     }
     public void runtimeRoom(CommandSender sender, com.npucraft.battleroyale.room.RoomDefinition room, com.npucraft.battleroyale.session.GameSession session) {
         send(sender,"%s（%s） 状态：%s　人数：%s/%s","%s (%s) Status: %s | Players: %s/%s",com.npucraft.battleroyale.paper.LobbyText.defaultLabel(sender,room.displayName()),room.id(),I18n.state(sender,session==null?"WAITING":session.state()),session==null?0:session.players().size(),room.maxPlayers());
@@ -119,6 +129,7 @@ public final class MessageService {
                 + " mapRevision="+session.selectedMap().map(MapTemplate::metadataRevision).orElse(0L)+ " map=" + session.selectedMap().map(MapTemplate::id).orElse("N/A")
                 + " world=" + session.gameWorld().map(com.npucraft.battleroyale.map.GameWorld::worldName).orElse("N/A")
                 + " path=" + session.gameWorld().map(world -> world.runtimePath().toString()).orElse("N/A")
+                + " initialRegion="+session.initialRegionName().orElse("N/A")
                 + " countdown=" + (remaining < 0 ? "N/A" : remaining)
                 + " stats=" + session.players().values() + " outcome=" + session.outcome().map(Object::toString).orElse("N/A"));
         zone(sender, session,now);

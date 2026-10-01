@@ -4,6 +4,7 @@ import com.npucraft.battleroyale.config.ConfigurationSnapshot;
 import com.npucraft.battleroyale.map.*;
 import com.npucraft.battleroyale.room.RoomDefinition;
 import com.npucraft.battleroyale.session.*;
+import com.npucraft.battleroyale.zone.*;
 import java.time.Clock;
 import java.util.*;
 import java.util.function.Supplier;
@@ -21,7 +22,58 @@ public final class RoomRuntimeService implements AutoCloseable {
     private final Map<UUID, UUID> memberships = new HashMap<>();
     private final Map<UUID, Countdown> countdowns = new HashMap<>();
     private final Map<UUID, UUID> operations = new HashMap<>();
+    private final Map<UUID, Map<String,InitialRegionVotes>> regionVotes=new HashMap<>();
+    private final java.util.random.RandomGenerator voteRandom=new Random();
     private volatile boolean closed;
+
+    public record RegionOption(String mapId,String mapName,InitialZoneCenters.Region region,int votes,boolean selected) {}
+    private ZoneProfile zoneProfile(GameSession session) {
+        return configuration.get().zoneProfiles().stream().filter(p->p.id().equals(session.room().zoneProfileId())).findFirst().orElse(null);
+    }
+    private Map<String,InitialRegionVotes> ballots(GameSession session) {
+        return regionVotes.computeIfAbsent(session.sessionId(),ignored->{
+            var result=new LinkedHashMap<String,InitialRegionVotes>();var profile=zoneProfile(session);
+            if(profile!=null)for(String map:session.room().mapPool()){
+                var centers=profile.initialCenters().get(map);
+                if(centers!=null&&!centers.regions().isEmpty())result.put(map,new InitialRegionVotes(centers));
+            }
+            return result;
+        });
+    }
+    /** Map selection remains independent. Each participant may vote once per candidate map. */
+    public List<RegionOption> regionOptions(UUID player) {
+        var session=membership(player);if(!session.joinable())return List.of();
+        var profile=zoneProfile(session);if(profile==null)return List.of();
+        var result=new ArrayList<RegionOption>();
+        for(var map:configuration.get().maps()){
+            var ballot=ballots(session).get(map.id());if(ballot==null)continue;
+            var counts=ballot.counts(session.players().keySet());
+            for(var region:profile.initialCenters().get(map.id()).regions())
+                result.add(new RegionOption(map.id(),map.displayName(),region,counts.getOrDefault(region.id(),0),ballot.choice(player).filter(region.id()::equals).isPresent()));
+        }
+        return List.copyOf(result);
+    }
+    public void voteRegion(UUID player,String map,String region) {
+        checkOpen();var session=membership(player);
+        if(!session.joinable())throw new IllegalStateException("Region voting has closed");
+        var ballot=ballots(session).get(map);
+        if(ballot==null)throw new IllegalArgumentException("This map has no voting regions");
+        ballot.vote(player,region);
+    }
+    public void clearRegionVotes(UUID player) {
+        checkOpen();var session=membership(player);
+        if(!session.joinable())throw new IllegalStateException("Region voting has closed");
+        ballots(session).values().forEach(ballot->ballot.remove(player));
+    }
+    private void freezeRegion(GameSession session) {
+        var ballot=ballots(session).get(session.selectedMap().orElseThrow().id());
+        if(ballot!=null){
+            var result=ballot.choose(session.players().keySet(),voteRandom);
+            session.initialRegion(result.region().id(),result.region().name());
+            players.notify(session.players().keySet(),result.totalVotes()==0?"region-random":"region-selected",result.region().name(),result.votes());
+        }
+        regionVotes.remove(session.sessionId());
+    }
 
     public RoomRuntimeService(Supplier<ConfigurationSnapshot> configuration, SessionManager sessions,
             GameScheduler scheduler, MapSelector selector, WorldProvider worlds, PlayerGateway players, Clock clock, MatchLifecycle matches) {
@@ -59,6 +111,7 @@ public final class RoomRuntimeService implements AutoCloseable {
         session.join(player);
         memberships.put(player, session.sessionId());
         players.notify(List.of(player), "joined", roomId);
+        if(!ballots(session).isEmpty())players.notify(List.of(player),"region-vote-open");
         considerCountdown(session);
     }
     /** Stable tie breaker is configuration order; equal counts never replace the earlier candidate. */
@@ -86,6 +139,7 @@ public final class RoomRuntimeService implements AutoCloseable {
         }
         if(!session.joinable())throw new IllegalStateException("比赛正在准备或进行中，不能提前退出；淘汰后可退出观战。");
         session.leave(player); memberships.remove(player);
+        ballots(session).values().forEach(ballot->ballot.remove(player));
         players.notify(List.of(player), "left", session.room().id());
         considerCountdown(session);
         if (session.players().isEmpty()) { session.transition(GameState.CLEANUP); retire(session); }
@@ -147,6 +201,7 @@ public final class RoomRuntimeService implements AutoCloseable {
         operations.put(session.sessionId(), token);
         try {
             session.prepare(selector.select(session.room(), configuration.get().maps()));
+            freezeRegion(session);
             matches.prepareDurably(session).whenComplete((barrier,barrierError)->{
             if(!current(session,token)){matches.restore(session);finish(session,null);return;}
             if(barrierError!=null){abort(session,barrierError);return;}
@@ -221,6 +276,7 @@ public final class RoomRuntimeService implements AutoCloseable {
     }
     private Throwable unwrap(Throwable error) { return error.getCause() == null ? error : error.getCause(); }
     private void retire(GameSession session) {
+        regionVotes.remove(session.sessionId());
         operations.remove(session.sessionId());
         session.players().keySet().forEach(id -> memberships.remove(id, session.sessionId()));
         sessions.retire(session);
@@ -228,6 +284,7 @@ public final class RoomRuntimeService implements AutoCloseable {
     private void checkOpen() { if (closed) throw new IllegalStateException("BattleRoyale is stopping"); }
     @Override public void close() {
         closed = true;
+        regionVotes.clear();
         matches.close();
         countdowns.values().forEach(timer -> timer.task.cancel()); countdowns.clear(); operations.clear();
         for (GameSession session : sessions.all()) {

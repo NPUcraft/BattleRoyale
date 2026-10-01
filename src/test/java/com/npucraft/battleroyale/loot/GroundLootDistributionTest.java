@@ -27,7 +27,7 @@ class GroundLootDistributionTest {
         var attempts=new GroundLootBudget();for(int i=0;i<800;i++)assertTrue(attempts.request(i));assertFalse(attempts.request(801));assertEquals(800,attempts.attempts());
         var elapsed=new GroundLootBudget();assertTrue(elapsed.request(100));assertFalse(elapsed.request(100+GroundLootBudget.MAX_NANOS));assertEquals(1,elapsed.attempts());
     }
-    @Test void containerDefaultsAreFortyPercentWithOneToThreeRolls(){
-        var settings=AutoContainerLootSettings.DEFAULT;assertEquals(.4,settings.chance());assertEquals(1,settings.minRolls());assertEquals(3,settings.maxRolls());assertEquals(16,settings.maxContainersPerTick());
+    @Test void nativeContainerDefaultsAreFifteenPercentWithOneToTwoRolls(){
+        var settings=AutoContainerLootSettings.DEFAULT;assertEquals(.15,settings.chance());assertEquals(1,settings.minRolls());assertEquals(2,settings.maxRolls());assertEquals(16,settings.maxContainersPerTick());
     }
 }
