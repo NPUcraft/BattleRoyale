@@ -87,7 +87,7 @@ await persist();console.log('Isolated rc11 fixture: '+root);
 function cleanLog(text){
  return text.split(/(?=^\[\d{2}:\d{2}:\d{2}\])/m).filter(block=>{
   const header=block.split(/\r?\n/,1)[0];
-  if(/^\[\d{2}:\d{2}:\d{2}\] \[Paper Async Task Handler Thread - \d+\/ERROR\]: \[PaperVersionFetcher\] Error while parsing (?:latest build|version)\s*$/.test(header)
+  if(/^\[\d{2}:\d{2}:\d{2}\] \[Paper Async Task Handler Thread - \d+\/ERROR\]: \[PaperVersionFetcher\] Error while parsing (?:latest build|version(?: list)?)\s*$/.test(header)
     &&block.includes('java.net.SocketTimeoutException: Read timed out')&&block.includes('com.destroystokyo.paper.PaperVersionFetcher.')&&!block.includes('battleroyale'))return false;
   if(/^\[\d{2}:\d{2}:\d{2}\] \[Paper Async Task Handler Thread - \d+\/ERROR\]: \*\*\* Error obtaining version information! Cannot fetch version info \*\*\*\s*$/.test(header)
     &&block.trim()===header.trim())return false;
