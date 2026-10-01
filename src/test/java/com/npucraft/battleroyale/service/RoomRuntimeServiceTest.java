@@ -158,6 +158,20 @@ class RoomRuntimeServiceTest {
         assertTrue(isolated.spectatable("c").isEmpty());
         assertTrue(isolated.spectatorMatch().isEmpty());
     }
+    @Test void autojoinPrefersAJoinableRoomOverASpectatorMatch() {
+        runtime.join(alice, "a"); runtime.debugStart("a"); worlds.succeed(session("a").sessionId());
+        assertEquals("b", runtime.autojoin(bob));
+        assertTrue(session("b").players().containsKey(bob));
+        assertTrue(runtime.spectatable("a").isPresent());
+    }
+    @Test void joinableRoomIsEmptyOnlyWhenEveryRoomIsRunning() {
+        runtime.join(alice, "a"); runtime.debugStart("a"); worlds.succeed(session("a").sessionId());
+        assertEquals("b", runtime.joinableRoom().orElseThrow().id());
+        assertTrue(runtime.spectatorMatch().isPresent());
+        runtime.join(bob, "b"); runtime.debugStart("b"); worlds.succeed(session("b").sessionId());
+        assertTrue(runtime.joinableRoom().isEmpty());
+        assertEquals("a", runtime.spectatorMatch().orElseThrow().room().id());
+    }
     @Test void waitingDisconnectLeavesButActiveDisconnectRetainsUuid() {
         runtime.join(alice, "a"); runtime.join(bob, "a"); runtime.disconnected(bob);
         assertEquals(GameState.WAITING, session("a").state());

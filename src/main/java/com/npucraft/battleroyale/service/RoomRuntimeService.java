@@ -124,10 +124,9 @@ public final class RoomRuntimeService implements AutoCloseable {
         if(!ballots(session).isEmpty())players.notify(List.of(player),"region-vote-open");
         considerCountdown(session);
     }
-    /** Stable tie breaker is configuration order; equal counts never replace the earlier candidate. */
-    public String autojoin(UUID player) {
-        checkOpen();
-        if (memberships.containsKey(player)) throw new IllegalStateException("Already in room");
+    /** Fullest room still accepting players; configuration order breaks ties. Empty when none is queuable.
+     *  A running spectator match is deliberately not a candidate here: queuing must always win. */
+    public Optional<RoomDefinition> joinableRoom() {
         RoomDefinition best = null; int bestCount = -1;
         for (RoomDefinition room : rooms()) {
             GameSession session = session(room.id()).orElse(null);
@@ -136,7 +135,13 @@ public final class RoomRuntimeService implements AutoCloseable {
                 best = room; bestCount = count;
             }
         }
-        if (best == null) throw new IllegalStateException("No room available");
+        return Optional.ofNullable(best);
+    }
+    /** Stable tie breaker is configuration order; equal counts never replace the earlier candidate. */
+    public String autojoin(UUID player) {
+        checkOpen();
+        if (memberships.containsKey(player)) throw new IllegalStateException("Already in room");
+        RoomDefinition best = joinableRoom().orElseThrow(() -> new IllegalStateException("No room available"));
         join(player, best.id()); return best.id();
     }
     public void leave(UUID player) {

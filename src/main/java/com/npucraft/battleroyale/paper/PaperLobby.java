@@ -66,13 +66,11 @@ public final class PaperLobby implements Listener, AutoCloseable {
         if(match.isPresent()){runtime.spectators().external(player,match.get());return;}
         runtime.rooms().join(player.getUniqueId(),room);showQueueExit(player);player.closeInventory();
     }
+    /** Quick join means "find me a match to play": a queuable room always wins and spectating is only the last resort. */
     private void autojoinOrSpectate(Player player){
-        try{runtime.rooms().autojoin(player.getUniqueId());}
-        catch(IllegalStateException noJoinable){
-            if(runtime.rooms().participant(player.getUniqueId()).isPresent())throw noJoinable;
-            runtime.spectators().external(player,runtime.rooms().spectatorMatch().orElseThrow(()->noJoinable));return;
-        }
-        showQueueExit(player);
+        var rooms=runtime.rooms();
+        if(rooms.participant(player.getUniqueId()).isPresent()||rooms.joinableRoom().isPresent()){rooms.autojoin(player.getUniqueId());showQueueExit(player);return;}
+        runtime.spectators().external(player,rooms.spectatorMatch().orElseThrow(()->new IllegalStateException("No room available")));
     }
     @EventHandler(priority=EventPriority.MONITOR)public void joined(PlayerJoinEvent event){
         lobby.remove(event.getPlayer().getUniqueId());

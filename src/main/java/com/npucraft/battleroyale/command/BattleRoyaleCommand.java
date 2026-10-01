@@ -139,12 +139,10 @@ public final class BattleRoyaleCommand implements CommandExecutor, TabCompleter 
         } catch (IllegalArgumentException | IllegalStateException error) { messages.send(sender, error.getMessage()); }
         return true;
     }
+    /** Quick join prioritises a queuable room; spectating a running match is only the fallback. */
     private void autojoinOrSpectate(Player player, RoomRuntimeService rooms){
-        try { rooms.autojoin(player.getUniqueId()); }
-        catch(IllegalStateException noJoinable){
-            if(rooms.participant(player.getUniqueId()).isPresent())throw noJoinable;
-            runtime.spectators().external(player,rooms.spectatorMatch().orElseThrow(()->noJoinable));
-        }
+        if(rooms.participant(player.getUniqueId()).isPresent()||rooms.joinableRoom().isPresent()){rooms.autojoin(player.getUniqueId());return;}
+        runtime.spectators().external(player,rooms.spectatorMatch().orElseThrow(()->new IllegalStateException("No room available")));
     }
     private boolean adminAccess(CommandSender sender){return java.util.stream.Stream.of("battleroyale.admin","battleroyale.admin.map","battleroyale.admin.config","battleroyale.admin.cosmetic","battleroyale.admin.diagnostics").anyMatch(sender::hasPermission);}
     @Override public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
