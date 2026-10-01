@@ -1,7 +1,7 @@
 import java.security.MessageDigest
 plugins { java }
 group = "com.npucraft.battleroyale"
-version = "1.0.0-rc.11"
+version = "1.0.0-rc.12"
 repositories {
     mavenCentral()
     maven("https://repo.nightexpressdev.com/releases")
@@ -29,6 +29,16 @@ tasks.test {
     val mysqlPort = providers.environmentVariable("BATTLEROYALE_MYSQL_TEST_PORT")
     inputs.property("mysqlTestPort", mysqlPort.orElse("disabled"))
     useJUnitPlatform { if (!mysqlPort.isPresent) excludeTags("mysql") }
+    // Opt-in deployment gate: -Dbr.live.config=<plugin data directory> validates a real config set.
+    // Forwarded explicitly because the Gradle daemon does not pass -D through to the test JVM.
+    val liveConfig = providers.systemProperty("br.live.config").orElse("")
+    inputs.property("br.live.config", liveConfig)
+    systemProperty("br.live.config", liveConfig.get())
+    if (liveConfig.get().isNotBlank()) {
+        inputs.dir(liveConfig.get())
+        // Only a deployment gate needs the loader's summary on stdout; a plain test run stays quiet.
+        testLogging { showStandardStreams = true }
+    }
 }
 tasks.processResources {
     val pluginVersion = project.version.toString()
