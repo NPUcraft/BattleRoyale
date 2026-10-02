@@ -197,14 +197,20 @@ public final class PaperGroundSupplies {
     }
     private void signal(Player player,GroundSupplyLedger.Point point){
         var center=at(point);
-        // Rarity colour when the table has an authored tier; without one, the legacy region hues keep working.
+        // Rarity is read by ring count first (1/2/3), colour is only the secondary cue:
+        // tables without an authored tier fall back to the legacy region hues.
         var tier=content.groundLoot().tierOf(point.table());
-        var rgb=switch(tier==null?"":tier){case "low"->TIER_LOW;case "mid"->TIER_MID;case "high"->TIER_HIGH;
-            default->point.table().equals(content.regionQuality().builtTable())?TIER_MID:TIER_LOW;};
+        if(tier==null)tier=point.table().equals(content.regionQuality().builtTable())?"mid":"low";
+        var rgb=switch(tier){case "mid"->TIER_MID;case "high"->TIER_HIGH;default->TIER_LOW;};
+        int rings=switch(tier){case "mid"->2;case "high"->3;default->1;};
         var dust=new Particle.DustOptions(rgb,1.6f);
-        // A bright ring around the existing surface block and a short vertical sparkle column.
-        // Per viewer: at most 3 points * 24 particles, every half second; no networked display entities.
-        for(int i=0;i<20;i++){double angle=i*Math.PI/10;player.spawnParticle(Particle.DUST,center.getX()+Math.cos(angle)*.85,center.getY()+.15,center.getZ()+Math.sin(angle)*.85,1,0,0,0,0,dust,true);}
+        // Concentric rings around the surface block plus a short vertical sparkle column.
+        // Per viewer: at most 3 points * (3 rings * 20 dust + 4 end rods) = 204 particles, every half second.
+        for(int ring=0;ring<rings;ring++){
+            double radius=.85+ring*.5,height=center.getY()+.15+ring*.12;
+            for(int i=0;i<20;i++){double angle=i*Math.PI/10;
+                player.spawnParticle(Particle.DUST,center.getX()+Math.cos(angle)*radius,height,center.getZ()+Math.sin(angle)*radius,1,0,0,0,0,dust,true);}
+        }
         for(int i=0;i<4;i++)player.spawnParticle(Particle.END_ROD,center.getX(),center.getY()+.4+i*.65,center.getZ(),1,.02,.02,.02,0,null,true);
     }
     private Location at(GroundSupplyLedger.Point point){return new Location(Objects.requireNonNull(plugin.getServer().getWorld(worldId)),point.x()+.5,point.y(),point.z()+.5);}
