@@ -173,7 +173,9 @@ public final class PaperFunItems implements Listener {
         int buffTicks=finalStage?15*20:60*20;
         for(var type:new PotionEffectType[]{PotionEffectType.JUMP_BOOST,PotionEffectType.SPEED,PotionEffectType.STRENGTH,
                 PotionEffectType.FIRE_RESISTANCE,PotionEffectType.RESISTANCE,PotionEffectType.HASTE,
-                PotionEffectType.NIGHT_VISION,PotionEffectType.GLOWING,PotionEffectType.ABSORPTION}){
+                PotionEffectType.NIGHT_VISION,PotionEffectType.GLOWING,PotionEffectType.ABSORPTION,
+                PotionEffectType.SATURATION,PotionEffectType.WATER_BREATHING,PotionEffectType.LUCK,
+                PotionEffectType.CONDUIT_POWER,PotionEffectType.DOLPHINS_GRACE,PotionEffectType.HERO_OF_THE_VILLAGE}){
             player.addPotionEffect(new PotionEffect(type,buffTicks,0,false,true,true));
         }
         var loc=player.getLocation();
