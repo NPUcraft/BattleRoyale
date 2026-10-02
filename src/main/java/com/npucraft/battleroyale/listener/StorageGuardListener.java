@@ -14,6 +14,7 @@ import org.bukkit.event.entity.*;
 import org.bukkit.event.hanging.*;
 import org.bukkit.event.inventory.InventoryOpenEvent;
 import org.bukkit.event.player.*;
+import org.bukkit.inventory.BlockInventoryHolder;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -31,21 +32,35 @@ public final class StorageGuardListener implements Listener {
     }
     private static boolean bypass(Player player){return player.getGameMode()==GameMode.CREATIVE||player.hasPermission("battleroyale.admin");}
     private static void deny(Player player){player.sendActionBar(UiText.warning(player,"该容器或装备在比赛中无法使用。","This container or gear is unavailable during a match."));}
-    private static Block block(Inventory inventory){
-        var holder=inventory.getHolder();
-        if(holder instanceof BlockState state)return state.getBlock();
-        if(holder instanceof DoubleChest chest&&chest.getLeftSide() instanceof BlockState state)return state.getBlock();
-        return null;
-    }
     @EventHandler(priority=EventPriority.LOWEST,ignoreCancelled=true) public void opened(InventoryOpenEvent event){
         if(!(event.getPlayer() instanceof Player player)||bypass(player)||!running(player.getWorld()))return;
         // The shared death-box inventory is a plugin-held view, never a world container.
         if(event.getInventory().getHolder() instanceof PaperDeathBoxes.View)return;
-        Block block=block(event.getInventory());
-        if(block==null||!StorageGuardPolicy.blockedContainer(block.getType().name()))return;
-        // A landed supply drop is the only barrel players are meant to open.
-        if(block.getType()==Material.BARREL&&block.getState() instanceof Container container&&container.getPersistentDataContainer().has(airdrop,PersistentDataType.STRING))return;
-        event.setCancelled(true);deny(player);
+        // Deny by default: only loot-bearing storage opens during a match. Block containers stay
+        // limited to the loot chests and the landed airdrop barrel; entity holders (horses, donkeys,
+        // the player-held ender chest view) and unknown containers all fail closed. Custom plugin
+        // holders are neither, so in-match plugin UIs keep working.
+        var holder=event.getInventory().getHolder();
+        if(holder instanceof Entity){deny(event);return;}
+        if(holder instanceof BlockState state){
+            var type=state.getType();
+            if(type==Material.CHEST||type==Material.TRAPPED_CHEST||type==Material.COPPER_CHEST)return;
+            if(type==Material.BARREL&&state instanceof Container container&&container.getPersistentDataContainer().has(airdrop,PersistentDataType.STRING))return;
+        } else if(!(holder instanceof BlockInventoryHolder)) {
+            return;
+        }
+        deny(event);
+    }
+    /** Jukeboxes and beacons hold items without firing an open event; the ender chest is denied for symmetry. */
+    @EventHandler(priority=EventPriority.LOWEST,ignoreCancelled=true) public void interactBlock(PlayerInteractEvent event){
+        if(event.getAction()!=Action.RIGHT_CLICK_BLOCK||event.getClickedBlock()==null)return;
+        if(bypass(event.getPlayer())||!running(event.getClickedBlock().getWorld()))return;
+        var type=event.getClickedBlock().getType();
+        if(type==Material.JUKEBOX||type==Material.BEACON||type==Material.ENDER_CHEST){event.setCancelled(true);deny(event.getPlayer());}
+    }
+    private static void deny(InventoryOpenEvent event){
+        if(event.getPlayer() instanceof Player player)deny(player);
+        event.setCancelled(true);
     }
     @EventHandler(priority=EventPriority.LOWEST,ignoreCancelled=true) public void armorStand(PlayerArmorStandManipulateEvent event){
         if(bypass(event.getPlayer())||!running(event.getRightClicked().getWorld()))return;

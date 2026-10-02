@@ -14,12 +14,14 @@ class StorageGuardPolicyTest {
         "SHULKER_BOX","WHITE_SHULKER_BOX","ORANGE_SHULKER_BOX","MAGENTA_SHULKER_BOX","LIGHT_BLUE_SHULKER_BOX",
         "YELLOW_SHULKER_BOX","LIME_SHULKER_BOX","PINK_SHULKER_BOX","GRAY_SHULKER_BOX","LIGHT_GRAY_SHULKER_BOX",
         "CYAN_SHULKER_BOX","PURPLE_SHULKER_BOX","BLUE_SHULKER_BOX","BROWN_SHULKER_BOX","GREEN_SHULKER_BOX",
-        "RED_SHULKER_BOX","BLACK_SHULKER_BOX","BARREL","CRAFTER","DISPENSER","DROPPER","ENDER_CHEST"})
+        "RED_SHULKER_BOX","BLACK_SHULKER_BOX","BARREL","CRAFTER","DISPENSER","DROPPER","ENDER_CHEST",
+        "HOPPER","FURNACE","BLAST_FURNACE","SMOKER","BREWING_STAND","LECTERN","DECORATED_POT",
+        "CHISELED_BOOKSHELF","BEACON","JUKEBOX"})
     void everyGuardedContainerIsBlockedForOpenAndPlacement(String material){
         assertTrue(StorageGuardPolicy.blockedContainer(material),material);
         assertTrue(StorageGuardPolicy.blockedPlacement(material),material);
     }
-    @ParameterizedTest @ValueSource(strings={"CHEST","TRAPPED_CHEST","COPPER_CHEST","HOPPER","FURNACE","STONE","AIR","DIAMOND_BLOCK"})
+    @ParameterizedTest @ValueSource(strings={"CHEST","TRAPPED_CHEST","COPPER_CHEST","STONE","AIR","DIAMOND_BLOCK"})
     void automaticContainerTargetsAndPlainBlocksStayAllowed(String material){
         assertFalse(StorageGuardPolicy.blockedContainer(material),material);
         assertFalse(StorageGuardPolicy.blockedPlacement(material),material);

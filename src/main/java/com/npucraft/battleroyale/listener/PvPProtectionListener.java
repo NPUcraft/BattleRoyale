@@ -10,6 +10,7 @@ import org.bukkit.event.block.*;
 import org.bukkit.event.entity.*;
 import org.bukkit.event.player.*;
 import org.bukkit.potion.PotionEffect;
+import org.bukkit.inventory.EquipmentSlot;
 import java.util.*;
 /** Cancels only attributable player-vs-player harm within one protected running session. */
 public final class PvPProtectionListener implements Listener {
@@ -80,6 +81,39 @@ public final class PvPProtectionListener implements Listener {
     }
     /** TNT detonates the instant it is lit instead of running the vanilla four-second fuse. */
     static boolean ignition(Material type) { return type==Material.FLINT_AND_STEEL||type==Material.FIRE_CHARGE; }
+    /** Placed TNT is a thrown charge: it primes the moment it lands, no flint needed. */
+    @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)
+    public void autoIgniteTnt(BlockPlaceEvent event) {
+        if(event.getBlockPlaced().getType()!=Material.TNT) return;
+        matches().activePlayer(event.getPlayer().getUniqueId()).filter(e -> inWorld(e,event.getBlockPlaced().getWorld())).ifPresent(entry -> {
+            event.setCancelled(true);
+            var location=event.getBlockPlaced().getLocation().add(.5,0,.5);
+            event.getBlockPlaced().getWorld().spawn(location,TNTPrimed.class,tnt -> tnt.setSource(event.getPlayer())).setFuseTicks(0);
+            var equipment=event.getPlayer().getEquipment();
+            if(equipment!=null) {
+                var item=event.getHand()==EquipmentSlot.OFF_HAND?equipment.getItemInOffHand():equipment.getItemInMainHand();
+                if(item.getType()==Material.TNT) item.setAmount(item.getAmount()-1);
+            }
+        });
+    }
+    /** A fire charge is dispenser-grade ordnance: right-click launches a small fireball, one charge per shot. */
+    @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)
+    public void launchFireCharge(PlayerInteractEvent event) {
+        if(event.getItem()==null || event.getItem().getType()!=Material.FIRE_CHARGE) return;
+        if(event.getAction()!=Action.RIGHT_CLICK_AIR && event.getAction()!=Action.RIGHT_CLICK_BLOCK) return;
+        // Right-clicking placed TNT still detonates it instead of launching.
+        if(event.getAction()==Action.RIGHT_CLICK_BLOCK && event.getClickedBlock()!=null && event.getClickedBlock().getType()==Material.TNT) return;
+        matches().activePlayer(event.getPlayer().getUniqueId()).filter(e -> inWorld(e,event.getPlayer().getWorld())).ifPresent(entry -> {
+            event.setCancelled(true);
+            var player=event.getPlayer();
+            player.launchProjectile(SmallFireball.class,player.getEyeLocation().getDirection().normalize().multiply(2.0));
+            var equipment=player.getEquipment();
+            if(equipment!=null) {
+                var item=event.getHand()==EquipmentSlot.OFF_HAND?equipment.getItemInOffHand():equipment.getItemInMainHand();
+                if(item.getType()==Material.FIRE_CHARGE) item.setAmount(item.getAmount()-1);
+            }
+        });
+    }
     @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)
     public void detonateTnt(PlayerInteractEvent event) {
         Block block=event.getClickedBlock();
