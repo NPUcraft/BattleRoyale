@@ -81,12 +81,22 @@ public final class MatchContentLoader {
         var airdrops=new AirdropSettings(!tables.isEmpty(),defaultTable,8,12,8,24,120);
         if(lootConfig.contains("airdrops")){
             var n=section(lootConfig,"airdrops");
+            List<String> roundTables=List.of();
+            if(n.contains("round-tables")){
+                roundTables=n.getStringList("round-tables");
+                if(roundTables.isEmpty())throw new IllegalArgumentException("airdrops round-tables must be a nonempty string list");
+                for(String round:roundTables)if(round==null||round.isBlank())throw new IllegalArgumentException("airdrops round-tables contains a blank entry");
+            }
             airdrops=new AirdropSettings(bool(n,"enabled"),text(n,"loot-table"),integer(n,"min-rolls"),integer(n,"max-rolls"),integer(n,"fall-seconds"),integer(n,"max-attempts"),integer(n,"marker-seconds"),
                     n.contains("announcement-seconds")?integer(n,"announcement-seconds"):AirdropSettings.ANNOUNCEMENT_SECONDS,
-                    n.contains("min-distance")?integer(n,"min-distance"):0);
+                    n.contains("min-distance")?integer(n,"min-distance"):0,
+                    roundTables);
         }
         if(auto.enabled()){require(tables,auto.table(),"auto-containers");new LootTable("auto",auto.minRolls(),auto.maxRolls(),tables.get(auto.table()).entries());}
-        if(airdrops.enabled()){require(tables,airdrops.table(),"airdrops");new LootTable("airdrop",airdrops.minRolls(),airdrops.maxRolls(),tables.get(airdrops.table()).entries());}
+        if(airdrops.enabled()){
+            require(tables,airdrops.table(),"airdrops");new LootTable("airdrop",airdrops.minRolls(),airdrops.maxRolls(),tables.get(airdrops.table()).entries());
+            for(String round:airdrops.roundTables())require(tables,round,"airdrops round-tables");
+        }
         var mobs=new MobLootSettings(!tables.isEmpty(),defaultTable,.35,1,1,64,10);
         if(lootConfig.contains("mob-loot")){
             var n=section(lootConfig,"mob-loot");
@@ -117,8 +127,12 @@ public final class MatchContentLoader {
             var n=section(lootConfig,"ground-loot");
             List<GroundLootSettings.Refill> refills=new ArrayList<>();
             if(n.contains("refills"))for(ConfigurationSection entry:list(n,"refills"))
-                refills.add(new GroundLootSettings.Refill(integer(entry,"after-stage"),text(entry,"table"),integer(entry,"points")));
-            groundLoot=new GroundLootSettings(bool(n,"enabled"),n.contains("initial-table")?text(n,"initial-table"):"",refills);
+                refills.add(new GroundLootSettings.Refill(integer(entry,"after-stage"),text(entry,"table"),integer(entry,"points"),
+                        entry.contains("built-table")?text(entry,"built-table"):null));
+            Map<String,String> signalTiers=new LinkedHashMap<>();
+            if(n.contains("signal-tiers"))for(ConfigurationSection entry:list(n,"signal-tiers"))signalTiers.put(text(entry,"table"),text(entry,"tier"));
+            groundLoot=new GroundLootSettings(bool(n,"enabled"),n.contains("initial-table")?text(n,"initial-table"):"",
+                    n.contains("built-initial-table")?text(n,"built-initial-table"):null,refills,signalTiers);
         }
         groundLoot.validate(tables);
         return new MatchContent(loadouts,tables,maps,mapErrors,auto,airdrops,mobs,horses,quality,groundLoot);

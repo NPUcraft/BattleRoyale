@@ -38,6 +38,7 @@ public final class PaperAirdrops implements AutoCloseable {
     private final List<Beacon> beacons=new ArrayList<>();
     private final List<AirdropPlacement.Point> usedSites=new ArrayList<>();
     private final PaperAirdropBeacons signals;
+    private final List<LootTable> roundTables;
     private CompletableFuture<com.npucraft.battleroyale.loot.AirdropBeaconLedger.Plan> pendingSignal;
     private CompletableFuture<Boolean> claim;
     private CompletableFuture<Chunk> pending;
@@ -58,6 +59,13 @@ public final class PaperAirdrops implements AutoCloseable {
         this.plugin=plugin;this.session=session;this.sanitizer=sanitizer;this.io=io;settings=content.airdrops();
         var source=content.tables().get(settings.table());
         table=!settings.enabled()||source==null?null:new LootTable("airdrop",settings.minRolls(),settings.maxRolls(),source.entries());
+        var roundTables=new ArrayList<LootTable>();
+        if(table!=null)for(String id:settings.roundTables()){
+            var roundSource=content.tables().get(id);
+            if(roundSource==null)throw new IllegalArgumentException("Unknown airdrop round loot table: "+id);
+            roundTables.add(new LootTable(id,settings.minRolls(),settings.maxRolls(),roundSource.entries()));
+        }
+        this.roundTables=List.copyOf(roundTables);
         var world=Objects.requireNonNull(plugin.getServer().getWorld(session.gameWorld().orElseThrow().worldName()));worldId=world.getUID();worldPath=world.getWorldPath();
         signals=new PaperAirdropBeacons(plugin,world,session.sessionId(),io,player->session.state()==GameState.RUNNING&&Optional.ofNullable(session.players().get(player.getUniqueId())).map(value->value.state()==com.npucraft.battleroyale.player.PlayerState.ALIVE).orElse(false));
         marker=new NamespacedKey(plugin,"airdrop");var zone=session.zone().orElseThrow();
@@ -160,10 +168,15 @@ public final class PaperAirdrops implements AutoCloseable {
                 &&world.getBlockAt(x,y,z).getType().isAir()&&world.getBlockAt(x,y+1,z).getType().isAir()
                 &&PaperSpawnTerrain.safeItemGround(world.getBlockAt(x,y-1,z),world.getBlockAt(x,y,z));
     }
+    /** Rounds beyond the per-round ladder fall back to the shared table. */
+    private LootTable tableFor(int round){return round>=0&&round<roundTables.size()?roundTables.get(round):table;}
+    /** Round 1 keeps pace with mid-tier ground, round 2 stretches above it, later rounds own the diamond pool. */
+    private static int guaranteeTier(int round){return round<=0?0:round==1?1:2;}
     /** Guarantees occupy slots first; random overflow cannot evict them. */
-    public static List<ItemStack> contents(LootTable table,RandomGenerator random){
+    public static List<ItemStack> contents(LootTable table,RandomGenerator random){return contents(table,2,random);}
+    public static List<ItemStack> contents(LootTable table,int guaranteeTier,RandomGenerator random){
         var items=new NativeLootItems();List<ItemStack> result=new ArrayList<>(27);
-        var guaranteed=items.airdropGuarantees(random);
+        var guaranteed=items.airdropGuarantees(random,guaranteeTier);
         if(guaranteed.isEmpty()||guaranteed.size()>27)throw new IllegalStateException("Invalid airdrop guarantee batch");
         for(var item:guaranteed)result.add(item.clone());
         for(var roll:table.roll(random)){
@@ -177,7 +190,7 @@ public final class PaperAirdrops implements AutoCloseable {
     }
     private void land(ZoneRuntime zone,long now){
         if(!valid(zone)){cancelRound("预告落点已被占用、变得不安全或离开安全区");return;}
-        List<ItemStack> contents=contents(table,random);
+        List<ItemStack> contents=contents(tableFor(stage),guaranteeTier(stage),random);
         var block=world().getBlockAt(x,y,z);block.setType(Material.BARREL,false);
         var barrel=(Barrel)block.getState();barrel.customName(I18n.shared("airdrop.container","第 {0} 轮补给空投","Supply drop {0}",UiText.value(Integer.toString(stage+1))).color(UiText.BRAND));
         barrel.getPersistentDataContainer().set(marker,PersistentDataType.STRING,identity());barrel.update(true,false);

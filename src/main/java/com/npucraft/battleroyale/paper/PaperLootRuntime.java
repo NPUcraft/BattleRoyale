@@ -51,8 +51,8 @@ public final class PaperLootRuntime {
     private final GroundLootStages groundStages;
     private final Queue<RefillRequest> refillQueue=new ArrayDeque<>();
     private final List<RefillCandidate> refillCandidates=new ArrayList<>();
-    private Zone refillZone;private LootTable refillTable;private int refillNeeded,refillResolved;
-    private record RefillRequest(LootTable table,int points) {}
+    private Zone refillZone;private LootTable refillNatural,refillBuilt;private int refillNeeded,refillResolved;
+    private record RefillRequest(LootTable natural,LootTable built,int points) {}
     private static final class RefillCandidate {
         final int x,z;int attempts;CompletableFuture<Chunk> chunk;
         RefillCandidate(int x,int z){this.x=x;this.z=z;}
@@ -193,10 +193,16 @@ public final class PaperLootRuntime {
         boolean safe=y>=request.area.minY() && y<=request.area.maxY() && y>world.getMinHeight() && y<world.getMaxHeight()
                 && safeGround(world.getBlockAt(x,y-1,z),world.getBlockAt(x,y,z));
         if(safe) {
-            // Staged ground loot ignores the region sample: the opening tier is fixed and refilled later on stage changes.
-            var table=content.groundLoot().enabled()?Objects.requireNonNull(content.tables().get(content.groundLoot().initialTable()))
-                    :quality.resolve(world.getChunkAt(x>>4,z>>4),content.tables().get(request.area.table()),content.tables());
-            supplies.plan(x,y,z,table,random.nextLong());groundPoints++;
+            // Opening tier follows the terrain: natural ground keeps the low table, built ground earns the mid table.
+            if(content.groundLoot().enabled()){
+                var staged=content.groundLoot();
+                LootTable table=content.tables().get(staged.initialTable());
+                if(staged.builtInitialTable()!=null&&quality!=null&&quality.quality(world.getChunkAt(x>>4,z>>4))==LootRegionQuality.BUILT)
+                    table=content.tables().get(staged.builtInitialTable());
+                supplies.plan(x,y,z,Objects.requireNonNull(table,"Missing staged ground table"),random.nextLong());
+            }
+            else supplies.plan(x,y,z,quality.resolve(world.getChunkAt(x>>4,z>>4),content.tables().get(request.area.table()),content.tables()),random.nextLong());
+            groundPoints++;
         } else if(++request.attempts>=request.area.maxAttempts()||groundBudgetExhausted) { missedSpawns++; }
         else ground.add(request);
     }
@@ -215,7 +221,7 @@ public final class PaperLootRuntime {
     }
     private void beginDrain(Throwable error){
         cancelled=true;if(terminalFailure==null)terminalFailure=error;ground.clear();points.clear();
-        refillQueue.clear();refillCandidates.clear();refillTable=null;
+        refillQueue.clear();refillCandidates.clear();refillNatural=null;refillBuilt=null;
         if(draining==null)draining=CompletableFuture.allOf(pipeline.stop(),pending==null?CompletableFuture.completedFuture(null):pending.handle((unused,failure)->null));
     }
     private void finish(Throwable error) {
@@ -245,16 +251,18 @@ public final class PaperLootRuntime {
     public void tickZone(ZoneRuntime zone){
         if(state!=State.COMPLETE||!content.groundLoot().enabled()||cancelled)return;
         for(var refill:groundStages.onStage(zone.stageNumber())){
-            var table=content.tables().get(refill.table());
-            if(table==null){plugin.getLogger().warning("Ground loot refill table missing: "+refill.table());continue;}
-            refillQueue.add(new RefillRequest(table,refill.points()));
+            var natural=content.tables().get(refill.table());
+            if(natural==null){plugin.getLogger().warning("Ground loot refill table missing: "+refill.table());continue;}
+            var built=refill.builtTable()==null?null:content.tables().get(refill.builtTable());
+            if(refill.builtTable()!=null&&built==null){plugin.getLogger().warning("Ground loot refill built table missing: "+refill.builtTable());continue;}
+            refillQueue.add(new RefillRequest(natural,built,refill.points()));
         }
-        if(refillTable==null&&!refillQueue.isEmpty())startRefill(zone);
-        if(refillTable!=null)advanceRefill();
+        if(refillNatural==null&&refillBuilt==null&&!refillQueue.isEmpty())startRefill(zone);
+        if(refillNatural!=null||refillBuilt!=null)advanceRefill();
     }
     private void startRefill(ZoneRuntime zone){
         var request=refillQueue.poll();if(request==null)return;
-        refillTable=request.table();refillNeeded=request.points();refillResolved=0;refillCandidates.clear();
+        refillNatural=request.natural();refillBuilt=request.built();refillNeeded=request.points();refillResolved=0;refillCandidates.clear();
         // Future safe zone when it still has area (the final continuation shrinks to zero), otherwise the current one.
         var next=zone.next();refillZone=next!=null&&next.halfSize()>0?next:zone.current();
         fillRefillWindow();
@@ -286,7 +294,7 @@ public final class PaperLootRuntime {
                 Chunk chunk=candidate.chunk.join();
                 if(tickets.add(chunk.getChunkKey()))PaperChunkTickets.acquire(plugin,chunk.getWorld(),chunk.getX(),chunk.getZ());
                 sanitizer.ensure(chunk);
-                if(!cancelled&&placeRefill(candidate.x,candidate.z)){placed=true;refillResolved++;}
+                if(!cancelled&&placeRefill(chunk,candidate.x,candidate.z)){placed=true;refillResolved++;}
             }catch(RuntimeException error){
                 plugin.getLogger().warning("Ground refill chunk failed at "+candidate.x+","+candidate.z+": "+error.getMessage());
             }finally{releaseTickets();}
@@ -296,14 +304,16 @@ public final class PaperLootRuntime {
                 if(retry!=null){retry.attempts=candidate.attempts+1;refillCandidates.add(retry);}else refillResolved++;
             }
         }
-        if(refillResolved>=refillNeeded){refillTable=null;refillCandidates.clear();}
+        if(refillResolved>=refillNeeded){refillNatural=null;refillBuilt=null;refillCandidates.clear();}
         else fillRefillWindow();
     }
-    private boolean placeRefill(int x,int z){
+    private boolean placeRefill(Chunk chunk,int x,int z){
         World world=world();int y=world.getHighestBlockYAt(x,z,HeightMap.MOTION_BLOCKING_NO_LEAVES)+1;
         if(y<=world.getMinHeight()||y>=world.getMaxHeight())return false;
         if(!safeGround(world.getBlockAt(x,y-1,z),world.getBlockAt(x,y,z)))return false;
-        supplies.append(x,y,z,refillTable,random.nextLong());return true;
+        // Built terrain earns the refill's better table; unknown samples deliberately stay natural.
+        LootTable table=refillBuilt!=null&&quality!=null&&quality.quality(chunk)==LootRegionQuality.BUILT?refillBuilt:refillNatural;
+        supplies.append(x,y,z,table,random.nextLong());return true;
     }
     public int progressCompleted(){return Math.min(totalProgress,explicitCompleted+groundPoints+missedSpawns);}
     public int progressTotal(){return totalProgress;}

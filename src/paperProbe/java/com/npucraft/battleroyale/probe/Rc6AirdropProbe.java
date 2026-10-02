@@ -102,7 +102,7 @@ public final class Rc6AirdropProbe {
             tick(68_000_000_000L);var crates=crates();require(crates.size()==1,"Exactly one landed supply crate");var crate=crates.getFirst();
             require(crate.getX()==at.x()&&crate.getY()==at.y()&&crate.getZ()==at.z(),"Actual barrel uses the exact announced XYZ");
             require(amount(crate.getInventory(),Material.TOTEM_OF_UNDYING)==0&&amount(crate.getInventory(),Material.BREAD)==6,"Totems are no longer guaranteed; random supplies still land");
-            require(Arrays.stream(crate.getInventory().getContents()).filter(Objects::nonNull).anyMatch(Rc6AirdropProbe::guaranteedEquipment),"Landed crate contains enchanted diamond equipment or enchanted bow");
+            require(Arrays.stream(crate.getInventory().getContents()).filter(Objects::nonNull).anyMatch(Rc6AirdropProbe::guaranteedEquipment),"Round-one crate contains enchanted iron equipment or an enchanted bow");
             require(tickets()==1&&visuals()==0&&drops.announcement().isEmpty(),"Landing retains only the native beacon ticket while supplies remain");
             report.set("warning.seconds",60);report.set("warning.location",List.of(at.x(),at.y(),at.z()));report.set("warning.same-xyz-on-landing",true);report.set("guarantees.landed-totem",0);report.set("guarantees.landed-equipment",true);
             return drops.stop();
@@ -159,13 +159,16 @@ public final class Rc6AirdropProbe {
         var crowded=new LootTable("crowded",27,27,List.of(new LootTable.Entry("minecraft:stone_sword",1,1,1)));
         for(int seed=0;seed<20;seed++){
             var items=PaperAirdrops.contents(crowded,new Random(seed));require(items.size()==27,"Container cap remains 27 stacks");
-            require(guaranteedEquipment(items.getFirst())&&items.getFirst().getAmount()==1,"Guaranteed enchanted equipment takes capacity before random rolls");
+            require(diamondGuaranteedEquipment(items.getFirst())&&items.getFirst().getAmount()==1,"Guaranteed enchanted equipment takes capacity before random rolls");
             require(items.stream().noneMatch(item->item.getType()==Material.TOTEM_OF_UNDYING),"Totems are ordinary table rolls, not a guaranteed slot");
             require(items.stream().noneMatch(item->item.getType()==Material.ELYTRA),"No elytra in supply crate");
         }
         report.set("guarantees.overflow-protected",true);report.set("guarantees.capacity",27);
     }
-    private static boolean guaranteedEquipment(ItemStack item){return (item.getType().name().startsWith("DIAMOND_")||item.getType()==Material.BOW)&&!item.getEnchantments().isEmpty();}
+    /** Round 0 guarantees an enchanted iron piece or bow; the diamond pool only arrives in later rounds. */
+    private static boolean guaranteedEquipment(ItemStack item){return (item.getType().name().startsWith("IRON_")||item.getType()==Material.BOW)&&!item.getEnchantments().isEmpty();}
+    /** The final-round pool keeps the historical diamond guarantee (capacity probe seeds use tier 2). */
+    private static boolean diamondGuaranteedEquipment(ItemStack item){return (item.getType().name().startsWith("DIAMOND_")||item.getType()==Material.BOW)&&!item.getEnchantments().isEmpty();}
     private CompletableFuture<Void> warning(long now){return until(()->{tick(now);return drops.announcement().isPresent();},240,"A fixed safe announcement location");}
     private void tick(long now){zone.update(now);drops.tick(zone,now);require(!drops.diagnostics().contains("FAILED"),"Airdrop controller healthy");}
     private List<Barrel> crates(){

@@ -3,12 +3,14 @@ package com.npucraft.battleroyale.paper;
 import com.npucraft.battleroyale.config.MatchContent;
 import com.npucraft.battleroyale.loot.*;
 import com.npucraft.battleroyale.player.PlayerState;
+import com.npucraft.battleroyale.service.I18n;
 import com.npucraft.battleroyale.service.UiText;
 import com.npucraft.battleroyale.session.*;
 import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.*;
 import org.bukkit.*;
+import org.bukkit.block.Chest;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
@@ -16,8 +18,9 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 /** Visible, proximity-opened supplies. No item/display entity exists before a durable claim. */
 public final class PaperGroundSupplies {
-    public static final int VISIBLE_RADIUS=48, SOUND_RADIUS=24, OPEN_RADIUS=4, MAX_STACKS_PER_POINT=8;
+    public static final int VISIBLE_RADIUS=48, SOUND_RADIUS=24, OPEN_RADIUS=3, MAX_STACKS_PER_POINT=8;
     private static final int MAX_PENDING=4, MAX_ITEMS=10_000;
+    private static final Color TIER_LOW=Color.fromRGB(85,230,190),TIER_MID=Color.fromRGB(255,195,70),TIER_HIGH=Color.fromRGB(255,84,112);
     private final JavaPlugin plugin;
     private final GameSession session;
     private final UUID worldId;
@@ -34,6 +37,7 @@ public final class PaperGroundSupplies {
     private CompletableFuture<Optional<GroundSupplyLedger.Snapshot>> recovery;
     private boolean sealed,closed;
     private int ticks,spawned,itemBudget;
+    private final List<GroundSupplyLedger.Point> placed=new ArrayList<>();
     private record Opening(GroundSupplyLedger.Point point,UUID player,CompletableFuture<Boolean> durable){}
 
     public PaperGroundSupplies(JavaPlugin plugin,GameSession session,MatchContent content,NativeLootItems items,NamespacedKey marker,Executor io){
@@ -153,27 +157,50 @@ public final class PaperGroundSupplies {
         var durable=writes.thenApplyAsync(unused->{try{return ledger.claim(point.id());}catch(IOException error){throw new CompletionException(error);}},io);
         writes=durable.thenAccept(unused->{});opening.put(point.id(),new Opening(point,player.getUniqueId(),durable));
     }
+    /** Looted chests vanish once emptied; foreign or vanished blocks simply drop off the tracking list. */
+    private void sweepPlaced(){
+        var world=plugin.getServer().getWorld(worldId);if(world==null)return;
+        for(var iterator=placed.iterator();iterator.hasNext();){
+            var point=iterator.next();
+            if(!world.isChunkLoaded(point.x()>>4,point.z()>>4))continue;
+            var block=world.getBlockAt(point.x(),point.y(),point.z());
+            if(!(block.getState() instanceof Chest chest)||!session.sessionId().toString().equals(chest.getPersistentDataContainer().get(marker,PersistentDataType.STRING))){iterator.remove();continue;}
+            if(chest.getInventory().isEmpty()){block.setType(Material.AIR,false);iterator.remove();}
+        }
+    }
     private void materialize(Player player,GroundSupplyLedger.Point point){
+        var world=Objects.requireNonNull(plugin.getServer().getWorld(worldId));
         var source=Objects.requireNonNull(content.tables().get(point.table()));
-        var table=new LootTable(source.id(),point.minRolls(),point.maxRolls(),source.entries());var random=new Random(point.seed());int count=0;
+        var table=new LootTable(source.id(),point.minRolls(),point.maxRolls(),source.entries());var random=new Random(point.seed());
+        var stacks=new ArrayList<ItemStack>();int count=0;
         outer:for(var roll:table.roll(random)){
             ItemStack prototype=items.roll(roll.item(),random);
             for(int amount:LootTable.split(roll.amount(),prototype.getMaxStackSize())){
                 if(count>=MAX_STACKS_PER_POINT)break outer;
-                var stack=prototype.clone();stack.setAmount(amount);
-                Objects.requireNonNull(plugin.getServer().getWorld(worldId)).dropItem(at(point).add(0,.12,0),stack,item->{
-                    item.getPersistentDataContainer().set(marker,PersistentDataType.STRING,session.sessionId().toString());
-                    item.getPersistentDataContainer().set(pointMarker,PersistentDataType.INTEGER,point.id());
-                    item.setUnlimitedLifetime(true);item.setVelocity(new org.bukkit.util.Vector());
-                });count++;spawned++;
+                var stack=prototype.clone();stack.setAmount(amount);stacks.add(stack);count++;
             }
         }
+        // A chest, not dropped items: the loot waits for the finder instead of scattering on the ground.
+        var block=world.getBlockAt(point.x(),point.y(),point.z());block.setType(Material.CHEST,false);
+        var chest=(Chest)block.getState();
+        chest.customName(I18n.shared("ground.supply","野外补给","Field supply"));
+        chest.getPersistentDataContainer().set(marker,PersistentDataType.STRING,session.sessionId().toString());
+        chest.getPersistentDataContainer().set(pointMarker,PersistentDataType.INTEGER,point.id());
+        chest.update(true,false);
+        var inventory=((Chest)world.getBlockAt(point.x(),point.y(),point.z()).getState()).getInventory();
+        List<Integer> slots=new ArrayList<>();for(int i=0;i<inventory.getSize();i++)slots.add(i);Collections.shuffle(slots,random);
+        for(int i=0;i<stacks.size()&&i<slots.size();i++)inventory.setItem(slots.get(i),stacks.get(i));
+        placed.add(point);spawned+=stacks.size();
         if(player!=null){player.playSound(at(point),Sound.BLOCK_AMETHYST_BLOCK_BREAK,SoundCategory.BLOCKS,.7f,1.15f);
-        player.sendMessage(UiText.message(player,"已发现野外补给，物资已出现！","Field supplies discovered! Collect the items nearby."));}
+        player.sendMessage(UiText.message(player,"已发现野外补给，附近出现了补给箱！","Field supplies discovered! A supply chest appeared nearby."));}
     }
     private void signal(Player player,GroundSupplyLedger.Point point){
-        var center=at(point);boolean built=point.table().equals(content.regionQuality().builtTable());
-        var dust=new Particle.DustOptions(built?Color.fromRGB(255,195,70):Color.fromRGB(85,230,190),1.6f);
+        var center=at(point);
+        // Rarity colour when the table has an authored tier; without one, the legacy region hues keep working.
+        var tier=content.groundLoot().tierOf(point.table());
+        var rgb=switch(tier==null?"":tier){case "low"->TIER_LOW;case "mid"->TIER_MID;case "high"->TIER_HIGH;
+            default->point.table().equals(content.regionQuality().builtTable())?TIER_MID:TIER_LOW;};
+        var dust=new Particle.DustOptions(rgb,1.6f);
         // A bright ring around the existing surface block and a short vertical sparkle column.
         // Per viewer: at most 3 points * 24 particles, every half second; no networked display entities.
         for(int i=0;i<20;i++){double angle=i*Math.PI/10;player.spawnParticle(Particle.DUST,center.getX()+Math.cos(angle)*.85,center.getY()+.15,center.getZ()+Math.sin(angle)*.85,1,0,0,0,0,dust,true);}
@@ -182,7 +209,18 @@ public final class PaperGroundSupplies {
     private Location at(GroundSupplyLedger.Point point){return new Location(Objects.requireNonNull(plugin.getServer().getWorld(worldId)),point.x()+.5,point.y(),point.z()+.5);}
     private static double distance(Location location,GroundSupplyLedger.Point point){double x=location.getX()-point.x()-.5,y=location.getY()-point.y(),z=location.getZ()-point.z()-.5;return x*x+y*y+z*z;}
     private static long key(int x,int z){return ((long)z<<32)|(x&0xffffffffL);}
-    public CompletableFuture<Void> stop(){closed=true;opening.clear();return writes;}
+    public CompletableFuture<Void> stop(){closed=true;opening.clear();removePlacedChests();return writes;}
+    /** The runtime owns every chest it placed; stopping removes them all so the world carries no loot litter. */
+    private void removePlacedChests(){
+        var world=plugin.getServer().getWorld(worldId);
+        if(world!=null)for(var point:placed){
+            if(!world.isChunkLoaded(point.x()>>4,point.z()>>4))continue;
+            var block=world.getBlockAt(point.x(),point.y(),point.z());
+            if(block.getState() instanceof Chest chest&&session.sessionId().toString().equals(chest.getPersistentDataContainer().get(marker,PersistentDataType.STRING)))
+                block.setType(Material.AIR,false);
+        }
+        placed.clear();
+    }
     public void close(){stop();}
     public int planned(){return points.size();}
     public String diagnostics(){return "ground-supplies="+points.size()+" claimed="+claimed.size()+" pending="+opening.size()+" spawned="+spawned;}

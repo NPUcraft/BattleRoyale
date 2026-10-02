@@ -18,6 +18,7 @@ import java.util.logging.Level;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.*;
+import org.bukkit.block.Chest;
 import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.*;
@@ -127,21 +128,24 @@ public final class Rc10GroundProbe {
     private CompletableFuture<Void> claimWhileWalkingAway(){
         first.at(0,2.5);second.at(0,3.5);first.reset();second.reset();io.pause();
         drive(List.of(first.player,second.player),10);
-        require(io.pending()==1&&nativeItems().isEmpty(),"Two contenders queue one durable claim, with no item before IO");
+        require(io.pending()==1&&nativeItems().isEmpty(),"Two contenders queue one durable claim, with no loot before IO");
         first.at(0,25.5);second.at(0,26.5);io.resume();
         return mainFuture(io.barrier()).thenCompose(unused->await(()->{
-            supplies.tick(List.of(first.player,second.player));return itemsFor(0).size()==1;
-        },100,"Claimed point materializes after contenders walk away")).thenRun(()->{
-            var item=itemsFor(0).getFirst();require(item.getItemStack().getType()==Material.DIAMOND&&item.getItemStack().getAmount()==1,"One deterministic native stack");
-            require(item.isUnlimitedLifetime(),"Generated item has the production persistence setting");
-            require(session.sessionId().toString().equals(item.getPersistentDataContainer().get(marker,PersistentDataType.STRING)),"Session marker installed before item spawn");
+            supplies.tick(List.of(first.player,second.player));return lootAt(0);
+        },100,"Claimed point materializes a chest after contenders walk away")).thenRun(()->{
+            var chest=chestFor(0);var stacks=Arrays.stream(chest.getInventory().getContents()).filter(Objects::nonNull).toList();
+            require(stacks.size()==1&&stacks.getFirst().getType()==Material.DIAMOND&&stacks.getFirst().getAmount()==1,"One deterministic native stack inside the chest");
+            require(chest.getInventory().getHolder() instanceof org.bukkit.block.Chest,"Materialized block is an openable chest");
+            require(chest.customName()!=null,"Chest carries a display name");
             int announcements=first.messages.size()+second.messages.size();require(announcements==1,"Only one contender receives an opening message");
             var message=first.messages.isEmpty()?second.messages.getFirst():first.messages.getFirst();
             require(message.contains("Field supplies discovered")||message.contains("已发现野外补给"),"Opening message follows the chosen contender's locale");
             first.at(0,.5);second.at(0,.5);drive(List.of(first.player,second.player),160);
-            require(itemsFor(0).size()==1&&first.messages.size()+second.messages.size()==1,"Repeated and competing ticks never duplicate items or messages");
-            item.remove();report.set("claim.competing-players-single-batch",true);report.set("claim.walking-away-still-materializes",true);
-        }).thenCompose(unused->snapshot()).thenAccept(saved->require(saved.claimed().equals(Set.of(0)),"First claim persisted before native drop"));
+            require(lootAt(0)&&first.messages.size()+second.messages.size()==1,"Repeated and competing ticks never duplicate chests or messages");
+            chest.getInventory().clear();drive(List.of(first.player,second.player),20);
+            require(chestFor(0)==null&&world.getBlockAt(POINT_X[0],81,0).getType().isAir(),"Emptied supply chest is removed by the runtime");
+            report.set("claim.competing-players-single-chest",true);report.set("claim.walking-away-still-materializes",true);report.set("claim.emptied-chest-removed",true);
+        }).thenCompose(unused->snapshot()).thenAccept(saved->require(saved.claimed().equals(Set.of(0)),"First claim persisted before native chest spawn"));
     }
     private CompletableFuture<Void> blockedAfterClaim(){
         second.at(1,2.5);second.reset();io.pause();drive(List.of(second.player),10);
@@ -150,9 +154,10 @@ public final class Rc10GroundProbe {
         return mainFuture(io.barrier()).thenRun(()->{
             drive(List.of(second.player),20);require(nativeItems().isEmpty()&&supplies.diagnostics().contains("pending=1"),"Occupied claimed point is deferred without losing it");
             world.getBlockAt(POINT_X[1],81,0).setType(Material.AIR,false);supplies.tick(List.of(second.player));
-            require(itemsFor(1).size()==1,"Claim appears at the original point when the space becomes safe");
+            require(lootAt(1),"Chest appears at the original point when the space becomes safe");
             require(second.messages.size()==1&&second.messages.getFirst().contains("已发现野外补给"),"Chinese opening message is rendered per viewer");
-            itemsFor(1).forEach(Entity::remove);report.set("claim.temporary-obstruction-defers-without-reclaim",true);
+            chestFor(1).getInventory().clear();drive(List.of(second.player),20);
+            require(chestFor(1)==null,"Emptied second chest is swept");report.set("claim.temporary-obstruction-defers-without-reclaim",true);
         }).thenCompose(unused->snapshot()).thenAccept(saved->require(saved.claimed().equals(Set.of(0,1)),"Both independent claims are durable"));
     }
     private CompletableFuture<Void> restart(){
@@ -168,6 +173,7 @@ public final class Rc10GroundProbe {
         },200,"Recovery reads all committed points")).thenRun(()->{
             first.at(0,.5);second.at(1,.5);drive(List.of(first.player,second.player),160);
             require(nativeItems().isEmpty(),"Picked-up claims do not respawn after actual world save/unload/reload");
+            require(chestFor(0)==null&&chestFor(1)==null,"Claimed points stay chest-free after recovery");
             report.set("recovery.native-world-save-reload",true);report.set("recovery.picked-up-items-not-recreated",true);
         });
     }
@@ -194,12 +200,13 @@ public final class Rc10GroundProbe {
         return await(()->{supplies.tick(List.of());return supplies.planned()==POINT_X.length;},100,"Stopped runtime can be recovered from its plan").thenRun(()->{
             first.at(2,.5);drive(List.of(first.player),40);require(nativeItems().isEmpty(),"Committed cancelled claim cannot resurrect");
             first.at(3,.5);
-        }).thenCompose(unused->await(()->{supplies.tick(List.of(first.player));return itemsFor(3).size()==1;},100,"Previously unloaded unclaimed negative-coordinate point can still open"))
+        }).thenCompose(unused->await(()->{supplies.tick(List.of(first.player));return lootAt(3);},100,"Previously unloaded unclaimed negative-coordinate point can still open"))
                 .thenCompose(unused->snapshot()).thenAccept(saved->{
                     require(saved.claimed().equals(Set.of(0,1,2,3)),"Claims remain independent across all lifecycle changes");
-                    require(itemsFor(3).size()==1,"Final unclaimed point produces exactly one batch");
+                    require(lootAt(3),"Final unclaimed point produces exactly one chest");
+                    require(Arrays.stream(chestFor(3).getInventory().getContents()).filter(Objects::nonNull).count()==1,"Final chest carries exactly one stack");
                     report.set("recovery.unclaimed-negative-coordinate-point-opens-once",true);
-                    report.set("diagnostics",supplies.diagnostics());itemsFor(3).forEach(Entity::remove);
+                    report.set("diagnostics",supplies.diagnostics());chestFor(3).getInventory().clear();drive(List.of(first.player),20);
                 });
     }
     private CompletableFuture<GroundSupplyLedger.Snapshot> snapshot(){
@@ -209,7 +216,14 @@ public final class Rc10GroundProbe {
         },io));
     }
     private List<Item> nativeItems(){return new ArrayList<>(world.getEntitiesByClass(Item.class));}
-    private List<Item> itemsFor(int point){return nativeItems().stream().filter(item->Integer.valueOf(point).equals(item.getPersistentDataContainer().get(pointMarker,PersistentDataType.INTEGER))).toList();}
+    /** Materialization is a chest block, not item entities: marker PDC on the block state must match session+point. */
+    private Chest chestFor(int point){
+        var state=world.getBlockAt(POINT_X[point],81,0).getState();
+        return state instanceof Chest chest
+                &&Integer.valueOf(point).equals(chest.getPersistentDataContainer().get(pointMarker,PersistentDataType.INTEGER))
+                &&session.sessionId().toString().equals(chest.getPersistentDataContainer().get(marker,PersistentDataType.STRING))?chest:null;
+    }
+    private boolean lootAt(int point){var chest=chestFor(point);return chest!=null&&Arrays.stream(chest.getInventory().getContents()).anyMatch(Objects::nonNull);}
     private void drive(List<Player> audience,int ticks){for(int i=0;i<ticks;i++)supplies.tick(audience);}
     private void force(int x,int z){
         var chunk=world.getChunkAt(x,z);long key=key(x,z);if(!chunk.isForceLoaded()){chunk.setForceLoaded(true);forced.add(key);}chunk.getEntities();

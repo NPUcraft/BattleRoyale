@@ -19,6 +19,7 @@ public final class I18n {
     // Persistent entities/block titles can be read before another instance is spawned after restart.
     private static final Map<String,Template> BUILT_INS=Map.ofEntries(
             entry("airdrop.container","第 {0} 轮补给空投","Supply drop {0}"),
+            entry("ground.supply","野外补给","Field supply"),
             entry("death.inventory","死亡物资箱：{0}","Death supplies: {0}"),
             entry("death.survived","存活 {0}","Survived {0}"),
             entry("death.killed","被 {0} 淘汰（{1}）","Eliminated by {0} ({1})"),

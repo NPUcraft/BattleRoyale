@@ -1,5 +1,6 @@
 package com.npucraft.battleroyale.loot;
 
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -31,5 +32,14 @@ class AirdropSettingsTest {
         assertEquals(60,new AirdropSettings(true,"basic",1,5,8,24,120).announcementSeconds());
         for(int seconds:new int[]{0,4,601})assertThrows(IllegalArgumentException.class,()->new AirdropSettings(true,"basic",1,5,8,24,120,seconds,0));
         for(int distance:new int[]{-1,100_001})assertThrows(IllegalArgumentException.class,()->new AirdropSettings(true,"basic",1,5,8,24,120,60,distance));
+    }
+    @Test void roundTablesFallBackToTheSharedTableAndValidateTheirNames() {
+        var ladder=new AirdropSettings(true,"airdrop",6,8,8,24,120,60,0,List.of("airdrop-1","airdrop-2","airdrop-3","airdrop-4"));
+        assertEquals("airdrop-1",ladder.roundTable(0));assertEquals("airdrop-4",ladder.roundTable(3));
+        assertEquals("airdrop",ladder.roundTable(4),"Rounds beyond the ladder share the default table");
+        assertEquals("airdrop",ladder.roundTable(-1));
+        assertEquals(List.of(),new AirdropSettings(true,"basic",1,5,8,24,120).roundTables(),"Legacy constructors stay table-uniform");
+        assertThrows(IllegalArgumentException.class,()->new AirdropSettings(true,"basic",1,5,8,24,120,60,0,List.of("Bad Name")));
+        assertThrows(IllegalArgumentException.class,()->new AirdropSettings(true,"basic",1,5,8,24,120,60,0,List.of("")));
     }
 }

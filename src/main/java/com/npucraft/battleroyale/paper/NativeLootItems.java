@@ -27,6 +27,11 @@ public final class NativeLootItems implements LootItemResolver<ItemStack> {
             "poison",new Effect(PotionEffectType.POISON,160,"剧毒","8秒",Color.fromRGB(0x4E9331)));
     private static final List<Material> GUARANTEES=List.of(Material.DIAMOND_SWORD,Material.DIAMOND_AXE,Material.DIAMOND_HELMET,
             Material.DIAMOND_CHESTPLATE,Material.DIAMOND_LEGGINGS,Material.DIAMOND_BOOTS,Material.BOW);
+    /** Early rounds must only outpace mid-tier ground, so their guaranteed piece stays iron. */
+    private static final List<Material> IRON_GUARANTEES=List.of(Material.IRON_SWORD,Material.IRON_AXE,Material.IRON_HELMET,
+            Material.IRON_CHESTPLATE,Material.IRON_LEGGINGS,Material.IRON_BOOTS,Material.BOW);
+    private static final List<Material> MIXED_GUARANTEES=List.of(Material.IRON_SWORD,Material.IRON_AXE,Material.IRON_CHESTPLATE,
+            Material.IRON_LEGGINGS,Material.BOW,Material.DIAMOND_HELMET,Material.DIAMOND_SWORD);
     private record Potion(Effect effect,boolean splash){}
     private Potion potion(String key){
         if(!key.startsWith("battleroyale:"))return null;
@@ -76,8 +81,11 @@ public final class NativeLootItems implements LootItemResolver<ItemStack> {
         var item=resolve(key);if(random.nextDouble()<AIRDROP_ENCHANT_CHANCE)enchantAirdrop(item,random);return item;
     }
     /** Exactly one enchanted equipment stack; totems are ordinary low-weight table rolls, never guaranteed. */
-    public List<ItemStack> airdropGuarantees(RandomGenerator random){
-        var equipment=new ItemStack(GUARANTEES.get(random.nextInt(GUARANTEES.size())));
+    public List<ItemStack> airdropGuarantees(RandomGenerator random){return airdropGuarantees(random,2);}
+    /** tier 0 = iron only, 1 = iron with a diamond pinch, 2 = the full diamond pool. */
+    public List<ItemStack> airdropGuarantees(RandomGenerator random,int tier){
+        var pool=switch(Math.max(0,Math.min(2,tier))){case 0->IRON_GUARANTEES;case 1->MIXED_GUARANTEES;default->GUARANTEES;};
+        var equipment=new ItemStack(pool.get(random.nextInt(pool.size())));
         if(!enchantAirdrop(equipment,random))throw new IllegalStateException("No applicable enchantment for guaranteed equipment "+equipment.getType());
         return List.of(equipment);
     }

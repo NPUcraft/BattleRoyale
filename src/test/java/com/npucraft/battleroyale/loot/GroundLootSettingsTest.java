@@ -28,4 +28,20 @@ class GroundLootSettingsTest {
         assertThrows(IllegalArgumentException.class,()->new GroundLootSettings.Refill(1,"ground-mid",65));
         assertDoesNotThrow(()->new GroundLootSettings.Refill(1,"ground-mid",64));
     }
+    @Test void terrainTiersValidateEveryReferencedTableAndLabel() {
+        var tiers=Map.of("ground-early","low","ground-mid","mid","ground-late","high");
+        var staged=new GroundLootSettings(true,"ground-early","ground-mid",
+                List.of(new GroundLootSettings.Refill(1,"ground-mid",3,"ground-late")),tiers);
+        assertDoesNotThrow(()->staged.validate(tables));
+        assertEquals("low",staged.tierOf("ground-early"));assertEquals("mid",staged.tierOf("ground-mid"));
+        assertEquals("high",staged.tierOf("ground-late"));assertNull(staged.tierOf("ground-missing"));
+        assertEquals("ground-late",new GroundLootSettings.Refill(1,"ground-mid",3,"ground-late").tableFor(LootRegionQuality.BUILT));
+        assertEquals("ground-mid",new GroundLootSettings.Refill(1,"ground-mid",3,"ground-late").tableFor(LootRegionQuality.NATURAL));
+        assertEquals("ground-mid",new GroundLootSettings.Refill(1,"ground-mid",3).tableFor(LootRegionQuality.BUILT),"Legacy refills ignore terrain");
+        assertThrows(IllegalArgumentException.class,()->new GroundLootSettings(true,"ground-early","ground-missing",List.of(),Map.of()).validate(tables));
+        assertThrows(IllegalArgumentException.class,()->new GroundLootSettings(true,"ground-early",null,List.of(new GroundLootSettings.Refill(1,"ground-mid",1,"ground-missing")),Map.of()).validate(tables));
+        assertThrows(IllegalArgumentException.class,()->new GroundLootSettings(true,"ground-early",null,List.of(),Map.of("ground-early","ultra")).validate(tables));
+        assertThrows(IllegalArgumentException.class,()->new GroundLootSettings(true,"ground-early",null,List.of(),Map.of("ground-missing","low")).validate(tables));
+        assertThrows(IllegalArgumentException.class,()->new GroundLootSettings(true,"ground-early","bad name",List.of(),Map.of()));
+    }
 }
