@@ -53,9 +53,10 @@ public final class NativeLootItems implements LootItemResolver<ItemStack> {
         if(material==Material.ELYTRA)throw new IllegalArgumentException("Elytra is not allowed in BattleRoyale loot");
         return material;
     }
-    @Override public void validate(String key) { Objects.requireNonNull(key,"loot key");if(key.equals("battleroyale:combat_firework"))return;if(potion(key)==null)material(key); }
+    @Override public void validate(String key) { Objects.requireNonNull(key,"loot key");if(key.equals("battleroyale:combat_firework")||key.equals("battleroyale:knockback_stick"))return;if(potion(key)==null)material(key); }
     @Override public ItemStack resolve(String key) {
-        Objects.requireNonNull(key,"loot key");if(key.equals("battleroyale:combat_firework"))return firework();var potion=potion(key);
+        Objects.requireNonNull(key,"loot key");if(key.equals("battleroyale:combat_firework"))return firework();
+        if(key.equals("battleroyale:knockback_stick"))return knockbackStick();var potion=potion(key);
         if(potion==null)return new ItemStack(material(key));
         var item=new ItemStack(potion.splash()?Material.SPLASH_POTION:Material.POTION);
         var effect=potion.effect();var meta=(PotionMeta)item.getItemMeta();
@@ -72,6 +73,13 @@ public final class NativeLootItems implements LootItemResolver<ItemStack> {
         var item=new ItemStack(Material.FIREWORK_ROCKET);var meta=(FireworkMeta)item.getItemMeta();
         meta.setPower(0);meta.addEffect(FireworkEffect.builder().with(FireworkEffect.Type.BALL).withColor(Color.fromRGB(0x46D9F7)).build());
         meta.displayName(Component.translatable("item.minecraft.firework_rocket").color(UiText.VALUE).append(Component.text(" · ★ × 1")).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC,false));item.setItemMeta(meta);return item;
+    }
+    /** The meme melee: an unbreakable stick with knockback V that launches players instead of hurting them. */
+    private ItemStack knockbackStick(){
+        var item=new ItemStack(Material.STICK);var meta=item.getItemMeta();
+        meta.addEnchant(Enchantment.KNOCKBACK,5,true);
+        meta.displayName(Component.text("击退棒 · Knockback V").color(UiText.VALUE).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC,false));
+        meta.setEnchantmentGlintOverride(true);item.setItemMeta(meta);return item;
     }
     /** Ordinary equipment receives at most one applicable, non-curse level I/II enchantment. */
     public ItemStack roll(String key,RandomGenerator random){
