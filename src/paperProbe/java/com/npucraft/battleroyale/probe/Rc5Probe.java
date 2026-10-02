@@ -19,7 +19,10 @@ import java.util.concurrent.*;
 import java.util.function.BooleanSupplier;
 import java.util.logging.Level;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.TranslatableComponent;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
+import com.npucraft.battleroyale.service.I18n;
+import com.npucraft.battleroyale.service.UiText;
 import org.bukkit.*;
 import org.bukkit.block.*;
 import org.bukkit.block.data.Directional;
@@ -82,6 +85,9 @@ public final class Rc5Probe {
         require(plain(component).equals("→ 下圈边界 60 米"),"Chinese next-boundary direction and distance without coordinates");
         var messages=new ArrayList<Component>();var particles=new ArrayList<Particle>();UUID viewerId=UUID.randomUUID();
         Player viewer=(Player)Proxy.newProxyInstance(Player.class.getClassLoader(),new Class<?>[]{Player.class},(proxy,method,args)->switch(method.getName()){
+            // Production selects copy via I18n.locale(player); a real Player always implements locale(). All rc5
+            // assertions are Chinese-oriented, so the stub reports Simplified Chinese.
+            case "locale"->java.util.Locale.SIMPLIFIED_CHINESE;
             case "getUniqueId"->viewerId;
             case "getLocation"->new Location(world,499,80,499,0,0);
             case "sendActionBar"->{messages.add((Component)args[0]);yield null;}
@@ -160,24 +166,54 @@ public final class Rc5Probe {
         var session=GameSession.waiting(sessionId,room,Instant.now());UUID winner=UUID.randomUUID();session.join(winner);session.prepare(map,new Random(3));
         Zone initial=new Zone(72,72,24);session.initialZone(initial);session.starting(new GameWorld(sessionId,room.id(),world.getName(),world.getWorldPath(),map));session.transition(GameState.RUNNING);
         var zone=new ZoneRuntime(initial,profile(),new Random(3),0);session.runningZone(zone,new ProtectionWindow(0,Duration.ZERO));
-        var content=new MatchContent(Map.of(),tables,Map.of(),Map.of(),new AutoContainerLootSettings(false,"basic",1,2,2,16),new AirdropSettings(true,"basic",2,2,1,24,30));
+        // The 9-argument form keeps the public lead short (5 s) so every drop finishes well inside the stage that
+        // announced it; the legacy 7-argument form forces lead=60 and lands exactly on the stage boundary.
+        var content=new MatchContent(Map.of(),tables,Map.of(),Map.of(),new AutoContainerLootSettings(false,"basic",1,2,2,16),new AirdropSettings(true,"basic",2,2,1,24,30,5,0));
+        var settings=content.airdrops();
+        var firstStage=profile().stages().getFirst();
+        // Contract: a drop must complete inside the stage that announced it. Otherwise its landing point belongs to a
+        // stale next() snapshot (PaperAirdrops.java:132) and the crate ends up in a future dead zone the production
+        // valid() check cannot detect (PaperAirdrops.java:157-162).
+        require(settings.announcementSeconds()+settings.fallSeconds()
+                <firstStage.waitDuration().toSeconds()+firstStage.shrinkDuration().toSeconds(),
+                "Fixture keeps every drop inside one zone stage");
         drops=new PaperAirdrops(plugin,session,sanitizer,content,ForkJoinPool.commonPool(),false);
         final long[] now={1_000_000_000L};
+        // A crate needs the full announcement countdown plus the fall. Derive the iteration budget from the settings
+        // (never hard-code it) and advance simulation time coarsely while only the countdown elapses (<=250 ms per
+        // server tick) but finely while a crate is actually falling (<=100 ms) so the 1 s descent is never skipped.
+        long waitStep=250_000_000L,fallStep=50_000_000L;
+        int budget=(settings.announcementSeconds()+settings.fallSeconds())*(int)(1_000_000_000L/waitStep)+200;
         return until(()->{
-            zone.update(now[0]);drops.tick(zone,now[0]);now[0]+=100_000_000L;
+            zone.update(now[0]);drops.tick(zone,now[0]);now[0]+=visuals()>0?fallStep:waitStep;
             require(!drops.diagnostics().contains("FAILED"),"Airdrop tick healthy");return drops.diagnostics().contains("landed=1");
-        },240,"First supply crate lands").thenCompose(unused->{
+        },budget,"First supply crate lands").thenCompose(unused->{
             List<Barrel> crates=crates();require(crates.size()==1,"Exactly one actual supply barrel");Barrel crate=crates.getFirst();
             require(crate.getY()==81&&crate.getBlock().getRelative(BlockFace.DOWN).getType()==Material.STONE,"Safe solid landing on test platform");
             require(zone.current().contains(crate.getX()+.5,crate.getZ()+.5)&&zone.next().contains(crate.getX()+.5,crate.getZ()+.5),"Landing inside current and destination zones");
-            require(amount(crate.getInventory(),Material.BREAD)==6,"Actual native supply contents");require(crate.customName()!=null&&plain(crate.customName()).contains("第 1 轮补给空投"),"Chinese supply crate label");
+            require(amount(crate.getInventory(),Material.BREAD)==6,"Actual native supply contents");
+            // The crate name is a styled TranslatableComponent (PaperAirdrops.java:182). Plain serialization renders it
+            // through the JVM default locale, and NMS round-trips break component equals(), so assert the structure:
+            // production key + the round number argument + the brand colour.
+            var actualName=crate.customName();
+            require(actualName instanceof TranslatableComponent t&&t.key().equals("battleroyale.airdrop.container")
+                    &&t.arguments().stream().anyMatch(argument->plain((Component)argument.value()).equals("1"))
+                    &&t.color()!=null&&t.color().equals(UiText.BRAND),"Chinese supply crate label");
             for(int i=0;i<20;i++)drops.tick(zone,now[0]);require(crates().size()==1&&drops.diagnostics().contains("landed=1"),"Same shrinking stage does not duplicate crate");
-            require(tickets()==0&&visuals()==0,"Landed crate releases display and chunk ticket");
+            // The falling display is removed before landing (PaperAirdrops.java:78); the crate's native beacon (rc6+)
+            // then deliberately holds its chunk tickets for markerSeconds while the marker is live. Assert the display
+            // release, drive sim time past beacon expiry, and only then require every ticket and display released.
+            long landedAt=now[0];
+            return until(()->visuals()==0,20,"Landed crate releases its falling display").thenCompose(ignored->{
+            now[0]=landedAt+(content.airdrops().markerSeconds()+2)*1_000_000_000L;
+            return until(()->{zone.update(now[0]);drops.tick(zone,now[0]);now[0]+=250_000_000L;return visuals()==0&&tickets()==0;},40,"Expired beacon releases display and chunk ticket").thenCompose(ignored2->{
             try{require(!AirdropLedger.claim(world.getWorldPath(),sessionId,0),"Persisted claim rejects a duplicate stage");}catch(Exception error){throw new CompletionException(error);}
             report.set("airdrop.location",List.of(crate.getX(),crate.getY(),crate.getZ()));report.set("airdrop.stage-zero-contents",6);
             now[0]=62_000_000_000L;
-            return until(()->{zone.update(now[0]);drops.tick(zone,now[0]);now[0]+=50_000_000L;require(!drops.diagnostics().contains("FAILED"),"Second-round descent healthy");return visuals()>0;},160,"Second round creates falling display for cancellation check");
-        }).thenCompose(unused->drops.stop()).thenCompose(unused->{
+            return until(()->{zone.update(now[0]);drops.tick(zone,now[0]);now[0]+=visuals()>0?fallStep:waitStep;require(!drops.diagnostics().contains("FAILED"),"Second-round descent healthy");return visuals()>0;},budget,"Second round creates falling display for cancellation check");
+            });
+            });
+            }).thenCompose(unused->drops.stop()).thenCompose(unused->{
             require(visuals()==0&&tickets()==0,"Stopping during descent removes display and chunk ticket");require(crates().size()==1,"Cancelled second drop created no extra barrel");
             drops=new PaperAirdrops(plugin,session,sanitizer,content,ForkJoinPool.commonPool(),true);
             for(int i=0;i<20;i++)drops.tick(zone,now[0]);require(visuals()==0&&crates().size()==1,"Recovered shrinking stage is not replayed");

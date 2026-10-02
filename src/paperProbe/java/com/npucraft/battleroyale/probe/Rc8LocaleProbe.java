@@ -96,7 +96,15 @@ public final class Rc8LocaleProbe {
     private void nativeItems(){
         var items=new NativeLootItems();int checked=0;
         for(String name:List.of("invisibility","fire_resistance","healing","harming","poison"))for(String prefix:List.of("","splash_")){
-            var item=items.resolve("battleroyale:"+prefix+name+"_potion");var copy=ItemStack.deserializeBytes(item.serializeAsBytes());require(copy.isSimilar(item),"Potion roundtrip");
+            String key="battleroyale:"+prefix+name+"_potion";
+            if(name.equals("harming")&&prefix.isEmpty()){
+                // A drinkable instant-damage potion only lets a player hurt itself, so production rejects the
+                // non-splash harming preset on purpose (NativeLootItems.java:37-38). Assert that rejection.
+                boolean rejected=false;try{items.resolve(key);}catch(IllegalArgumentException expected){rejected=true;}
+                require(rejected,"Non-splash harming preset must be rejected");
+                report.set("items.non-splash-harming-rejected",true);continue;
+            }
+            var item=items.resolve(key);var copy=ItemStack.deserializeBytes(item.serializeAsBytes());require(copy.isSimilar(item),"Potion roundtrip");
             Component title=Objects.requireNonNull(copy.getItemMeta().displayName());require(title instanceof TranslatableComponent tr&&tr.key().equals("item.minecraft."+(prefix.isEmpty()?"potion":"splash_potion")+".effect."+name),"Native potion translation key");nativeOnly(title);checked++;
         }
         for(ItemStack item:List.of(items.resolve("battleroyale:combat_firework"),new StoredExperienceBottles(plugin).create(73))){
