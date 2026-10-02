@@ -53,10 +53,14 @@ public final class NativeLootItems implements LootItemResolver<ItemStack> {
         if(material==Material.ELYTRA)throw new IllegalArgumentException("Elytra is not allowed in BattleRoyale loot");
         return material;
     }
-    @Override public void validate(String key) { Objects.requireNonNull(key,"loot key");if(key.equals("battleroyale:combat_firework")||key.equals("battleroyale:knockback_stick"))return;if(potion(key)==null)material(key); }
+    @Override public void validate(String key) { Objects.requireNonNull(key,"loot key");if(key.equals("battleroyale:combat_firework")||key.equals("battleroyale:knockback_stick")
+            ||key.equals("battleroyale:slowness_arrow")||key.equals("battleroyale:levitation_arrow"))return;if(potion(key)==null)material(key); }
     @Override public ItemStack resolve(String key) {
         Objects.requireNonNull(key,"loot key");if(key.equals("battleroyale:combat_firework"))return firework();
-        if(key.equals("battleroyale:knockback_stick"))return knockbackStick();var potion=potion(key);
+        if(key.equals("battleroyale:knockback_stick"))return knockbackStick();
+        if(key.equals("battleroyale:slowness_arrow"))return arrow(PotionEffectType.SLOWNESS,220,"迟缓药水箭 · Slowness (11s)",Color.fromRGB(0x7CAFC6));
+        if(key.equals("battleroyale:levitation_arrow"))return arrow(PotionEffectType.LEVITATION,100,"飘浮药水箭 · Levitation (5s)",Color.fromRGB(0xF4F4B3));
+        var potion=potion(key);
         if(potion==null)return new ItemStack(material(key));
         var item=new ItemStack(potion.splash()?Material.SPLASH_POTION:Material.POTION);
         var effect=potion.effect();var meta=(PotionMeta)item.getItemMeta();
@@ -80,6 +84,14 @@ public final class NativeLootItems implements LootItemResolver<ItemStack> {
         meta.addEnchant(Enchantment.KNOCKBACK,5,true);
         meta.displayName(Component.text("击退棒 · Knockback V").color(UiText.VALUE).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC,false));
         meta.setEnchantmentGlintOverride(true);item.setItemMeta(meta);return item;
+    }
+    /** Single tipped arrows with effects vanilla loot cannot produce (slowness, levitation). */
+    private ItemStack arrow(PotionEffectType effect,int ticks,String label,Color color){
+        var item=new ItemStack(Material.TIPPED_ARROW);var meta=(PotionMeta)item.getItemMeta();
+        meta.setBasePotionType(PotionType.WATER);meta.addCustomEffect(new PotionEffect(effect,ticks,0),true);
+        meta.setColor(color);
+        meta.displayName(Component.text(label).color(UiText.VALUE).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC,false));
+        item.setItemMeta(meta);return item;
     }
     /** Ordinary equipment receives at most one applicable, non-curse level I/II enchantment. */
     public ItemStack roll(String key,RandomGenerator random){
