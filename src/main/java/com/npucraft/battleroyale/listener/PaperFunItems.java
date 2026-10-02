@@ -178,12 +178,12 @@ public final class PaperFunItems implements Listener {
         }
         var loc=player.getLocation();
         for(var other:player.getWorld().getPlayers())other.playSound(loc,Sound.ENTITY_WITHER_SPAWN,1f,1f);
-        for(var other:player.getWorld().getPlayers())other.sendMessage(UiText.message("§c有人服下了禁忌盛宴——60 秒后将被诅咒吞噬。"));
-        player.sendActionBar(UiText.warning(player,"60 秒后死亡……跑！","You will die in 60 seconds... run!"));
+        for(var other:player.getWorld().getPlayers())other.sendMessage(UiText.message("§c有人服下了禁忌盛宴——"+(finalStage?"15":"60")+" 秒后将被诅咒吞噬。"));
+        player.sendActionBar(UiText.warning(player,finalStage?"15 秒后死亡……跑！":"60 秒后死亡……跑！",finalStage?"You will die in 15 seconds... run!":"You will die in 60 seconds... run!"));
         plugin.getServer().getScheduler().runTaskLater(plugin,()->{
             if(!player.isOnline()||player.isDead())return;
             if(matches().activePlayer(player.getUniqueId()).filter(e->e.inWorld(player.getWorld().getUID())).isEmpty())return;
             player.setHealth(0);
-        },60L*20L);
+        },finalStage?15L*20L:60L*20L);
     }
 }
