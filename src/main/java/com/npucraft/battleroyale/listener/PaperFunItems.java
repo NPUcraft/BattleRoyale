@@ -76,24 +76,31 @@ public final class PaperFunItems implements Listener {
         snowball.getPersistentDataContainer().set(FUN,PersistentDataType.STRING,TORCH);
         consumeOne(player);
     }
-    /** Impact: scatter a small patch of fire around the landing spot and ignite hit entities. */
+    /** Impact: ignite the outer face of the hit block (always air), scatter a few more fires around
+     *  the landing spot, and light up the struck entity. */
     @EventHandler(priority=EventPriority.MONITOR,ignoreCancelled=true)
     public void torchImpact(ProjectileHitEvent event){
         if(!(event.getEntity() instanceof Snowball snowball))return;
         if(!TORCH.equals(snowball.getPersistentDataContainer().get(FUN,PersistentDataType.STRING)))return;
         var world=snowball.getWorld();
-        var at=snowball.getLocation().getBlock();
         var hitEntity=event.getHitEntity();
         if(hitEntity!=null)hitEntity.setFireTicks(100);
         int placed=0;
+        var hitBlock=event.getHitBlock();
+        if(hitBlock!=null&&event.getHitBlockFace()!=null){
+            var target=hitBlock.getRelative(event.getHitBlockFace());
+            if(target.getType().isAir()){target.setType(Material.FIRE);placed++;}
+        }
+        var at=snowball.getLocation().getBlock();
         for(int attempt=0;attempt<24&&placed<5;attempt++){
-            int dx=ThreadLocalRandom.current().nextInt(-2,3),dz=ThreadLocalRandom.current().nextInt(-2,3),dy=ThreadLocalRandom.current().nextInt(0,2);
+            int dx=ThreadLocalRandom.current().nextInt(-2,3),dz=ThreadLocalRandom.current().nextInt(-2,3),dy=ThreadLocalRandom.current().nextInt(0,3);
             var target=world.getBlockAt(at.getX()+dx,at.getY()+dy,at.getZ()+dz);
             if(!target.getType().isAir())continue;
             var below=target.getRelative(BlockFace.DOWN);
-            if(below.getType().isAir()||!below.getType().isSolid())continue;
-            target.setType(Material.FIRE,false);placed++;
+            if(!below.getType().isSolid())continue;
+            target.setType(Material.FIRE);placed++;
         }
+        plugin.getLogger().info("TORCH_HIT at="+at.getX()+","+at.getY()+","+at.getZ()+" placed="+placed+" entity="+(hitEntity!=null));
     }
     private static void consumeOne(Player player){
         var equipment=player.getEquipment();if(equipment==null)return;

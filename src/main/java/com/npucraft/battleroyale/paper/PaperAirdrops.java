@@ -53,31 +53,60 @@ public final class PaperAirdrops implements AutoCloseable {
     private boolean claimed,closed,failed;
     private static final double SPACING_FACTOR=.5;
     private static final int SPACING_ATTEMPTS=24;
-    /** Signal-gun drops bypass the round pipeline with this pseudo-stage; land() maps it back to the current round table. */
-    private static final int SIGNAL_STAGE=1_000;
-    /** Signal-gun drop: skip the round pipeline and descend straight onto the requester's position,
-     *  using the loot of the current zone stage. Consumes no scheduled round and shares the single
-     *  descent slot, so it is refused while another drop is announced, falling, or being placed. */
+    /** Signal-gun drops run on their own slot in parallel to the round pipeline, so they can be
+     *  summoned even while a scheduled drop is announced, falling, or being placed. The crate lands
+     *  on the requester's feet square (indoor-friendly) and uses the current zone stage's table. */
+    private BlockDisplay signalFalling;
+    private long signalFallStarted;
+    private int signalX,signalY,signalZ;
+    private boolean signalActive;
     public boolean summonSignal(org.bukkit.entity.Player requester,ZoneRuntime zone,long now){
-        if(closed||failed||table==null||!settings.enabled())return false;
-        if(stage>=0||announcement!=null||falling!=null||pending!=null||claim!=null||pendingSignal!=null)return false;
+        if(closed||failed||table==null||!settings.enabled()||signalActive)return false;
         var loc=requester.getLocation();
-        if(!zone.current().contains(loc.getX(),loc.getZ()))return false;
-        destination=zone.current();x=loc.getBlockX();z=loc.getBlockZ();
-        y=world().getHighestBlockYAt(x,z,org.bukkit.HeightMap.MOTION_BLOCKING_NO_LEAVES)+1;
-        if(!valid(zone))return false;
-        random=new Random();
-        stage=SIGNAL_STAGE;
-        usedSites.add(new AirdropPlacement.Point(x,z));
-        startY=Math.min(world().getMaxHeight()-1,y+32);
-        falling=world().spawn(new Location(world(),x+.5,startY,z+.5),BlockDisplay.class,display->{
+        int sx=loc.getBlockX(),sz=loc.getBlockZ(),sy=loc.getBlockY();
+        if(!zone.current().contains(sx+.5,sz+.5))return false;
+        World world=world();
+        if(!world.getBlockAt(sx,sy,sz).getType().isAir()||!world.getBlockAt(sx,sy+1,sz).getType().isAir())return false;
+        if(!world.getBlockAt(sx,sy-1,sz).getType().isSolid())return false;
+        signalX=sx;signalY=sy;signalZ=sz;signalActive=true;
+        double startY=signalStartY(world);
+        signalFalling=world.spawn(new Location(world,sx+.5,startY,sz+.5),BlockDisplay.class,display->{
             display.setBlock(Material.BARREL.createBlockData());display.setPersistent(false);display.setTeleportDuration(1);
-            display.setGlowing(true);display.getPersistentDataContainer().set(marker,PersistentDataType.STRING,identity());
+            display.setGlowing(true);display.getPersistentDataContainer().set(marker,PersistentDataType.STRING,signalIdentity());
         });
-        fallStarted=now;
-        announce("信号枪空投正在降落！ %s，约 %s 秒后可拾取。","Signal-gun supply drop is descending! %s; ready in about %s seconds.",coordinates(),settings.fallSeconds());
-        plugin.getLogger().info("AIRDROP_SIGNAL room="+session.room().id()+" x="+x+" y="+y+" z="+z);
+        signalFallStarted=now;
+        announce("信号枪空投正在降落！ %s，约 %s 秒后可拾取。","Signal-gun supply drop is descending! %s; ready in about %s seconds.",coordinates(signalX,signalY,signalZ),settings.fallSeconds());
+        plugin.getLogger().info("AIRDROP_SIGNAL room="+session.room().id()+" x="+signalX+" y="+signalY+" z="+signalZ);
         return true;
+    }
+    private String signalIdentity(){return session.sessionId()+":signal";}
+    private double signalStartY(World world){return Math.min(world.getMaxHeight()-1,signalY+40);}
+    private void signalTick(ZoneRuntime zone,long now){
+        if(!signalActive)return;
+        double progress=Math.clamp((double)(now-signalFallStarted)/(settings.fallSeconds()*1_000_000_000L),0,1);
+        double startY=signalStartY(world());
+        signalFalling.teleport(new Location(world(),signalX+.5,startY+(signalY-startY)*progress,signalZ+.5));
+        if(progress>=1){signalFalling.remove();signalFalling=null;signalActive=false;signalLand(zone,now);}
+    }
+    private void signalLand(ZoneRuntime zone,long now){
+        World world=world();
+        var block=world.getBlockAt(signalX,signalY,signalZ);
+        while(!block.getType().isAir()&&block.getY()<world.getMaxHeight()-2)block=world.getBlockAt(block.getX(),block.getY()+1,block.getZ());
+        block.setType(Material.BARREL,false);
+        var barrel=(Barrel)block.getState();
+        barrel.customName(I18n.shared("airdrop.signal","信号枪空投","Signal-gun supply drop").color(UiText.BRAND));
+        barrel.getPersistentDataContainer().set(marker,PersistentDataType.STRING,signalIdentity());barrel.update(true,false);
+        int round=Math.min(roundTables.size()-1,Math.max(0,zone.stageIndex()));
+        List<ItemStack> signalContents=contents(tableFor(round),guaranteeTier(round),new Random());
+        List<Integer> slots=new ArrayList<>();for(int i=0;i<27;i++)slots.add(i);Collections.shuffle(slots);
+        for(int i=0;i<signalContents.size();i++)barrel.getInventory().setItem(slots.get(i),signalContents.get(i));
+        landed++;
+        if(settings.markerSeconds()>0){
+            if(beacons.size()>=8)signals.remove(beacons.removeFirst().stage());
+            beacons.add(new Beacon(new Location(world,signalX+.5,block.getY()+1,signalZ+.5),now+settings.markerSeconds()*1_000_000_000L,signalIdentity(),-9));
+        }
+        announce("信号枪空投已落地！ %s，右键木桶领取。","Signal-gun supply drop landed! %s. Right-click the barrel to collect supplies.",coordinates(signalX,block.getY(),signalZ));
+        plugin.getLogger().info("AIRDROP_SIGNAL_LANDED room="+session.room().id()+" x="+signalX+" y="+block.getY()+" z="+signalZ);
     }
     private record Beacon(Location location,long expires,String identity,int stage){}
 
@@ -100,6 +129,7 @@ public final class PaperAirdrops implements AutoCloseable {
     public void tick(ZoneRuntime zone,long now){
         if(closed||failed||session.state()!=GameState.RUNNING)return;
         try{
+            signalTick(zone,now);
             if(!signals.recover())return;
             if(!settings.enabled()||table==null)return;
             if(now/1_000_000_000L!=lastMarkerSecond){
@@ -188,6 +218,7 @@ public final class PaperAirdrops implements AutoCloseable {
     private World world(){return Objects.requireNonNull(plugin.getServer().getWorld(worldId),"Airdrop world unloaded");}
     private String identity(){return session.sessionId()+":"+stage;}
     private String coordinates(){return "X="+x+" Y="+y+" Z="+z;}
+    private String coordinates(int cx,int cy,int cz){return "X="+cx+" Y="+cy+" Z="+cz;}
     private boolean valid(ZoneRuntime zone){
         World world=world();return y>world.getMinHeight()&&y+2<world.getMaxHeight()
                 &&destination.contains(x+.5,z+.5)&&zone.current().contains(x+.5,z+.5)
@@ -216,13 +247,9 @@ public final class PaperAirdrops implements AutoCloseable {
     }
     private void land(ZoneRuntime zone,long now){
         if(!valid(zone)){cancelRound("预告落点已被占用、变得不安全或离开安全区");return;}
-        boolean signal=stage>=SIGNAL_STAGE;
-        int round=signal?Math.min(roundTables.size()-1,Math.max(0,zone.stageIndex())):stage;
-        List<ItemStack> contents=contents(tableFor(round),guaranteeTier(round),random);
+        List<ItemStack> contents=contents(tableFor(stage),guaranteeTier(stage),random);
         var block=world().getBlockAt(x,y,z);block.setType(Material.BARREL,false);
-        var barrel=(Barrel)block.getState();
-        barrel.customName(signal?I18n.shared("airdrop.signal","信号枪空投","Signal-gun supply drop").color(UiText.BRAND)
-                :I18n.shared("airdrop.container","第 {0} 轮补给空投","Supply drop {0}",UiText.value(Integer.toString(stage+1))).color(UiText.BRAND));
+        var barrel=(Barrel)block.getState();barrel.customName(I18n.shared("airdrop.container","第 {0} 轮补给空投","Supply drop {0}",UiText.value(Integer.toString(stage+1))).color(UiText.BRAND));
         barrel.getPersistentDataContainer().set(marker,PersistentDataType.STRING,identity());barrel.update(true,false);
         List<Integer> slots=new ArrayList<>();for(int i=0;i<27;i++)slots.add(i);Collections.shuffle(slots,random);
         for(int i=0;i<contents.size();i++)barrel.getInventory().setItem(slots.get(i),contents.get(i));
@@ -231,15 +258,13 @@ public final class PaperAirdrops implements AutoCloseable {
             if(beacons.size()>=8)signals.remove(beacons.removeFirst().stage());
             beacons.add(new Beacon(at,now+settings.markerSeconds()*1_000_000_000L,identity(),stage));
         }else signals.remove(stage);
-        if(signal)announce("信号枪空投已落地！ %s，右键木桶领取。","Signal-gun supply drop landed! %s. Right-click the barrel to collect supplies.",coordinates());
-        else announce("第 %s 轮补给空投已落地！ %s，右键木桶领取。","Supply drop %s landed! %s. Right-click the barrel to collect supplies.",stage+1,coordinates());
+        announce("第 %s 轮补给空投已落地！ %s，右键木桶领取。","Supply drop %s landed! %s. Right-click the barrel to collect supplies.",stage+1,coordinates());
         plugin.getLogger().info("AIRDROP_LANDED room="+session.room().id()+" stage="+stage+" x="+x+" y="+y+" z="+z);
         release();announcement=null;stage=-1;claimed=false;
     }
     private void cancelRound(String reason){
         String english=switch(reason){case "未找到安全落点"->"No safe landing site was found";case "预告落点已被占用、变得不安全或离开安全区"->"The announced site is occupied, unsafe, or outside the safe zone";default->reason;};
-        String label=stage>=SIGNAL_STAGE?"信号枪":"第 "+(stage+1)+" 轮";
-        for(var player:world().getPlayers())player.sendMessage(UiText.message("["+LobbyText.defaultLabel(player,session.room().displayName())+"] "+I18n.text(player,"%s空投已取消：%s%s。","The %s supply drop was cancelled: %s%s.",label,I18n.text(player,reason,english),announcement==null?"":" ("+coordinates()+")")));
+        for(var player:world().getPlayers())player.sendMessage(UiText.message("["+LobbyText.defaultLabel(player,session.room().displayName())+"] "+I18n.text(player,"第 %s 轮空投已取消：%s%s。","Supply drop %s cancelled: %s%s.",stage+1,I18n.text(player,reason,english),announcement==null?"":" ("+coordinates()+")")));
         plugin.getLogger().warning("AIRDROP_CANCELLED room="+session.room().id()+" stage="+stage+" reason="+reason);
         removeVisual();release();signals.remove(stage);announcement=null;stage=-1;claimed=false;
     }
@@ -260,7 +285,10 @@ public final class PaperAirdrops implements AutoCloseable {
     /** Explicit inspection hook for the isolated real-Paper lifecycle probe. */
     public Optional<com.npucraft.battleroyale.loot.AirdropBeaconLedger.Plan> nativeBeacon(int round){return signals.active(round);}
     private void release(){if(ticket!=null){PaperChunkTickets.release(plugin,ticket.getWorld(),ticket.getX(),ticket.getZ());ticket=null;}}
-    private void removeVisual(){if(falling!=null){falling.remove();falling=null;}}
+    private void removeVisual(){
+        if(falling!=null){falling.remove();falling=null;}
+        if(signalFalling!=null){signalFalling.remove();signalFalling=null;signalActive=false;}
+    }
     public CompletableFuture<Void> stop(){
         closed=true;removeVisual();release();announcement=null;beacons.clear();
         var cleanup=signals.stop();
