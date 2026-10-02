@@ -7,6 +7,7 @@ import com.npucraft.battleroyale.session.*;
 import com.npucraft.battleroyale.spawn.SpawnPlanner;
 import com.npucraft.battleroyale.spawn.SpawnPreparation;
 import com.npucraft.battleroyale.zone.*;
+import org.bukkit.GameRules;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -76,6 +77,11 @@ public final class PaperMatches implements MatchLifecycle {
         Entry entry=Objects.requireNonNull(entries.get(session.sessionId()));
         var initial=session.initialZone().orElseThrow();
         var world=Objects.requireNonNull(plugin.getServer().getWorld(session.gameWorld().orElseThrow().worldName()));entry.worldId=world.getUID();
+        // API explosions (fire-charge blasts, flint-ignited placed TNT) run through the
+        // mob-griefing-gated interaction and would not break a single block if the cloned
+        // template inherited mobGriefing=false. Match worlds carry no griefing mobs, so the
+        // rule is switched on for terrain damage without any downside.
+        world.setGameRule(GameRules.MOB_GRIEFING,true);
         sanitizer.register(world,session.sessionId(),failed);
         if(closed || entries.get(session.sessionId())!=entry || session.state()!=GameState.STARTING)
             throw new IllegalStateException("Match cancelled during initial sanitation");

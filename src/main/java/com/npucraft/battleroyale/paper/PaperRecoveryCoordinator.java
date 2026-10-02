@@ -58,6 +58,9 @@ public final class PaperRecoveryCoordinator implements AutoCloseable {
                 for(var p:saved.participants())if(saved.gameState().equals("RUNNING") && Set.of("ALIVE","DISCONNECTED").contains(p.state()) && !players.hasOriginal(p.id(),saved.sessionId()))throw new IllegalStateException("Missing durable original for active participant");
                 if(plugin.getServer().getWorlds().stream().anyMatch(w->w.getName().equals(candidate.world().worldName()) || w.getWorldFolder().toPath().toAbsolutePath().normalize().equals(candidate.world().runtimePath())))throw new RecoveryPlan.Rejected("WORLD_ALREADY_LOADED");
                 worlds.recover(candidate.world());loadedByUs=true;var world=Objects.requireNonNull(plugin.getServer().getWorld(candidate.world().worldName()));cleaner.register(world);
+                // Same as PaperMatches.start: API explosions are mob-griefing-gated, recovered
+                // worlds must allow terrain damage too.
+                world.setGameRule(org.bukkit.GameRules.MOB_GRIEFING,true);
                 var room=config.rooms().stream().filter(r->r.id().equals(saved.roomId())).findFirst().orElseThrow();session=GameSession.recovered(saved,room,candidate.world());GameSession recoveredSession=session;
                 matches.recover(session,saved,failure->{plugin.getLogger().severe("Recovered session runtime failed: "+saved.sessionId());if(ready)rooms.debugEnd(saved.roomId());});
                 rooms.recover(session);known.put(saved.sessionId(),saved);revisions.put(saved.sessionId(),saved.revision());recovered++;
