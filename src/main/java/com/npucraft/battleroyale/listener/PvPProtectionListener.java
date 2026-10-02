@@ -109,8 +109,8 @@ public final class PvPProtectionListener implements Listener {
             launch(event.getPlayer());
         });
     }
-    /** Vanilla clients never send an air use packet for fire charges (Item.use() is PASS), so aiming
-     *  at the horizon produced no event at all. The attack swing is always sent — that is the ranged trigger. */
+    /** Both buttons launch: left-click swings (always sent by vanilla clients) and right-click
+     *  fires an interact event (air use is client-dependent, block use always arrives). */
     @EventHandler(priority=EventPriority.MONITOR)
     public void swingFireCharge(PlayerAnimationEvent event) {
         if(event.getAnimationType()!=PlayerAnimationType.ARM_SWING) return;
@@ -118,14 +118,29 @@ public final class PvPProtectionListener implements Listener {
         if(equipment==null||equipment.getItemInMainHand().getType()!=Material.FIRE_CHARGE) return;
         launch(event.getPlayer());
     }
-    /** A launched fire charge detonates on impact like a TNT charge: power 4, terrain damage, attributed. */
+    /** A launched fire charge keeps TNT-grade terrain destruction (power 4) but caps hurt to a fair
+     *  ranged amount, so a point-blank hit can never one-shot an armoured player like raw TNT does. */
+    static final float FIREBALL_BLAST_DAMAGE=8.0f;
+    private final Map<UUID,Long> fireballBlast=new HashMap<>();
+    @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)
+    public void fireballBlast(EntityDamageEvent event) {
+        if(event.getCause()!=EntityDamageEvent.DamageCause.ENTITY_EXPLOSION) return;
+        Long at=fireballBlast.get(event.getEntity().getWorld().getUID());
+        if(at==null) return;
+        event.setDamage(FIREBALL_BLAST_DAMAGE);
+    }
     @EventHandler(priority=EventPriority.MONITOR,ignoreCancelled=true)
     public void fireballImpact(ProjectileHitEvent event) {
         if(!(event.getEntity() instanceof SmallFireball fireball)) return;
         if(!(fireball.getShooter() instanceof Player shooter)) return;
         matches().activePlayer(shooter.getUniqueId()).filter(e -> inWorld(e,fireball.getWorld())).ifPresent(entry -> {
             var at=fireball.getLocation();
-            fireball.getWorld().createExplosion(at.getX(),at.getY(),at.getZ(),4f,false,true,shooter);
+            // Explosion damage events fire synchronously inside createExplosion; the marker is
+            // removed right after so later TNT blasts in the same tick keep vanilla damage.
+            fireballBlast.put(fireball.getWorld().getUID(),System.nanoTime());
+            try {
+                fireball.getWorld().createExplosion(at.getX(),at.getY(),at.getZ(),4f,false,true,shooter);
+            } finally { fireballBlast.remove(fireball.getWorld().getUID()); }
             fireball.remove();
         });
     }

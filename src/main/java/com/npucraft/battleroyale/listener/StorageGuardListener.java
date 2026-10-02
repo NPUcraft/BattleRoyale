@@ -30,7 +30,9 @@ public final class StorageGuardListener implements Listener {
         for(var entry:matches.allEntries())if(entry.session.state()==GameState.RUNNING&&entry.inWorld(world.getUID()))return true;
         return false;
     }
-    private static boolean bypass(Player player){return player.getGameMode()==GameMode.CREATIVE||player.hasPermission("battleroyale.admin");}
+    /** Only creative mode bypasses the match guard. The admin permission must not: server owners
+     *  are also participants, and an OP bypass made every denial silently disappear for them. */
+    private static boolean bypass(Player player){return player.getGameMode()==GameMode.CREATIVE;}
     private static void deny(Player player){player.sendActionBar(UiText.warning(player,"该容器或装备在比赛中无法使用。","This container or gear is unavailable during a match."));}
     @EventHandler(priority=EventPriority.LOWEST,ignoreCancelled=true) public void opened(InventoryOpenEvent event){
         if(!(event.getPlayer() instanceof Player player)||bypass(player)||!running(player.getWorld()))return;
