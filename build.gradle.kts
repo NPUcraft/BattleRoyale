@@ -1,7 +1,7 @@
 import java.security.MessageDigest
 plugins { java }
 group = "com.npucraft.battleroyale"
-version = "1.0.0-rc.17"
+version = "1.0.0-rc.18"
 repositories {
     mavenCentral()
     maven("https://repo.nightexpressdev.com/releases")

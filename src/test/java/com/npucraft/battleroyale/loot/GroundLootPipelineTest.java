@@ -33,6 +33,6 @@ class GroundLootPipelineTest {
         var tick=new GroundLootBudget.Tick(100);for(int n=0;n<8;n++){assertTrue(tick.request(100));assertTrue(tick.inspect(100));}
         assertFalse(tick.request(100));assertFalse(tick.inspect(100));
         var slow=new GroundLootBudget.Tick(100);assertTrue(slow.inspect(101));assertFalse(slow.inspect(100+GroundLootBudget.MAX_TICK_NANOS));assertFalse(slow.request(100+GroundLootBudget.MAX_TICK_NANOS));
-        assertEquals(8,GroundLootBudget.MAX_IN_FLIGHT);assertEquals(800,GroundLootBudget.MAX_ATTEMPTS);
+        assertEquals(8,GroundLootBudget.MAX_IN_FLIGHT);assertEquals(2400,GroundLootBudget.MAX_ATTEMPTS);
     }
 }

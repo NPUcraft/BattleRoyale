@@ -1,9 +1,11 @@
 package com.npucraft.battleroyale.loot;
 
-/** Failed terrain candidates consume the same budget as successful ones. No second refill on recovery. */
+/** Failed terrain candidates consume the same budget as successful ones. No second refill on recovery.
+ *  Water-heavy regions burn attempts fast: the ceiling must absorb ~10 retries per planned point
+ *  (200 points × worst-case terrain) or the opening loots starve far below the configured count. */
 public final class GroundLootBudget {
-    public static final int MAX_ATTEMPTS=800;
-    public static final long MAX_NANOS=45_000_000_000L;
+    public static final int MAX_ATTEMPTS=2400;
+    public static final long MAX_NANOS=90_000_000_000L;
     public static final int MAX_IN_FLIGHT=8, MAX_REQUESTS_PER_TICK=8, MAX_INSPECTIONS_PER_TICK=8;
     public static final long MAX_TICK_NANOS=2_000_000L;
     /** Wall-time and operation ceilings both apply. One expensive native operation cannot be preempted. */
