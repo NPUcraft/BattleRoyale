@@ -91,6 +91,17 @@ public final class BattleRoyaleCommand implements CommandExecutor, TabCompleter 
                 case "debug" -> {
                     if(args.length==2 && Set.of("perf","tasks","worlds").contains(args[1])){if(args[1].equals("worlds"))runtime.diagnostics().debugWorlds(sender);else messages.send(sender,runtime.diagnostics().perf());break;}
                     if(args.length>=2 && args[1].equalsIgnoreCase("economy")){messages.send(sender,runtime.progression().economy().diagnostics());break;}
+                    if(args.length>=3 && args[1].equalsIgnoreCase("item")){
+                        if(!(sender instanceof org.bukkit.entity.Player player))throw new IllegalArgumentException(I18n.text(sender, "该指令只能由玩家执行。", "This command can only be run by a player."));
+                        String raw=args[2];String key=raw.contains(":")?raw:"battleroyale:"+raw;
+                        int amount=args.length>3?Math.max(1,Integer.parseInt(args[3])):1;
+                        var stack=new com.npucraft.battleroyale.paper.NativeLootItems().resolve(key);
+                        stack.setAmount(Math.min(amount,stack.getMaxStackSize()));
+                        var left=player.getInventory().addItem(stack);
+                        left.values().forEach(rest->player.getWorld().dropItemNaturally(player.getLocation(),rest));
+                        messages.send(sender, I18n.text(sender, "已发放：%s ×%d", "Given: %s x%d", key, amount));
+                        break;
+                    }
                     if(args.length==3 && args[1].equalsIgnoreCase("stats")){var target=org.bukkit.Bukkit.getPlayerExact(args[2]);if(target==null)throw new IllegalArgumentException(I18n.text(sender, "目标玩家必须在线。", "The target player must be online."));messages.send(sender,String.valueOf(runtime.progression().profile(target.getUniqueId())));break;}
                     if(args.length==2 && args[1].equalsIgnoreCase("storage")){messages.send(sender,runtime.storageDiagnostics());}
                     else if(args.length==2 && args[1].equalsIgnoreCase("recovery")){messages.send(sender,runtime.recoveryDiagnostics());}
