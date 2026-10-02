@@ -10,11 +10,16 @@ public final class ParticleWall {
     public record Point(double x, double y, double z) {}
 
     public static List<Point> sample(Zone zone,double x,double y,double z,ZoneUiSettings settings) {
+        return sample(zone,x,y,z,settings,settings.below(),settings.above());
+    }
+
+    /** Explicit vertical span so a caller can drop the curtain to terrain for airborne viewers. */
+    public static List<Point> sample(Zone zone,double x,double y,double z,ZoneUiSettings settings,double below,double above) {
         Objects.requireNonNull(zone); Objects.requireNonNull(settings);
         Checks.finite(x,"player x"); Checks.finite(y,"player y"); Checks.finite(z,"player z");
         if (zone.halfSize()==0) return List.of();
         int cap=settings.maximumParticles();
-        List<Double> heights=axis(y-settings.below(),y+settings.above(),y+1.6,settings.verticalSpacing(),cap);
+        List<Double> heights=axis(y-below,y+above,y+1.6,settings.verticalSpacing(),cap);
         List<Edge> edges=new ArrayList<>(4);
         edge(edges,true,zone.minX(),zone.minZ(),zone.maxZ(),x,z,heights,settings);
         edge(edges,true,zone.maxX(),zone.minZ(),zone.maxZ(),x,z,heights,settings);

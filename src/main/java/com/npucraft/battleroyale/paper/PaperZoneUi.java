@@ -50,8 +50,16 @@ public final class PaperZoneUi {
             navigationViewers.add(player.getUniqueId());
         }
         if (!spectator && settings.wallEnabled() && tick%settings.wallInterval()==0) {
+            // Airborne viewers lose a player-height wall entirely; drop the curtain to the terrain
+            // so the boundary stays visible (and judgeable) from the sky.
+            double y=location.getY(),below=settings.below();
+            var world=location.getWorld();
+            if(world!=null){
+                double ground=world.getHighestBlockYAt(location.getBlockX(),location.getBlockZ());
+                if(y-ground>24) below=Math.min(y-(ground+2),64);
+            }
             int sample=0;
-            for (var point:ParticleWall.sample(zone.current(),location.getX(),location.getY(),location.getZ(),settings)) {
+            for (var point:ParticleWall.sample(zone.current(),location.getX(),location.getY(),location.getZ(),settings,below,settings.above())) {
                 // Colored curtain and bright outline share the existing cap; never emit a second layer per sample.
                 if (settings.coloredWall() && sample++%4!=0)
                     player.spawnParticle(Particle.DUST,point.x(),point.y(),point.z(),1,0,0,0,0,BLUE_EDGE);
