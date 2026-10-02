@@ -38,8 +38,8 @@ public final class PaperFlightDeployment implements Listener,AutoCloseable {
     private final Map<UUID,Long> departed=new HashMap<>();
     private final Set<FlightRoute.Chunk> tickets=new LinkedHashSet<>();
     private final FlightRoute route;
-    private final int height;
-    private final List<FlightRoute.Cell> corridor;
+    private int height;
+    private List<FlightRoute.Cell> corridor;
     private final ArrayDeque<FlightRoute.Chunk> loading;
     private final CompletableFuture<Void> drained=new CompletableFuture<>();
     private PaperFlightEquipment equipment;
@@ -131,12 +131,37 @@ public final class PaperFlightDeployment implements Listener,AutoCloseable {
         if(!loading.isEmpty()){
             pendingChunk=loading.removeFirst();pending=world.getChunkAtAsync(pendingChunk.x(),pendingChunk.z(),true);return;
         }
+        if(inspected==0){
+            adaptCourseToTerrain();
+        }
         for(int i=0;i<2048&&inspected<corridor.size();i++,inspected++){
             var at=corridor.get(inspected);
             if(!world.getBlockAt(at.x(),at.y(),at.z()).getType().isAir())throw new IllegalStateException("Flight corridor is obstructed; existing terrain was preserved");
         }
         if(inspected<corridor.size())return;
         platform=new Platform(world,route);platform.move(route.center(0,height));board(now);
+    }
+    /**
+     * Terrain at the build ceiling is normal for custom maps; aborting the match for it is not.
+     * One heightmap pass over the corridor footprint, then the course flies just below the highest
+     * peak instead of the world ceiling. Only the aircraft's own envelope shrinks: boarding slots,
+     * the platform and the corridor all derive from this height, so no other constant changes.
+     */
+    private void adaptCourseToTerrain(){
+        int top=world.getMinHeight()-1;
+        var columns=new HashSet<Long>();
+        for(var at:corridor){
+            long packed=((long)(at.x()+33554432)<<26)|(at.z()+33554432);
+            if(!columns.add(packed))continue;
+            int highest=world.getHighestBlockYAt(at.x(),at.z());
+            if(highest>top)top=highest;
+        }
+        if(top<height)return;
+        int ceiling=world.getMaxHeight()-6;
+        int adjusted=Math.min(top+1,ceiling);
+        if(adjusted<world.getMinHeight()+32)throw new IllegalStateException("Flight corridor blocked: terrain reaches the build ceiling");
+        plugin.getLogger().info("Flight course lowered from y="+height+" to y="+adjusted+" (highest terrain y="+top+")");
+        height=adjusted;corridor=route.corridor(height);inspected=0;
     }
     private void board(long now){
         phase=Phase.BOARDING;phaseStarted=now;int index=0;
