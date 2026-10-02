@@ -30,8 +30,25 @@ public final class AtomicFiles {
         while (buffer.hasRemaining()) channel.write(buffer);
         channel.force(true);
       }
-      Files.move(
-          temporary, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+      // Windows: AV scanners and indexers transiently hold the destination open;
+      // a short bounded retry keeps atomic replacement reliable without weakening it.
+      IOException last = null;
+      for (int attempt = 0; attempt < 3; attempt++) {
+        try {
+          Files.move(
+              temporary, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+          return;
+        } catch (AtomicMoveNotSupportedException unsupported) {
+          throw unsupported;
+        } catch (AccessDeniedException denied) {
+          last = denied;
+          try { Thread.sleep(100L << attempt); } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw denied;
+          }
+        }
+      }
+      throw last;
     } finally {
       Files.deleteIfExists(temporary);
     }

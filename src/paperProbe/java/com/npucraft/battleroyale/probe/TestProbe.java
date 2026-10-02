@@ -51,7 +51,12 @@ public final class TestProbe extends JavaPlugin implements Listener {
         getServer().getPluginManager().registerEvents(this,this);
         getServer().getPluginManager().registerEvents(m5,this);
         getServer().getPluginManager().registerEvents(m6,this);
-        getCommand("brprobe").setExecutor((sender,command,label,args)-> {
+        getCommand("brprobe").setExecutor((raw,command,label,args)-> {
+            // Async probes answer after the RCON client is gone, so verdicts must also reach
+            // the server log: tee every feedback message into the plugin logger.
+            org.bukkit.command.CommandSender sender=(org.bukkit.command.CommandSender)java.lang.reflect.Proxy
+                    .newProxyInstance(org.bukkit.command.CommandSender.class.getClassLoader(),
+                            new Class<?>[]{org.bukkit.command.CommandSender.class}, new LogTee(raw,this));
             try {
                 if(args.length > 0 && args[0].equals("p26rc10quality")) { rc10Quality.command(sender,args); return true; }
                 if(args.length > 0 && args[0].equals("p26rc10ground")) { rc10Ground.command(sender,args); return true; }
@@ -200,6 +205,18 @@ public final class TestProbe extends JavaPlugin implements Listener {
             } catch(Exception error) { sender.sendMessage("PROBE failed="+error); }
             return true;
         });
+    }
+    /** Delegates everything to the real sender; echoes feedback into the plugin logger. */
+    private static final class LogTee implements java.lang.reflect.InvocationHandler {
+        private final org.bukkit.command.CommandSender target;
+        private final JavaPlugin plugin;
+        private LogTee(org.bukkit.command.CommandSender target,JavaPlugin plugin){this.target=target;this.plugin=plugin;}
+        @Override public Object invoke(Object proxy,java.lang.reflect.Method method,Object[] args) throws Throwable {
+            if(method.getName().startsWith("sendMessage") && args!=null && args.length>0)
+                plugin.getLogger().info("VERDICT "+java.util.Arrays.deepToString(args));
+            try { return method.invoke(target,args); }
+            catch(java.lang.reflect.InvocationTargetException wrapped){ throw wrapped.getCause(); }
+        }
     }
     @EventHandler(priority=EventPriority.LOWEST)
     public void reject(PlayerTeleportEvent event) {
