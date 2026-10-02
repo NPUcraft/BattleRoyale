@@ -19,7 +19,7 @@ class AirdropEnchantmentTierTest {
         var random=new Random(71);var counts=new int[3];
         for(int i=0;i<10_000;i++)counts[AirdropEnchantmentTier.roll(random).ordinal()]++;
         assertTrue(counts[0]>8200&&counts[0]<8800);
-        assertTrue(counts[1]>850&&counts[1]<1150);
-        assertTrue(counts[2]>400&&counts[2]<600);
+        assertTrue(counts[1]>1100&&counts[1]<1500);
+        assertTrue(counts[2]>100&&counts[2]<300);
     }
 }

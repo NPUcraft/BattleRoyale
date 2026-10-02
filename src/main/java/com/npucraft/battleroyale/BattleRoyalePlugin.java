@@ -57,6 +57,7 @@ public final class BattleRoyalePlugin extends JavaPlugin {
             getServer().getPluginManager().registerEvents(new PlayerConnectionListener(runtime), this);
             getServer().getPluginManager().registerEvents(new com.npucraft.battleroyale.listener.ChatStyleListener(this), this);
             getServer().getPluginManager().registerEvents(new com.npucraft.battleroyale.listener.PvPProtectionListener(runtime), this);
+            getServer().getPluginManager().registerEvents(new com.npucraft.battleroyale.listener.PaperFunItems(this,runtime), this);
             runtime.beginRecovery();
             messages.loaded(foundation.state().configuration());
         } catch (Exception exception) {

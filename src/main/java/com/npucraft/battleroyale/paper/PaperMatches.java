@@ -398,6 +398,8 @@ public final class PaperMatches implements MatchLifecycle {
         boolean cleanupFailed;
         PaperLootRuntime loot;
         PaperAirdrops airdrops;
+        /** Read-only handle for listeners outside this package (signal gun). */
+        public PaperAirdrops airdropsView(){return airdrops;}
         PaperMatchHorses horses;
         UUID worldId;
         SessionLoop task;

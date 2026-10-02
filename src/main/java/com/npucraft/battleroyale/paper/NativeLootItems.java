@@ -8,7 +8,11 @@ import java.util.random.RandomGenerator;
 import org.bukkit.Material;
 import org.bukkit.Color;
 import org.bukkit.FireworkEffect;
+import org.bukkit.NamespacedKey;
+import org.bukkit.attribute.Attribute;
+import org.bukkit.attribute.AttributeModifier;
 import org.bukkit.enchantments.Enchantment;
+import org.bukkit.inventory.EquipmentSlotGroup;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.PotionMeta;
 import org.bukkit.inventory.meta.FireworkMeta;
@@ -54,12 +58,16 @@ public final class NativeLootItems implements LootItemResolver<ItemStack> {
         return material;
     }
     @Override public void validate(String key) { Objects.requireNonNull(key,"loot key");if(key.equals("battleroyale:combat_firework")||key.equals("battleroyale:knockback_stick")
-            ||key.equals("battleroyale:slowness_arrow")||key.equals("battleroyale:levitation_arrow"))return;if(potion(key)==null)material(key); }
+            ||key.equals("battleroyale:slowness_arrow")||key.equals("battleroyale:levitation_arrow")
+            ||key.equals("battleroyale:throwing_torch")||key.equals("battleroyale:sneakers")||key.equals("battleroyale:signal_gun"))return;if(potion(key)==null)material(key); }
     @Override public ItemStack resolve(String key) {
         Objects.requireNonNull(key,"loot key");if(key.equals("battleroyale:combat_firework"))return firework();
         if(key.equals("battleroyale:knockback_stick"))return knockbackStick();
         if(key.equals("battleroyale:slowness_arrow"))return arrow(PotionEffectType.SLOWNESS,220,"迟缓药水箭 · Slowness (11s)",Color.fromRGB(0x7CAFC6));
         if(key.equals("battleroyale:levitation_arrow"))return arrow(PotionEffectType.LEVITATION,100,"飘浮药水箭 · Levitation (5s)",Color.fromRGB(0xF4F4B3));
+        if(key.equals("battleroyale:throwing_torch"))return throwingTorch();
+        if(key.equals("battleroyale:sneakers"))return sneakers();
+        if(key.equals("battleroyale:signal_gun"))return signalGun();
         var potion=potion(key);
         if(potion==null)return new ItemStack(material(key));
         var item=new ItemStack(potion.splash()?Material.SPLASH_POTION:Material.POTION);
@@ -92,6 +100,31 @@ public final class NativeLootItems implements LootItemResolver<ItemStack> {
         meta.setColor(color);
         meta.displayName(Component.text(label).color(UiText.VALUE).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC,false));
         item.setItemMeta(meta);return item;
+    }
+    /** Throwable torch launched like a fire charge; the glint marks it as a special ordnance item. */
+    private ItemStack throwingTorch(){
+        var item=new ItemStack(Material.TORCH);var meta=item.getItemMeta();
+        meta.displayName(Component.text("投掷火把 · Throwing Torch").color(UiText.VALUE).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC,false));
+        meta.setEnchantmentGlintOverride(true);item.setItemMeta(meta);
+        com.npucraft.battleroyale.listener.PaperFunItems.mark(item,com.npucraft.battleroyale.listener.PaperFunItems.TORCH);return item;
+    }
+    /** Zero-armour golden boots granting permanent Speed I while worn; the glint separates them from loot gold boots. */
+    private ItemStack sneakers(){
+        var item=new ItemStack(Material.GOLDEN_BOOTS);var meta=item.getItemMeta();
+        meta.displayName(Component.text("疾风之履 · Speed I").color(UiText.VALUE).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC,false));
+        meta.addAttributeModifier(Attribute.ARMOR,new AttributeModifier(NamespacedKey.minecraft("zero_armor"),0,
+                AttributeModifier.Operation.ADD_NUMBER,EquipmentSlotGroup.FEET));
+        meta.addAttributeModifier(Attribute.ARMOR_TOUGHNESS,new AttributeModifier(NamespacedKey.minecraft("zero_toughness"),0,
+                AttributeModifier.Operation.ADD_NUMBER,EquipmentSlotGroup.FEET));
+        meta.setEnchantmentGlintOverride(true);item.setItemMeta(meta);
+        com.npucraft.battleroyale.listener.PaperFunItems.mark(item,com.npucraft.battleroyale.listener.PaperFunItems.SNEAKERS);return item;
+    }
+    /** One-shot flare gun: use anywhere to summon a supply drop descending onto your position. */
+    private ItemStack signalGun(){
+        var item=new ItemStack(Material.NETHER_STAR);var meta=item.getItemMeta();
+        meta.displayName(Component.text("信号枪 · Signal Gun").color(UiText.VALUE).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC,false));
+        meta.setEnchantmentGlintOverride(true);item.setItemMeta(meta);
+        com.npucraft.battleroyale.listener.PaperFunItems.mark(item,com.npucraft.battleroyale.listener.PaperFunItems.SIGNAL_GUN);return item;
     }
     /** Ordinary equipment receives at most one applicable, non-curse level I/II enchantment. */
     public ItemStack roll(String key,RandomGenerator random){
