@@ -29,6 +29,10 @@ tasks.test {
     val mysqlPort = providers.environmentVariable("BATTLEROYALE_MYSQL_TEST_PORT")
     inputs.property("mysqlTestPort", mysqlPort.orElse("disabled"))
     useJUnitPlatform { if (!mysqlPort.isPresent) excludeTags("mysql") }
+    // Opt-in live-config gate: forward -Dbr.live.config=<plugin data directory> to the test JVM.
+    val liveConfig = providers.systemProperty("br.live.config").orElse("")
+    inputs.property("br.live.config", liveConfig)
+    systemProperty("br.live.config", liveConfig.get())
 }
 tasks.processResources {
     val pluginVersion = project.version.toString()
