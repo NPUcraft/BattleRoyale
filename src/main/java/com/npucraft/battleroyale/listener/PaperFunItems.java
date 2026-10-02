@@ -158,12 +158,28 @@ public final class PaperFunItems implements Listener {
 
     // ---------- mystery food ----------
 
-    /** The cursed feast: eight minute-long buffs, a wither roar heard across the world, then death. */
-    @EventHandler(priority=EventPriority.MONITOR,ignoreCancelled=true)
+    /** The cursed feast: eight minute-long buffs, a wither roar heard across the world, then death.
+     *  Only edible during the 15 seconds right after the second-to-last zone has finished shrinking
+     *  (final zone static, not yet closing) — outside that window the feast refuses to be eaten. */
+    @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)
     public void mysteryFeast(PlayerItemConsumeEvent event){
         if(!MYSTERY_FOOD.equals(funId(event.getItem())))return;
         var player=event.getPlayer();
-        if(matches().activePlayer(player.getUniqueId()).filter(e->e.inWorld(player.getWorld().getUID())).isEmpty())return;
+        var entryOptional=matches().activePlayer(player.getUniqueId()).filter(e->e.inWorld(player.getWorld().getUID()));
+        if(entryOptional.isEmpty())return;
+        var entry=entryOptional.get();
+        var zone=entry.session.zone().orElse(null);
+        // The window: final stage is WAITING (previous shrink finished, last zone not closing yet)
+        // and no more than 15s of that wait has elapsed.
+        boolean window=zone!=null
+                && zone.phase()==com.npucraft.battleroyale.zone.ZonePhase.WAITING
+                && zone.stageIndex()==zone.stageCount()-1
+                && zone.stage().waitDuration().toSeconds()-zone.remainingSeconds()<=15;
+        if(!window){
+            event.setCancelled(true);
+            player.sendActionBar(UiText.warning(player,"现在还不是时候——等最后一圈静止下来的那一刻再吃。","Not yet — feast only when the last zone stands still."));
+            return;
+        }
         for(var type:new PotionEffectType[]{PotionEffectType.JUMP_BOOST,PotionEffectType.SPEED,PotionEffectType.STRENGTH,
                 PotionEffectType.FIRE_RESISTANCE,PotionEffectType.RESISTANCE,PotionEffectType.HASTE,
                 PotionEffectType.NIGHT_VISION,PotionEffectType.GLOWING,PotionEffectType.ABSORPTION}){
