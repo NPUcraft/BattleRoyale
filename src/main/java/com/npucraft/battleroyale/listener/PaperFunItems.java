@@ -28,7 +28,7 @@ import org.bukkit.NamespacedKey;
  *  Speed I while worn). All three carry the fun-item PDC marker so loot copies stay recognisable. */
 public final class PaperFunItems implements Listener {
     private static final NamespacedKey FUN=new NamespacedKey("battleroyale","fun_item");
-    public static final String TORCH="throwing_torch",SNEAKERS="sneakers",SIGNAL_GUN="signal_gun";
+    public static final String TORCH="throwing_torch",SNEAKERS="sneakers",SIGNAL_GUN="signal_gun",MYSTERY_FOOD="mystery_food";
     /** Marks a custom fun item stack; called by NativeLootItems while building loot. */
     public static void mark(ItemStack item,String id){
         var meta=item.getItemMeta();meta.getPersistentDataContainer().set(FUN,PersistentDataType.STRING,id);item.setItemMeta(meta);
@@ -154,5 +154,29 @@ public final class PaperFunItems implements Listener {
             if(equipment==null||!SNEAKERS.equals(funId(equipment.getBoots())))continue;
             player.addPotionEffect(new PotionEffect(PotionEffectType.SPEED,61,0,true,false,true));
         }
+    }
+
+    // ---------- mystery food ----------
+
+    /** The cursed feast: eight minute-long buffs, a wither roar heard across the world, then death. */
+    @EventHandler(priority=EventPriority.MONITOR,ignoreCancelled=true)
+    public void mysteryFeast(PlayerItemConsumeEvent event){
+        if(!MYSTERY_FOOD.equals(funId(event.getItem())))return;
+        var player=event.getPlayer();
+        if(matches().activePlayer(player.getUniqueId()).filter(e->e.inWorld(player.getWorld().getUID())).isEmpty())return;
+        for(var type:new PotionEffectType[]{PotionEffectType.JUMP_BOOST,PotionEffectType.SPEED,PotionEffectType.STRENGTH,
+                PotionEffectType.FIRE_RESISTANCE,PotionEffectType.RESISTANCE,PotionEffectType.HASTE,
+                PotionEffectType.NIGHT_VISION,PotionEffectType.GLOWING,PotionEffectType.ABSORPTION}){
+            player.addPotionEffect(new PotionEffect(type,1200,0,false,true,true));
+        }
+        var loc=player.getLocation();
+        for(var other:player.getWorld().getPlayers())other.playSound(loc,Sound.ENTITY_WITHER_SPAWN,1f,1f);
+        for(var other:player.getWorld().getPlayers())other.sendMessage(UiText.message("§c有人服下了禁忌盛宴——60 秒后将被诅咒吞噬。"));
+        player.sendActionBar(UiText.warning(player,"60 秒后死亡……跑！","You will die in 60 seconds... run!"));
+        plugin.getServer().getScheduler().runTaskLater(plugin,()->{
+            if(!player.isOnline()||player.isDead())return;
+            if(matches().activePlayer(player.getUniqueId()).filter(e->e.inWorld(player.getWorld().getUID())).isEmpty())return;
+            player.setHealth(0);
+        },60L*20L);
     }
 }

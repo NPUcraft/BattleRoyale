@@ -59,7 +59,8 @@ public final class NativeLootItems implements LootItemResolver<ItemStack> {
     }
     @Override public void validate(String key) { Objects.requireNonNull(key,"loot key");if(key.equals("battleroyale:combat_firework")||key.equals("battleroyale:knockback_stick")
             ||key.equals("battleroyale:slowness_arrow")||key.equals("battleroyale:levitation_arrow")
-            ||key.equals("battleroyale:throwing_torch")||key.equals("battleroyale:sneakers")||key.equals("battleroyale:signal_gun"))return;if(potion(key)==null)material(key); }
+            ||key.equals("battleroyale:throwing_torch")||key.equals("battleroyale:sneakers")||key.equals("battleroyale:signal_gun")
+            ||key.equals("battleroyale:mystery_food"))return;if(potion(key)==null)material(key); }
     @Override public ItemStack resolve(String key) {
         Objects.requireNonNull(key,"loot key");if(key.equals("battleroyale:combat_firework"))return firework();
         if(key.equals("battleroyale:knockback_stick"))return knockbackStick();
@@ -68,6 +69,7 @@ public final class NativeLootItems implements LootItemResolver<ItemStack> {
         if(key.equals("battleroyale:throwing_torch"))return throwingTorch();
         if(key.equals("battleroyale:sneakers"))return sneakers();
         if(key.equals("battleroyale:signal_gun"))return signalGun();
+        if(key.equals("battleroyale:mystery_food"))return mysteryFood();
         var potion=potion(key);
         if(potion==null)return new ItemStack(material(key));
         var item=new ItemStack(potion.splash()?Material.SPLASH_POTION:Material.POTION);
@@ -125,6 +127,17 @@ public final class NativeLootItems implements LootItemResolver<ItemStack> {
         meta.displayName(Component.text("信号枪 · Signal Gun").color(UiText.VALUE).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC,false));
         meta.setEnchantmentGlintOverride(true);item.setItemMeta(meta);
         com.npucraft.battleroyale.listener.PaperFunItems.mark(item,com.npucraft.battleroyale.listener.PaperFunItems.SIGNAL_GUN);return item;
+    }
+    /** Cursed feast: eight buffs for a minute, a wither roar for everyone, then death. */
+    private ItemStack mysteryFood(){
+        var item=new ItemStack(Material.SUSPICIOUS_STEW);var meta=item.getItemMeta();
+        meta.displayName(Component.text("神秘食物 · 禁忌盛宴").color(UiText.VALUE).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC,false));
+        var lore=new java.util.ArrayList<Component>();
+        lore.add(Component.text("60 秒全增益：跳跃/迅捷/力量/抗火/抗性/急迫/夜视/发光").color(UiText.VALUE).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC,false));
+        lore.add(Component.text("……然后你会死。全服都会听见凋零的咆哮。").color(net.kyori.adventure.text.format.NamedTextColor.DARK_RED).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC,false));
+        meta.lore(lore);
+        meta.setEnchantmentGlintOverride(true);item.setItemMeta(meta);
+        com.npucraft.battleroyale.listener.PaperFunItems.mark(item,com.npucraft.battleroyale.listener.PaperFunItems.MYSTERY_FOOD);return item;
     }
     /** Ordinary equipment receives at most one applicable, non-curse level I/II enchantment. */
     public ItemStack roll(String key,RandomGenerator random){
