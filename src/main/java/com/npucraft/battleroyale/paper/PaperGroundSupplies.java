@@ -107,6 +107,7 @@ public final class PaperGroundSupplies {
             opening.remove(entry.point().id());materialize(present.get(entry.player()),entry.point());emitted++;
         }
         if(++ticks%10!=0)return;
+        sweepPlaced();
         for(var player:present.values()){
             var near=nearby(player);int rendered=0;
             for(var point:near){
