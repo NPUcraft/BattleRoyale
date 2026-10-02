@@ -133,7 +133,7 @@ public final class NativeLootItems implements LootItemResolver<ItemStack> {
         var item=new ItemStack(Material.SUSPICIOUS_STEW);var meta=item.getItemMeta();
         meta.displayName(Component.text("神秘食物 · 禁忌盛宴").color(UiText.VALUE).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC,false));
         var lore=new java.util.ArrayList<Component>();
-        lore.add(Component.text("食用后获得一段时间的大量效果（仅在最后一圈静止的前 15 秒内可食用）").color(UiText.VALUE).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC,false));
+        lore.add(Component.text("食用后获得一段时间的大量效果").color(UiText.VALUE).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC,false));
         lore.add(Component.text("……然后你会死。全服都会听见凋零的咆哮。").color(net.kyori.adventure.text.format.NamedTextColor.DARK_RED).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC,false));
         meta.lore(lore);
         meta.setEnchantmentGlintOverride(true);item.setItemMeta(meta);
