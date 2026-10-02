@@ -31,9 +31,10 @@ public final class PaperZoneBorder implements AutoCloseable {
     public int size(){return viewers.size();}
     public WorldBorder border(){return border;}
     /** Subscribe a live combatant and track the interpolated safe square with the absolute-size API only. */
-    public void apply(Player player,ZoneRuntime zone) {
+    public void apply(Player player,ZoneRuntime zone) { apply(player,zone.current()); }
+    /** Static-square overload used before RUNNING (flight deployment shows the initial square). */
+    public void apply(Player player,Zone current) {
         if(!enabled)return;
-        Zone current=zone.current();
         // The final collapse has no safe square; the server border is the only sane fallback.
         if(current.halfSize()<=0){restore(player.getUniqueId());return;}
         double size=2*(current.halfSize()+MARGIN);

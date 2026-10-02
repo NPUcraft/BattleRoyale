@@ -81,14 +81,14 @@ public final class PvPProtectionListener implements Listener {
     }
     /** TNT detonates the instant it is lit instead of running the vanilla four-second fuse. */
     static boolean ignition(Material type) { return type==Material.FLINT_AND_STEEL||type==Material.FIRE_CHARGE; }
-    /** Placed TNT is a thrown charge: it primes the moment it lands, no flint needed. */
+    /** Placed TNT is a thrown charge: it primes the moment it lands on a short fuse, no flint needed. */
     @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)
     public void autoIgniteTnt(BlockPlaceEvent event) {
         if(event.getBlockPlaced().getType()!=Material.TNT) return;
         matches().activePlayer(event.getPlayer().getUniqueId()).filter(e -> inWorld(e,event.getBlockPlaced().getWorld())).ifPresent(entry -> {
             event.setCancelled(true);
             var location=event.getBlockPlaced().getLocation().add(.5,0,.5);
-            event.getBlockPlaced().getWorld().spawn(location,TNTPrimed.class,tnt -> tnt.setSource(event.getPlayer())).setFuseTicks(0);
+            event.getBlockPlaced().getWorld().spawn(location,TNTPrimed.class,tnt -> tnt.setSource(event.getPlayer())).setFuseTicks(60);
             var equipment=event.getPlayer().getEquipment();
             if(equipment!=null) {
                 var item=event.getHand()==EquipmentSlot.OFF_HAND?equipment.getItemInOffHand():equipment.getItemInMainHand();
@@ -96,7 +96,8 @@ public final class PvPProtectionListener implements Listener {
             }
         });
     }
-    /** A fire charge is dispenser-grade ordnance: right-click launches a small fireball, one charge per shot. */
+    /** A fire charge is dispenser-grade ordnance: right-click a block (or use the attack swing,
+     *  which vanilla clients always send) to launch a small fireball, one charge per shot. */
     @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)
     public void launchFireCharge(PlayerInteractEvent event) {
         if(event.getItem()==null || event.getItem().getType()!=Material.FIRE_CHARGE) return;
@@ -105,14 +106,42 @@ public final class PvPProtectionListener implements Listener {
         if(event.getAction()==Action.RIGHT_CLICK_BLOCK && event.getClickedBlock()!=null && event.getClickedBlock().getType()==Material.TNT) return;
         matches().activePlayer(event.getPlayer().getUniqueId()).filter(e -> inWorld(e,event.getPlayer().getWorld())).ifPresent(entry -> {
             event.setCancelled(true);
-            var player=event.getPlayer();
-            player.launchProjectile(SmallFireball.class,player.getEyeLocation().getDirection().normalize().multiply(2.0));
-            var equipment=player.getEquipment();
-            if(equipment!=null) {
-                var item=event.getHand()==EquipmentSlot.OFF_HAND?equipment.getItemInOffHand():equipment.getItemInMainHand();
-                if(item.getType()==Material.FIRE_CHARGE) item.setAmount(item.getAmount()-1);
-            }
+            launch(event.getPlayer());
         });
+    }
+    /** Vanilla clients never send an air use packet for fire charges (Item.use() is PASS), so aiming
+     *  at the horizon produced no event at all. The attack swing is always sent — that is the ranged trigger. */
+    @EventHandler(priority=EventPriority.MONITOR)
+    public void swingFireCharge(PlayerAnimationEvent event) {
+        if(event.getAnimationType()!=PlayerAnimationType.ARM_SWING) return;
+        var equipment=event.getPlayer().getEquipment();
+        if(equipment==null||equipment.getItemInMainHand().getType()!=Material.FIRE_CHARGE) return;
+        launch(event.getPlayer());
+    }
+    /** A launched fire charge detonates on impact like a TNT charge: power 4, terrain damage, attributed. */
+    @EventHandler(priority=EventPriority.MONITOR,ignoreCancelled=true)
+    public void fireballImpact(ProjectileHitEvent event) {
+        if(!(event.getEntity() instanceof SmallFireball fireball)) return;
+        if(!(fireball.getShooter() instanceof Player shooter)) return;
+        matches().activePlayer(shooter.getUniqueId()).filter(e -> inWorld(e,fireball.getWorld())).ifPresent(entry -> {
+            var at=fireball.getLocation();
+            fireball.getWorld().createExplosion(at.getX(),at.getY(),at.getZ(),4f,false,true,shooter);
+            fireball.remove();
+        });
+    }
+    private static final long SHOT_COOLDOWN=400_000_000L;
+    private final Map<UUID,Long> lastShot=new HashMap<>();
+    private void launch(Player player) {
+        long now=System.nanoTime();
+        if(now-lastShot.getOrDefault(player.getUniqueId(),0L)<SHOT_COOLDOWN) return;
+        if(matches().activePlayer(player.getUniqueId()).filter(e -> inWorld(e,player.getWorld())).isEmpty()) return;
+        lastShot.put(player.getUniqueId(),now);
+        player.launchProjectile(SmallFireball.class,player.getEyeLocation().getDirection().normalize().multiply(2.0));
+        var equipment=player.getEquipment();
+        if(equipment!=null&&equipment.getItemInMainHand().getType()==Material.FIRE_CHARGE) {
+            var item=equipment.getItemInMainHand();
+            if(item.getAmount()>1) item.setAmount(item.getAmount()-1); else equipment.setItemInMainHand(null);
+        }
     }
     @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)
     public void detonateTnt(PlayerInteractEvent event) {
@@ -167,16 +196,12 @@ public final class PvPProtectionListener implements Listener {
     @EventHandler(priority=EventPriority.MONITOR,ignoreCancelled=true)
     public void spawn(EntitySpawnEvent event) {
         if(!(event.getEntity() instanceof TNTPrimed tnt)) return;
-        boolean managed=false;
         for(var entry:matches().runningEntries()) if(inWorld(entry,tnt.getWorld())) {
-            managed=true;
             UUID owner=runtime.provenance().owner(tnt,entry);
             if(owner==null) owner=entry.hazards.owner(key(tnt.getLocation().getBlock()));
             entry.hazards.entity(tnt.getUniqueId(),owner);
             entry.hazards.block(key(tnt.getLocation().getBlock()),null);
         }
-        // Any ignition path (redstone, fire, dispenser) also detonates immediately instead of after four seconds.
-        if(managed)tnt.setFuseTicks(0);
     }
     @EventHandler(priority=EventPriority.MONITOR,ignoreCancelled=true)
     public void launch(ProjectileLaunchEvent event) {

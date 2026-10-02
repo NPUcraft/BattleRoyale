@@ -72,6 +72,10 @@ public final class PaperFlightDeployment implements Listener,AutoCloseable {
         if(chunks.size()>384)throw new IllegalArgumentException("Flight chunk budget exceeded");
         loading=new ArrayDeque<>(chunks);
     }
+    /** Optional pre-RUNNING overlay: boundary wall plus per-player world border while boarding, gliding, or waiting. */
+    public interface Boundary { void render(Player player,long tick); }
+    private Boundary boundary;
+    public void boundary(Boundary value){boundary=value;}
     public void start(Runnable ready,Consumer<Throwable> failed){
         requireMain();if(startedOnce||stopped)throw new IllegalStateException("Flight already started or stopped");
         startedOnce=true;this.ready=Objects.requireNonNull(ready);this.failed=Objects.requireNonNull(failed);started=nanos.getAsLong();phaseStarted=started;
@@ -92,6 +96,7 @@ public final class PaperFlightDeployment implements Listener,AutoCloseable {
             if(phase==Phase.LOADING){load(now);return;}
             updatePassengers(now);
             if(stopped)return;
+            renderBoundary();
             if(progress().completed()==fallbacks.size()){complete();return;}
             if(phase==Phase.BOARDING&&now-phaseStarted>=FlightRoute.BOARDING_SECONDS*SECOND){phase=Phase.FLYING;phaseStarted=now;}
             if(phase==Phase.FLYING&&tick%3==0){
@@ -105,6 +110,15 @@ public final class PaperFlightDeployment implements Listener,AutoCloseable {
     }
     private void evacuate(long now){
         for(UUID id:fallbacks.keySet())if(presence.get(id)==Presence.ONBOARD)eject(id,now);
+    }
+    /** A render failure must never abort deployment: log and keep flying. */
+    private void renderBoundary(){
+        if(boundary==null)return;
+        for(UUID id:fallbacks.keySet()){
+            Player player=lookup.apply(id);
+            if(player==null||!player.isOnline()||player.isDead()||!player.getWorld().equals(world))continue;
+            try{boundary.render(player,tick);}catch(Throwable error){plugin.getLogger().warning("Deployment boundary render failed: "+error);}
+        }
     }
     private void load(long now){
         if(now-started>FlightRoute.LOADING_SECONDS*SECOND)throw new IllegalStateException("Flight course loading exceeded 45 seconds");

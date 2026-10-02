@@ -86,6 +86,13 @@ public final class PaperMatches implements MatchLifecycle {
                 starters,()-> session.state()==GameState.STARTING && entries.get(session.sessionId())==entry,scheduler,clock,()->{
                     if(closed||entries.get(session.sessionId())!=entry||session.state()!=GameState.STARTING)return;
                     entry.flight=new PaperFlightDeployment(plugin,session,fallbackLandings,new java.util.Random(random.nextLong()));
+                    // The zone tick only runs for RUNNING; deployment still shows the initial boundary
+                    // so players can judge the square while skydiving, and the border actually blocks.
+                    var initialZone=session.initialZone().orElseThrow();
+                    entry.flight.boundary((player,t)->{
+                        entry.ui.renderWall(player,initialZone,t);
+                        if(t%20==0)entry.border.apply(player,initialZone);
+                    });
                     entry.flight.start(ready,failed);
                 },failed);
     }
