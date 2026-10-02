@@ -87,7 +87,7 @@ public final class NativeLootItems implements LootItemResolver<ItemStack> {
         else if(type.endsWith("_HELMET")||type.endsWith("_CHESTPLATE")||type.endsWith("_LEGGINGS")||type.endsWith("_BOOTS"))primary=Enchantment.PROTECTION;
         else if(item.getType()==Material.BOW)primary=Enchantment.POWER;
         else if(item.getType()==Material.CROSSBOW)primary=Enchantment.QUICK_CHARGE;
-        else if(item.getType()==Material.TRIDENT)primary=Enchantment.IMPALING;
+        else if(item.getType()==Material.TRIDENT)primary=Enchantment.LOYALTY;
         else if(item.getType()==Material.MACE)primary=Enchantment.DENSITY;
         else if(type.endsWith("_PICKAXE")||type.endsWith("_SHOVEL")||type.endsWith("_HOE"))primary=Enchantment.EFFICIENCY;
         else primary=Enchantment.UNBREAKING;
@@ -121,7 +121,9 @@ public final class NativeLootItems implements LootItemResolver<ItemStack> {
         if(type.endsWith("_BOOTS"))choices.add(Enchantment.FEATHER_FALLING);
         if(type.endsWith("_SPEAR"))choices.add(Enchantment.KNOCKBACK);
         if(item.getType()==Material.CROSSBOW)choices.add(Enchantment.QUICK_CHARGE);
-        if(item.getType()==Material.TRIDENT)choices.add(Enchantment.IMPALING);
+        // Impaling only boosts hits in water or rain, which this land-based clear-weather mode never has;
+        // Loyalty keeps a thrown trident recoverable, so it is the meaningful primary here.
+        if(item.getType()==Material.TRIDENT)choices.add(Enchantment.LOYALTY);
         if(item.getType()==Material.MACE)choices.add(Enchantment.DENSITY);
         if(type.endsWith("_PICKAXE")||type.endsWith("_SHOVEL")||type.endsWith("_HOE"))choices.add(Enchantment.EFFICIENCY);
         // The API applicability check excludes food, potions, books and other non-equipment items.

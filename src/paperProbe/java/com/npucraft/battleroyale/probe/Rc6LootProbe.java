@@ -137,7 +137,7 @@ public final class Rc6LootProbe {
     private static void safe(ItemStack item){
         require(item.getType()!=Material.ELYTRA&&item.getEnchantments().size()<=1,"No elytra or enchantment stacks");
         Set<Enchantment> allowed=Set.of(Enchantment.SHARPNESS,Enchantment.PROTECTION,Enchantment.FEATHER_FALLING,Enchantment.POWER,
-                Enchantment.QUICK_CHARGE,Enchantment.IMPALING,Enchantment.DENSITY,Enchantment.EFFICIENCY,Enchantment.UNBREAKING);
+                Enchantment.QUICK_CHARGE,Enchantment.LOYALTY,Enchantment.DENSITY,Enchantment.EFFICIENCY,Enchantment.UNBREAKING);
         for(var entry:item.getEnchantments().entrySet())require(allowed.contains(entry.getKey())&&entry.getKey().canEnchantItem(item)
                 &&entry.getValue()>=1&&entry.getValue()<=2&&entry.getValue()<=entry.getKey().getMaxLevel(),"Only appropriate safe enchantments");
     }
