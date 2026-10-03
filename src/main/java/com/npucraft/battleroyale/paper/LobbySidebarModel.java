@@ -16,6 +16,9 @@ public final class LobbySidebarModel {
     public record RoomView(String id,String name,int players,int maxPlayers,int minPlayers,GameState state,int countdown){
         public RoomView {Objects.requireNonNull(id);Objects.requireNonNull(name);Objects.requireNonNull(state);if(players<0||maxPlayers<1||minPlayers<1)throw new IllegalArgumentException("Invalid room counts");}
     }
+    public record WealthRow(String name,double balance){
+        public WealthRow {Objects.requireNonNull(name);if(Double.isNaN(balance)||Double.isInfinite(balance))throw new IllegalArgumentException("Invalid balance");}
+    }
     public record Page(List<Component> lines,int number,int total){
         public Page {lines=List.copyOf(lines);if(lines.size()>MAX_LINES||number<1||number>total)throw new IllegalArgumentException("Invalid sidebar page");}
     }
@@ -27,6 +30,9 @@ public final class LobbySidebarModel {
         return page(rooms,online,elapsedSeconds,pageSeconds,Locale.CHINESE);
     }
     public static Page page(List<RoomView> rooms,int online,long elapsedSeconds,int pageSeconds,Locale locale){
+        return page(rooms,online,elapsedSeconds,pageSeconds,locale,List.of(),0);
+    }
+    public static Page page(List<RoomView> rooms,int online,long elapsedSeconds,int pageSeconds,Locale locale,List<WealthRow> wealth,double wealthTotal){
         if(online<0||elapsedSeconds<0||pageSeconds<1)throw new IllegalArgumentException("Invalid sidebar clock/count");
         int total=Math.max(1,(rooms.size()+ROOMS_PER_PAGE-1)/ROOMS_PER_PAGE);
         int number=(int)((elapsedSeconds/pageSeconds)%total)+1;
@@ -43,6 +49,15 @@ public final class LobbySidebarModel {
             lines.add(UiText.text(shortName(LobbyText.defaultLabel(locale,room.name())))
                     .append(UiText.value("  "+room.players()+"/"+room.maxPlayers())).append(UiText.muted(" · "))
                     .append(Component.text(state,stateColor(room.state())).decoration(TextDecoration.ITALIC,false)));
+        }
+        if(!wealth.isEmpty()){
+            lines.add(UiText.muted(I18n.text(locale,"财富榜 · TOP "+wealth.size(),"Wealth · TOP "+wealth.size())));
+            for(int i=0;i<wealth.size();i++){
+                var row=wealth.get(i);TextColor rank=switch(i){case 0->NamedTextColor.GOLD;case 1->NamedTextColor.WHITE;case 2->NamedTextColor.YELLOW;default->UiText.BRAND;};
+                lines.add(Component.text((i+1)+". "+row.name(),rank).decoration(TextDecoration.ITALIC,false)
+                        .append(UiText.muted(" · ")).append(UiText.value(PaperEconomyRewards.format(row.balance()))));
+            }
+            lines.add(UiText.muted(I18n.text(locale,"全服合计 ","Server total ")).append(UiText.value(PaperEconomyRewards.format(wealthTotal))));
         }
         lines.add(UiText.muted(I18n.text(locale,"指南针 · 选择房间","Compass · Choose a room"))
                 .append(total>1?UiText.value("  "+number+"/"+total):Component.empty()));

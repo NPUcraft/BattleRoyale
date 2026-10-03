@@ -1,0 +1,37 @@
+config-version: 2
+# 内置大厅只在 world 与 config.yml 的 lobby.world 一致时建造。
+# 专用大厅服确认世界名称后设置 enabled: true；通用默认关闭，避免误改已有世界。
+# 已有配置缺少 structure 时不会自动施工。首次施工前会备份受控范围内的非空气方块。
+# 地板层为 center.y，出生点为 center.y + 1；施工范围为半径32格、y-3 至 y+10。
+# READY 标记存在后绝不自动重建；管理员可临时打开 allow-admin-build 装修。
+structure:
+  enabled: true
+  world: battleroyale_lobby
+  center: { x: 0, y: 200, z: 0 }
+  radius: 32
+  blocks-per-tick: 1200
+  clear-existing-blocks: true
+protection:
+  enabled: true
+  allow-admin-build: false
+login:
+  return-to-lobby: true
+# 准备大厅固定晴天 + 固定正午（6000 是全天最亮的白天刻度）。
+environment:
+  enabled: true
+  fixed-time: 6000
+  clear-weather: true
+
+titles:
+  rooms: 大逃杀 · 选择房间
+  profile: 大逃杀 · 我的战绩
+  leaderboard: 大逃杀 · 排行榜
+  shop: 大逃杀 · 外观商店
+  cosmetics: 大逃杀 · 我的外观
+  confirmation: 确认购买
+items:
+  rooms: { slot: 0, material: COMPASS, name: 选择房间, lore: [右键查看单人、双人和四人房间] }
+  autojoin: { slot: 1, material: ENDER_EYE, name: 快速加入, lore: [右键加入可用房间] }
+  profile: { slot: 4, material: PLAYER_HEAD, name: 我的战绩, lore: [查看评分与永久统计] }
+  leaderboard: { slot: 7, material: GOLD_INGOT, name: 排行榜, lore: [查看总榜和历史排行] }
+  shop: { slot: 8, material: EMERALD, name: 外观商店, lore: [永久解锁个性外观，不影响比赛属性] }

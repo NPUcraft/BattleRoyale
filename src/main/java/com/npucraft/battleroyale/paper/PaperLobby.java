@@ -31,6 +31,7 @@ public final class PaperLobby implements Listener, AutoCloseable {
     private PaperLobbyDataBoard dataBoard;
     private PaperLobbySidebar sidebar;
     private final PaperRegionVoteMenu regionVoting;
+    private final PaperEconomyTop economyTop;
     private com.npucraft.battleroyale.config.LobbySidebarSettings sidebarSettings=com.npucraft.battleroyale.config.LobbySidebarSettings.DEFAULT;
     private LobbyEnvironmentSettings environmentSettings=LobbyEnvironmentSettings.DEFAULT;
     private String sidebarWorld,environmentWorld;
@@ -83,7 +84,8 @@ public final class PaperLobby implements Listener, AutoCloseable {
         if(runtime.rooms().participant(id).isEmpty())try{restoreQueueExit(event.getPlayer());}catch(RuntimeException error){plugin.getLogger().warning("玩家退出时无法恢复按钮原物品，已保留现状："+id+" "+error.getMessage());}
     }
     @EventHandler(priority=EventPriority.MONITOR)public void changedWorld(PlayerChangedWorldEvent event){if(sidebar!=null)sidebar.hide(event.getPlayer());}
-    public PaperLobby(JavaPlugin plugin,PluginRuntime runtime){this.plugin=plugin;this.runtime=runtime;regionVoting=new PaperRegionVoteMenu(plugin,runtime);actionKey=new NamespacedKey(plugin,"lobby_action");queueExitKey=new NamespacedKey(plugin,"queue_exit_original");}
+    public PaperLobby(JavaPlugin plugin,PluginRuntime runtime){this.plugin=plugin;this.runtime=runtime;regionVoting=new PaperRegionVoteMenu(plugin,runtime);actionKey=new NamespacedKey(plugin,"lobby_action");queueExitKey=new NamespacedKey(plugin,"queue_exit_original");
+        economyTop=new PaperEconomyTop(plugin,()->{var data=data();return data==null?"coins":data.economy().currency();});}
     private PaperProgression data(){return runtime.progression();}
     public boolean eligible(Player player) {
         UUID id=player.getUniqueId();if(runtime.editing(id))return false;if(!runtime.recoveryReady() || player.isDead() || runtime.pendingRestore(id) || runtime.matches().frozen(id) || runtime.spectators().registry().find(id).isPresent())return false;
@@ -152,6 +154,7 @@ public final class PaperLobby implements Listener, AutoCloseable {
         sidebar.retain(players.stream().map(Player::getUniqueId).collect(java.util.stream.Collectors.toSet()));
         boolean available=sidebarSettings.enabled()&&ready()&&runtime.recoveryReady()&&data()!=null&&data().ready();
         if(!available){for(var player:players)sidebar.suspend(player);return;}
+        economyTop.tick();
         LobbySidebarModel.Page chinese,english;
         try{
             var rooms=runtime.rooms().rooms().stream().map(room->{
@@ -160,8 +163,9 @@ public final class PaperLobby implements Listener, AutoCloseable {
                         session==null?com.npucraft.battleroyale.session.GameState.WAITING:session.state(),session==null?-1:runtime.rooms().remaining(session));
             }).toList();
             long elapsed=java.util.concurrent.TimeUnit.NANOSECONDS.toSeconds(System.nanoTime()-sidebarStarted);
-            chinese=LobbySidebarModel.page(rooms,players.size(),Math.max(0,elapsed),sidebarSettings.pageSeconds(),Locale.CHINESE);
-            english=LobbySidebarModel.page(rooms,players.size(),Math.max(0,elapsed),sidebarSettings.pageSeconds(),Locale.ENGLISH);
+            var wealth=economyTop.ready()?economyTop.rows().stream().map(r->new LobbySidebarModel.WealthRow(r.name(),r.balance())).toList():List.<LobbySidebarModel.WealthRow>of();
+            chinese=LobbySidebarModel.page(rooms,players.size(),Math.max(0,elapsed),sidebarSettings.pageSeconds(),Locale.CHINESE,wealth,economyTop.total());
+            english=LobbySidebarModel.page(rooms,players.size(),Math.max(0,elapsed),sidebarSettings.pageSeconds(),Locale.ENGLISH,wealth,economyTop.total());
         }catch(RuntimeException error){
             plugin.getLogger().log(java.util.logging.Level.WARNING,"无法读取大厅房间计分板",error);
             for(var player:players)sidebar.suspend(player);return;
