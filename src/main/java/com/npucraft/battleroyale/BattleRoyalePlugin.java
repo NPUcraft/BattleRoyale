@@ -50,7 +50,8 @@ public final class BattleRoyalePlugin extends JavaPlugin {
             foundation = new FoundationService(loader::load, new SessionManager());
             runtime = new PluginRuntime(this, foundation, messages);
             runtime.reload();
-            var handler = new BattleRoyaleCommand(foundation, runtime, messages, getPluginMeta().getVersion());
+            var economyReset=new com.npucraft.battleroyale.paper.PaperEconomyReset(this,()->runtime.progression()==null?"coins":runtime.progression().economy().currency());
+            var handler = new BattleRoyaleCommand(foundation, runtime, messages, economyReset, getPluginMeta().getVersion());
             var command = Objects.requireNonNull(getCommand("battleroyale"), "plugin.yml must declare battleroyale");
             command.setExecutor(handler);
             command.setTabCompleter(handler);

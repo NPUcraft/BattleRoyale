@@ -10,9 +10,10 @@ public final class BattleRoyaleCommand implements CommandExecutor, TabCompleter 
     private final FoundationService foundation;
     private final PluginRuntime runtime;
     private final MessageService messages;
+    private final com.npucraft.battleroyale.paper.PaperEconomyReset economyReset;
     private final String version;
-    public BattleRoyaleCommand(FoundationService foundation, PluginRuntime runtime, MessageService messages, String version) {
-        this.foundation = foundation; this.runtime = runtime; this.messages = messages; this.version = version;
+    public BattleRoyaleCommand(FoundationService foundation, PluginRuntime runtime, MessageService messages, com.npucraft.battleroyale.paper.PaperEconomyReset economyReset, String version) {
+        this.foundation = foundation; this.runtime = runtime; this.messages = messages; this.economyReset = economyReset; this.version = version;
     }
     @Override public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!sender.hasPermission("battleroyale.command")) { messages.denied(sender); return true; }
@@ -51,6 +52,14 @@ public final class BattleRoyaleCommand implements CommandExecutor, TabCompleter 
                     if(!(sender instanceof Player player)){messages.send(sender,"此命令只能由游戏内玩家执行。","Only in-game players can use this command.");break;}
                     var selection=runtime.progression().economy();
                     if(!selection.available()){messages.send(sender,"经济服务未就绪："+selection.diagnostics(),"Economy unavailable: "+selection.diagnostics());break;}
+                    if(args.length>=2&&args[1].equalsIgnoreCase("reset")){
+                        if(!sender.hasPermission("battleroyale.admin")){messages.denied(sender);break;}
+                        if(!(sender instanceof Player resetter))throw new IllegalArgumentException(I18n.text(sender,"全服经济重置必须由游戏内管理员执行二次确认。","The global economy reset must be confirmed in-game by an administrator."));
+                        if(args.length==3&&args[2].equalsIgnoreCase("confirm"))economyReset.confirm(resetter);
+                        else if(args.length==2)economyReset.request(resetter);
+                        else messages.unknown(sender);
+                        break;
+                    }
                     if(args.length>=2&&args[1].equalsIgnoreCase("list")){
                         if(!sender.hasPermission("battleroyale.admin")){messages.denied(sender);break;}
                         var provider=selection.provider();
@@ -187,8 +196,10 @@ public final class BattleRoyaleCommand implements CommandExecutor, TabCompleter 
             if (sender.hasPermission("battleroyale.play")) choices.addAll(List.of("rooms", "join", "autojoin", "leave", "team", "spectate", "lobby", "profile", "leaderboard", "shop", "cosmetics", "vote", "economy"));
             if (sender.hasPermission("battleroyale.admin")) choices.addAll(List.of("reload", "debug"));
             if(adminAccess(sender))choices.add("admin");
-        } else if (args.length == 2 && args[0].equalsIgnoreCase("economy") && sender.hasPermission("battleroyale.admin"))
+        }         else if (args.length == 2 && args[0].equalsIgnoreCase("economy") && sender.hasPermission("battleroyale.admin"))
             choices.add("list");
+        else if (args.length == 3 && args[0].equalsIgnoreCase("economy") && args[1].equalsIgnoreCase("reset") && sender.hasPermission("battleroyale.admin"))
+            choices.add("confirm");
         else if (args.length == 2 && args[0].equalsIgnoreCase("debug") && sender.hasPermission("battleroyale.admin"))
             choices.addAll(List.of("perf", "tasks", "worlds", "economy", "stats", "storage", "recovery", "rooms", "maps", "session", "zone", "protection", "loot", "deathboxes", "teams", "offline", "start", "end"));
         else if(args[0].equalsIgnoreCase("admin") && adminAccess(sender)) {
