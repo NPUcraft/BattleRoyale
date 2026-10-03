@@ -24,7 +24,7 @@ class GroundLootDistributionTest {
         assertDoesNotThrow(()->new MapLoot(List.of(),List.of(large,large)));
         assertThrows(IllegalArgumentException.class,()->new MapLoot(List.of(),List.of(large,large,large)));
         assertThrows(IllegalArgumentException.class,()->new LootArea("a",0,1,0,1,0,1,"basic",1,0,1025,10));
-        var attempts=new GroundLootBudget();for(int i=0;i<GroundLootBudget.MAX_ATTEMPTS;i++)assertTrue(attempts.request(i));assertFalse(attempts.request(GroundLootBudget.MAX_ATTEMPTS+1));assertEquals(GroundLootBudget.MAX_ATTEMPTS,attempts.attempts());
+        var attempts=new GroundLootBudget();for(int i=0;i<GroundLootBudget.BASE_MAX_ATTEMPTS;i++)assertTrue(attempts.request(i));assertFalse(attempts.request(GroundLootBudget.BASE_MAX_ATTEMPTS+1));assertEquals(GroundLootBudget.BASE_MAX_ATTEMPTS,attempts.attempts());
         var elapsed=new GroundLootBudget();assertTrue(elapsed.request(100));assertFalse(elapsed.request(100+GroundLootBudget.MAX_NANOS));assertEquals(1,elapsed.attempts());
     }
     @Test void nativeContainerDefaultsAreFifteenPercentWithOneToTwoRolls(){

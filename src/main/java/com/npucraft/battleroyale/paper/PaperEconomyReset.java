@@ -38,6 +38,9 @@ public final class PaperEconomyReset {
         admin.sendMessage(UiText.warning(admin,
                 "系统会先自动生成余额备份文件。确认请输入 /br economy reset confirm（60 秒内有效）。",
                 "A balance backup is generated automatically. To proceed type /br economy reset confirm (within 60 seconds)."));
+        admin.sendMessage(UiText.warning(admin,
+                "建议尽量在少人在线时执行，避免在线玩家缓存覆盖重置结果。",
+                "Prefer running this with few players online so cached balances cannot overwrite the reset."));
         plugin.getLogger().warning("[EconomyReset] "+admin.getName()+" requested a global economy reset; awaiting confirm.");
     }
     /** Second step: executes when the same admin confirms inside the window. */

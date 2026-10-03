@@ -166,7 +166,9 @@ public final class PaperFunItems implements Listener {
         if(COIN_1000.equals(id))return 1000;
         return 0;
     }
-    @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)
+    /** Runs even on cancelled events: lobby protection cancels block interactions, but a coin
+     *  must redeem on any click, air or block. The event is then cancelled to keep it exclusive. */
+    @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=false)
     public void coinUse(PlayerInteractEvent event){
         if(event.getHand()!=EquipmentSlot.HAND)return;
         long amount=coinValue(event.getItem());

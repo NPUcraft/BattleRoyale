@@ -33,13 +33,26 @@ public final class PaperEconomyRewards {
             var economy=progression.economy();
             if(!economy.available())return;
             Player player=Bukkit.getPlayer(id);
-            if(player==null)return;
+            if(player==null){offlinePay(economy,id,amount);return;}
             if(!economy.provider().deposit(id,BigDecimal.valueOf(amount)))return;
             player.sendMessage(UiText.message(I18n.text(player,"+"+amount+" 金币（"+zh+"）","+"+amount+" coins ("+en+")"))
                     .append(UiText.muted(" · ").append(UiText.value("余额 "+format(balance(economy,id).doubleValue())))));
             player.playSound(player.getLocation(),Sound.ENTITY_EXPERIENCE_ORB_PICKUP,0.8f,1.4f);
         } catch(LinkageError|RuntimeException error) {
             Bukkit.getLogger().warning("[BattleRoyale] Economy payout skipped for "+id+": "+error.getClass().getSimpleName());
+        }
+    }
+    /** Offline recipients (disconnected before settlement) are credited straight through the
+     *  CoinsEngine uuid API so large-match disconnects never lose their payout; nothing is shown. */
+    private static void offlinePay(com.npucraft.battleroyale.economy.EconomySelection economy,UUID id,long amount) {
+        try{
+            String currency=economy.currency();
+            if(!su.nightexpress.coinsengine.api.CoinsEngineAPI.isLoaded()
+                    ||!su.nightexpress.coinsengine.api.CoinsEngineAPI.hasCurrency(currency))return;
+            if(su.nightexpress.coinsengine.api.CoinsEngineAPI.addBalance(id,currency,amount))
+                Bukkit.getLogger().info("[BattleRoyale] Offline payout "+amount+" "+currency+" -> "+id);
+        } catch(LinkageError|RuntimeException error) {
+            Bukkit.getLogger().warning("[BattleRoyale] Offline payout failed for "+id+": "+error.getClass().getSimpleName());
         }
     }
     private static BigDecimal balance(com.npucraft.battleroyale.economy.EconomySelection economy,UUID id) {

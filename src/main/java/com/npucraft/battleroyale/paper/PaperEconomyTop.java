@@ -46,7 +46,7 @@ public final class PaperEconomyTop {
                 for(var user:users){
                     double balance=user.getBalanceMap().getOrDefault(name,0.0);
                     sum+=balance;
-                    eligible.add(new Row(user.getName(),balance));
+                    if(balance>0)eligible.add(new Row(user.getName(),balance));
                 }
                 eligible.sort(Comparator.comparingDouble(Row::balance).reversed());
                 rows=List.copyOf(eligible.subList(0,Math.min(TOP_SIZE,eligible.size())));

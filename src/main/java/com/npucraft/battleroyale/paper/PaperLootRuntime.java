@@ -113,7 +113,9 @@ public final class PaperLootRuntime {
                 ground.add(new GroundRequest(area,cell));
             }
         }
-        totalProgress=points.size()+ground.size();task=scheduler.repeat(1,this::tick); return result;
+        totalProgress=points.size()+ground.size();
+        groundBudget.plan(ground.size());
+        task=scheduler.repeat(1,this::tick); return result;
     }
     private void tick() {
         try {
