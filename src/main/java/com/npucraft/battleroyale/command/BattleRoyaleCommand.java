@@ -55,6 +55,8 @@ public final class BattleRoyaleCommand implements CommandExecutor, TabCompleter 
                     if(args.length>=2&&args[1].equalsIgnoreCase("reset")){
                         if(!sender.hasPermission("battleroyale.admin")){messages.denied(sender);break;}
                         if(!(sender instanceof Player resetter))throw new IllegalArgumentException(I18n.text(sender,"全服经济重置必须由游戏内管理员执行二次确认。","The global economy reset must be confirmed in-game by an administrator."));
+                        if(rooms.rooms().stream().anyMatch(r->rooms.session(r.id()).isPresent()))
+                            throw new IllegalStateException(I18n.text(sender,"有比赛正在进行，请等全部比赛结束后再重置经济。","A match is running; wait for all matches to end before resetting the economy."));
                         if(args.length==3&&args[2].equalsIgnoreCase("confirm"))economyReset.confirm(resetter);
                         else if(args.length==2)economyReset.request(resetter);
                         else messages.unknown(sender);

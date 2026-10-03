@@ -1,0 +1,44 @@
+config-version: 2
+rooms:
+  solo:
+    display-name: "单人竞技"
+    min-players: 4
+    max-players: 24
+    team-size: 1
+    countdown-seconds: 60
+    pvp-protection-seconds: 60
+    spawn:
+      min-distance: 64
+      max-attempts-per-player: 200
+    allow-external-spectators: true
+    maps: [survival]
+    loadout: starter
+    zone-profile: default
+  duo:
+    display-name: "双人组队"
+    min-players: 8
+    max-players: 24
+    team-size: 2
+    countdown-seconds: 60
+    pvp-protection-seconds: 60
+    spawn:
+      min-distance: 64
+      max-attempts-per-player: 200
+    allow-external-spectators: true
+    maps: [survival]
+    loadout: starter
+    zone-profile: default
+  squad:
+    display-name: "四人小队"
+    min-players: 16
+    max-players: 32
+    team-size: 4
+    countdown-seconds: 60
+    pvp-protection-seconds: 60
+    spawn:
+      min-distance: 64
+      max-attempts-per-player: 200
+    allow-external-spectators: true
+    maps: [survival]
+    loadout: starter
+    zone-profile: default

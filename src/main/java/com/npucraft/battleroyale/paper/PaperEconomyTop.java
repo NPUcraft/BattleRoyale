@@ -37,9 +37,9 @@ public final class PaperEconomyTop {
         running=true;startedAt=System.nanoTime();
         Bukkit.getScheduler().runTaskAsynchronously(plugin,()->{
             try{
-                if(!CoinsEngineAPI.isLoaded())return;
+                if(!CoinsEngineAPI.isLoaded()){lastRefresh=System.nanoTime();return;} // back off, no per-tick retry
                 String name=currency.get();
-                if(name==null || !CoinsEngineAPI.hasCurrency(name))return;
+                if(name==null || !CoinsEngineAPI.hasCurrency(name)){lastRefresh=System.nanoTime();return;}
                 var users=CoinsEngineAPI.getUserManager().getDataAccessor().loadAll();
                 double sum=0;
                 var eligible=new ArrayList<Row>();
