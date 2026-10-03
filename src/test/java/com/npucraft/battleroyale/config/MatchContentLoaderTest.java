@@ -18,7 +18,7 @@ class MatchContentLoaderTest {
         public void validate(String key) {
             // Catalog adapter only; native ItemType registries are verified by the real Paper probe.
             if(key.startsWith("minecraft:")&&org.bukkit.Material.matchMaterial(key)!=null&&!java.util.Set.of("minecraft:air","minecraft:cave_air","minecraft:void_air","minecraft:elytra").contains(key))return;
-            if(java.util.Set.of("battleroyale:invisibility_potion","battleroyale:fire_resistance_potion","battleroyale:healing_potion","battleroyale:harming_potion","battleroyale:poison_potion","battleroyale:splash_invisibility_potion","battleroyale:splash_fire_resistance_potion","battleroyale:splash_healing_potion","battleroyale:splash_harming_potion","battleroyale:splash_poison_potion","battleroyale:combat_firework").contains(key))return;
+            if(java.util.Set.of("battleroyale:invisibility_potion","battleroyale:fire_resistance_potion","battleroyale:healing_potion","battleroyale:harming_potion","battleroyale:poison_potion","battleroyale:splash_invisibility_potion","battleroyale:splash_fire_resistance_potion","battleroyale:splash_healing_potion","battleroyale:splash_harming_potion","battleroyale:splash_poison_potion","battleroyale:combat_firework","battleroyale:coin_100","battleroyale:coin_1000").contains(key))return;
             throw new IllegalArgumentException("Unknown test item: " + key);
         }
         public String resolve(String key) { validate(key); return key; }

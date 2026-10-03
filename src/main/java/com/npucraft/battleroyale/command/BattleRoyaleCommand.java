@@ -18,7 +18,7 @@ public final class BattleRoyaleCommand implements CommandExecutor, TabCompleter 
         if (!sender.hasPermission("battleroyale.command")) { messages.denied(sender); return true; }
         String action = args.length == 0 ? "help" : args[0].toLowerCase(Locale.ROOT);
         if (Set.of("reload", "debug").contains(action) && !sender.hasPermission("battleroyale.admin")
-                || Set.of("rooms", "join", "autojoin", "leave", "team", "spectate", "lobby", "profile", "leaderboard", "shop", "cosmetics", "vote").contains(action) && !sender.hasPermission("battleroyale.play")) {
+                || Set.of("rooms", "join", "autojoin", "leave", "team", "spectate", "lobby", "profile", "leaderboard", "shop", "cosmetics", "vote", "economy").contains(action) && !sender.hasPermission("battleroyale.play")) {
             messages.denied(sender); return true;
         }
         try {
@@ -46,6 +46,29 @@ public final class BattleRoyaleCommand implements CommandExecutor, TabCompleter 
                         throw new IllegalStateException(I18n.text(sender, "编辑装备前请先离开房间。", "Leave your room before editing loadouts."));
                     var room=rooms.rooms().stream().filter(r->r.id().equals(args[3])).findFirst().orElseThrow(()->new IllegalArgumentException(I18n.text(sender, "房间不存在：%s", "Room not found: %s", args[3])));
                     runtime.loadouts().open(player,room,rooms.rooms());
+                }
+                case "economy" -> {
+                    if(!(sender instanceof Player player)){messages.send(sender,"此命令只能由游戏内玩家执行。","Only in-game players can use this command.");break;}
+                    var selection=runtime.progression().economy();
+                    if(!selection.available()){messages.send(sender,"经济服务未就绪："+selection.diagnostics(),"Economy unavailable: "+selection.diagnostics());break;}
+                    if(args.length>=2&&args[1].equalsIgnoreCase("list")){
+                        if(!sender.hasPermission("battleroyale.admin")){messages.denied(sender);break;}
+                        var provider=selection.provider();
+                        messages.send(sender,"—— 全服经济（在线玩家，货币：%s）——","-- Server economy (online, currency: %s) --",selection.currency());
+                        int count=0;double total=0;
+                        for(var online:org.bukkit.Bukkit.getOnlinePlayers()){
+                            try{var balance=provider.getBalance(online.getUniqueId()).doubleValue();total+=balance;count++;
+                                messages.send(sender,"%s：%s","%s: %s",online.getName(),com.npucraft.battleroyale.paper.PaperEconomyRewards.format(balance));}
+                            catch(LinkageError|RuntimeException error){messages.send(sender,"%s：读取失败","%s: read failed",online.getName());}
+                        }
+                        messages.send(sender,"共 %d 名在线玩家，合计 %s","%d online players, total %s",count,com.npucraft.battleroyale.paper.PaperEconomyRewards.format(total));
+                        messages.send(sender,"离线玩家余额由经济插件自身管理。","Offline balances are managed by the economy plugin itself.");
+                        break;
+                    }
+                    if(args.length!=1){messages.unknown(sender);break;}
+                    try{var balance=selection.provider().getBalance(player.getUniqueId()).doubleValue();
+                        messages.send(sender,"你的余额：%s %s","Your balance: %s %s",com.npucraft.battleroyale.paper.PaperEconomyRewards.format(balance),selection.currency());}
+                    catch(LinkageError|RuntimeException error){messages.send(sender,"暂时无法读取你的余额。","Balance is temporarily unavailable.");}
                 }
                 case "help" -> { if (args.length <= 1) messages.help(sender); else messages.unknown(sender); }
                 case "version" -> { if (args.length == 1) messages.version(sender, version); else messages.unknown(sender); }
@@ -161,10 +184,12 @@ public final class BattleRoyaleCommand implements CommandExecutor, TabCompleter 
         List<String> choices = new ArrayList<>();
         if (args.length == 1) {
             choices.addAll(List.of("help", "version"));
-            if (sender.hasPermission("battleroyale.play")) choices.addAll(List.of("rooms", "join", "autojoin", "leave", "team", "spectate", "lobby", "profile", "leaderboard", "shop", "cosmetics", "vote"));
+            if (sender.hasPermission("battleroyale.play")) choices.addAll(List.of("rooms", "join", "autojoin", "leave", "team", "spectate", "lobby", "profile", "leaderboard", "shop", "cosmetics", "vote", "economy"));
             if (sender.hasPermission("battleroyale.admin")) choices.addAll(List.of("reload", "debug"));
             if(adminAccess(sender))choices.add("admin");
-        } else if (args.length == 2 && args[0].equalsIgnoreCase("debug") && sender.hasPermission("battleroyale.admin"))
+        } else if (args.length == 2 && args[0].equalsIgnoreCase("economy") && sender.hasPermission("battleroyale.admin"))
+            choices.add("list");
+        else if (args.length == 2 && args[0].equalsIgnoreCase("debug") && sender.hasPermission("battleroyale.admin"))
             choices.addAll(List.of("perf", "tasks", "worlds", "economy", "stats", "storage", "recovery", "rooms", "maps", "session", "zone", "protection", "loot", "deathboxes", "teams", "offline", "start", "end"));
         else if(args[0].equalsIgnoreCase("admin") && adminAccess(sender)) {
             if(args.length==2){if(sender.hasPermission("battleroyale.admin"))choices.add("loadout");if(sender.hasPermission("battleroyale.admin.cosmetic"))choices.addAll(List.of("cosmetic","purchases"));if(sender.hasPermission("battleroyale.admin.map"))choices.add("map");if(sender.hasPermission("battleroyale.admin.config"))choices.add("config");if(sender.hasPermission("battleroyale.admin.diagnostics"))choices.addAll(List.of("diagnose","supportbundle"));}

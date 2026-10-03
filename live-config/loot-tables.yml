@@ -1,0 +1,970 @@
+config-version: 2
+auto-containers:
+  enabled: true
+  loot-table: native-basic
+  chance: 0.15
+  min-rolls: 1
+  max-rolls: 2
+  max-containers-per-tick: 16
+airdrops:
+  enabled: true
+  loot-table: airdrop
+  # 分轮阶梯：第 N 轮整体比当期地面最高级高半档，保底装备也随轮升级（铁 -> 铁中带钻 -> 钻）。
+  round-tables: [airdrop-1, airdrop-2, airdrop-3, airdrop-4]
+  min-rolls: 6
+  max-rolls: 8
+  # 公示 60 + 下落 20 = 80 秒，必须小于最短缩圈阶段的总时长（wait 60 + shrink 25 = 85），
+  # 否则空投会跨阶段落地、被投进下一圈之外的死区（生产的落点校验比对的是选点时的快照，查不出这种偏移）。
+  # 调整公示时长前先核对该契约：announcement-seconds + fall-seconds < min(wait-seconds + shrink-seconds)。
+  fall-seconds: 20
+  max-attempts: 24
+  marker-seconds: 120
+  announcement-seconds: 60
+  min-distance: 128
+mob-loot:
+  enabled: true
+  loot-table: survival
+  chance: 0.35
+  min-rolls: 1
+  max-rolls: 1
+  max-drops-per-session: 64
+  per-player-cooldown-seconds: 10
+horses:
+  enabled: true
+  max-per-session: 16
+  interval-seconds: 15
+  max-attempts: 24
+  min-distance: 64
+# Staged ground supplies: a low-tier opening table fixed at generation, then higher-tier refills
+# seeded into the future safe zone when each shrinking stage begins.
+ground-loot:
+  enabled: true
+  initial-table: ground-early
+  # 郊区开局低级；村庄等人造建筑周边开局直接中级。缩圈二刷同样看地形：郊区补中级、市区补高级。
+  built-initial-table: ground-mid
+  refills:
+    - { after-stage: 1, table: ground-mid, built-table: ground-late, points: 12 }
+    - { after-stage: 2, table: ground-mid, built-table: ground-late, points: 10 }
+    - { after-stage: 3, table: ground-late, built-table: ground-late, points: 8 }
+  # 补给点稀有度粒子配色：青绿=低级，琥珀=中级，绯红=高级。
+  signal-tiers:
+    - { table: ground-early, tier: low }
+    - { table: ground-mid, tier: mid }
+    - { table: ground-late, tier: high }
+loot-tables:
+  survival:
+    min-rolls: 3
+    max-rolls: 5
+    entries:
+    - item: minecraft:bread
+      weight: 14
+      min-amount: 2
+      max-amount: 6 
+    - item: minecraft:arrow
+      weight: 7
+      min-amount: 6
+      max-amount: 12
+    - item: minecraft:iron_sword
+      weight: 7
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:iron_axe
+      weight: 5
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:crossbow
+      weight: 3
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:shield
+      weight: 5
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:iron_chestplate
+      weight: 4
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:iron_leggings
+      weight: 4
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:iron_boots
+      weight: 5
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:iron_helmet
+      weight: 5
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:golden_apple
+      weight: 3
+      min-amount: 1
+      max-amount: 2
+    - item: minecraft:diamond_sword
+      weight: 1
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:cobblestone
+      weight: 8
+      min-amount: 16
+      max-amount: 32
+    - item: minecraft:oak_planks
+      weight: 8
+      min-amount: 16
+      max-amount: 32
+    - item: minecraft:iron_pickaxe
+      weight: 5
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:spectral_arrow
+      weight: 2
+      min-amount: 4
+      max-amount: 6
+    - item: minecraft:tnt
+      weight: 2
+      min-amount: 1
+      max-amount: 2
+    - item: minecraft:water_bucket
+      weight: 3
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:flint_and_steel
+      weight: 1
+      min-amount: 1
+      max-amount: 1
+    - item: battleroyale:combat_firework
+      weight: 2
+      min-amount: 1
+      max-amount: 3
+    - item: battleroyale:invisibility_potion
+      weight: 2
+      min-amount: 1
+      max-amount: 1
+    - item: battleroyale:poison_potion
+      weight: 1
+      min-amount: 1
+      max-amount: 1
+    - item: battleroyale:splash_invisibility_potion
+      weight: 2
+      min-amount: 1
+      max-amount: 1
+    - item: battleroyale:splash_fire_resistance_potion
+      weight: 2
+      min-amount: 1
+      max-amount: 1
+    - item: battleroyale:splash_healing_potion
+      weight: 3
+      min-amount: 1
+      max-amount: 1
+    - item: battleroyale:splash_harming_potion
+      weight: 2
+      min-amount: 1
+      max-amount: 1
+    - item: battleroyale:splash_poison_potion
+      weight: 2
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:ender_pearl
+      weight: 2
+      min-amount: 1
+      max-amount: 2
+    - item: minecraft:oak_log
+      weight: 5
+      min-amount: 4
+      max-amount: 8
+    - item: minecraft:stone
+      weight: 4
+      min-amount: 8
+      max-amount: 16
+    - item: minecraft:iron_ingot
+      weight: 4
+      min-amount: 2
+      max-amount: 5
+    - item: minecraft:diamond
+      weight: 1
+      min-amount: 1
+      max-amount: 1
+  # Opening ground tier: leather, copper and stone only. Iron, shields and diamonds are deliberately absent.
+  ground-early:
+    min-rolls: 2
+    max-rolls: 3
+    entries:
+    - item: minecraft:bread
+      weight: 15
+      min-amount: 2
+      max-amount: 4
+    - item: minecraft:apple
+      weight: 6
+      min-amount: 1
+      max-amount: 3
+    - item: minecraft:stone_sword
+      weight: 6
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:oak_log
+      weight: 5
+      min-amount: 4
+      max-amount: 8
+    - item: minecraft:cobblestone
+      weight: 5
+      min-amount: 8
+      max-amount: 16
+    - item: minecraft:stone_axe
+      weight: 6
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:leather_helmet
+      weight: 6
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:leather_chestplate
+      weight: 6
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:leather_leggings
+      weight: 6
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:leather_boots
+      weight: 6
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:arrow
+      weight: 2
+      min-amount: 4
+      max-amount: 8
+    - item: minecraft:stone_spear
+      weight: 4
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:copper_helmet
+      weight: 4
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:copper_chestplate
+      weight: 4
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:copper_leggings
+      weight: 4
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:copper_boots
+      weight: 4
+      min-amount: 1
+      max-amount: 1
+  ground-mid:
+    min-rolls: 3
+    max-rolls: 4
+    entries: 
+    - item: minecraft:iron_sword
+      weight: 9
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:iron_axe
+      weight: 9
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:arrow
+      weight: 3
+      min-amount: 2
+      max-amount: 4
+    - item: minecraft:spectral_arrow
+      weight: 2
+      min-amount: 1
+      max-amount: 3
+    - item: minecraft:crossbow
+      weight: 5
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:shield
+      weight: 1
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:iron_ingot
+      weight: 3
+      min-amount: 1
+      max-amount: 3
+    - item: minecraft:iron_helmet
+      weight: 5
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:iron_chestplate
+      weight: 5
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:iron_leggings
+      weight: 5
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:iron_boots
+      weight: 5
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:chainmail_helmet
+      weight: 5
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:chainmail_chestplate
+      weight: 5
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:chainmail_leggings
+      weight: 5
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:chainmail_boots
+      weight: 5
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:tnt
+      weight: 2
+      min-amount: 1
+      max-amount: 2
+    - item: minecraft:water_bucket
+      weight: 1
+      min-amount: 1
+      max-amount: 1
+    - item: battleroyale:splash_healing_potion
+      weight: 3
+      min-amount: 1
+      max-amount: 1
+    - item: battleroyale:splash_harming_potion
+      weight: 3
+      min-amount: 1
+      max-amount: 1
+    - item: battleroyale:combat_firework
+      weight: 2
+      min-amount: 1
+      max-amount: 2
+    - item: minecraft:iron_spear
+      weight: 1
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:golden_apple
+      weight: 2
+      min-amount: 1
+      max-amount: 1
+    - item: battleroyale:signal_gun
+      weight: 1
+      min-amount: 1
+      max-amount: 1
+    - item: battleroyale:coin_100
+      weight: 2
+      min-amount: 1
+      max-amount: 1
+  # Third ring onward: full iron, golden apples and a sparse diamond tier.
+  ground-late:
+    min-rolls: 4
+    max-rolls: 5
+    entries: 
+    - item: minecraft:iron_sword
+      weight: 3
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:iron_axe
+      weight: 3
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:iron_spear
+      weight: 1
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:diamond_spear
+      weight: 1
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:trident
+      weight: 4
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:mace
+      weight: 2
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:shield
+      weight: 2
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:iron_helmet
+      weight: 4
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:iron_chestplate
+      weight: 4
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:iron_leggings
+      weight: 4
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:iron_boots
+      weight: 4
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:arrow
+      weight: 3
+      min-amount: 2
+      max-amount: 4
+    - item: minecraft:spectral_arrow
+      weight: 3
+      min-amount: 2
+      max-amount: 4
+    - item: battleroyale:slowness_arrow
+      weight: 1
+      min-amount: 1
+      max-amount: 1
+    - item: battleroyale:levitation_arrow
+      weight: 1
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:golden_apple
+      weight: 3
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:iron_ingot
+      weight: 3
+      min-amount: 2
+      max-amount: 5
+    - item: minecraft:diamond
+      weight: 3
+      min-amount: 1
+      max-amount: 4
+    - item: minecraft:wind_charge
+      weight: 4
+      min-amount: 2
+      max-amount: 4
+    - item: minecraft:ender_pearl
+      weight: 3
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:tnt
+      weight: 3
+      min-amount: 1
+      max-amount: 2
+    - item: minecraft:fire_charge
+      weight: 2
+      min-amount: 1
+      max-amount: 2
+    - item: minecraft:water_bucket
+      weight: 1
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:fishing_rod
+      weight: 4
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:chorus_fruit
+      weight: 2
+      min-amount: 2
+      max-amount: 4
+    - item: minecraft:snowball
+      weight: 3
+      min-amount: 16
+      max-amount: 16
+    - item: battleroyale:splash_healing_potion
+      weight: 2
+      min-amount: 1
+      max-amount: 1
+    - item: battleroyale:splash_harming_potion
+      weight: 2
+      min-amount: 1
+      max-amount: 1
+    - item: battleroyale:splash_fire_resistance_potion
+      weight: 2
+      min-amount: 1
+      max-amount: 1
+    - item: battleroyale:knockback_stick
+      weight: 2
+      min-amount: 1
+      max-amount: 1
+    - item: battleroyale:throwing_torch
+      weight: 1
+      min-amount: 1
+      max-amount: 3
+    - item: battleroyale:sneakers
+      weight: 1
+      min-amount: 1
+      max-amount: 1
+    - item: battleroyale:signal_gun
+      weight: 1
+      min-amount: 1
+      max-amount: 1
+    - item: battleroyale:coin_100
+      weight: 2
+      min-amount: 1
+      max-amount: 1
+  airdrop:
+    min-rolls: 6
+    max-rolls: 8
+    entries:
+    - item: minecraft:iron_sword
+      weight: 5
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:iron_spear
+      weight: 2
+
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:diamond_sword
+      weight: 1
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:diamond_spear
+      weight: 1
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:iron_chestplate
+      weight: 3
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:iron_leggings
+      weight: 3
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:diamond_helmet
+      weight: 1
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:bow
+      weight: 3
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:arrow
+      weight: 3
+      min-amount: 8
+      max-amount: 12
+    - item: minecraft:golden_apple
+      weight: 2
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:ender_pearl
+      weight: 2
+      min-amount: 1
+      max-amount: 2 
+    - item: minecraft:iron_axe
+      weight: 4
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:shield
+      weight: 3
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:crossbow
+      weight: 2
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:spectral_arrow
+      weight: 2
+      min-amount: 4
+      max-amount: 6
+    - item: minecraft:tnt
+      weight: 2
+      min-amount: 1
+      max-amount: 2
+    - item: minecraft:water_bucket
+      weight: 3
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:flint_and_steel
+      weight: 1
+      min-amount: 1
+      max-amount: 1
+    - item: battleroyale:combat_firework
+      weight: 2
+      min-amount: 1
+      max-amount: 3
+    - item: battleroyale:invisibility_potion
+      weight: 2
+      min-amount: 1
+      max-amount: 1
+    - item: battleroyale:poison_potion
+      weight: 1
+      min-amount: 1
+      max-amount: 1
+    - item: battleroyale:splash_invisibility_potion
+      weight: 2
+      min-amount: 1
+      max-amount: 1
+    - item: battleroyale:splash_fire_resistance_potion
+      weight: 2
+      min-amount: 1
+      max-amount: 1
+    - item: battleroyale:splash_healing_potion
+      weight: 3
+      min-amount: 1
+      max-amount: 1
+    - item: battleroyale:splash_harming_potion
+      weight: 2
+      min-amount: 1
+      max-amount: 1
+    - item: battleroyale:splash_poison_potion
+      weight: 2
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:iron_ingot
+      weight: 4
+      min-amount: 2
+      max-amount: 5
+    - item: minecraft:totem_of_undying
+      weight: 2
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:diamond
+      weight: 1
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:netherite_ingot
+      weight: 2
+      min-amount: 1
+      max-amount: 1
+    - item: battleroyale:coin_1000
+      weight: 2
+      min-amount: 1
+      max-amount: 1
+  airdrop-1:
+    min-rolls: 6
+    max-rolls: 8
+    entries:
+    - { item: minecraft:iron_sword, weight: 4, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:iron_spear, weight: 1, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:iron_helmet, weight: 2, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:iron_chestplate, weight: 3, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:iron_leggings, weight: 3, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:iron_boots, weight: 2, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:bow, weight: 3, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:arrow, weight: 3, min-amount: 8, max-amount: 12 }
+    - { item: minecraft:spectral_arrow, weight: 1, min-amount: 4, max-amount: 6 }
+    - { item: minecraft:golden_apple, weight: 2, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:shield, weight: 3, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:iron_axe, weight: 2, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:bread, weight: 3, min-amount: 3, max-amount: 6 }
+    - { item: minecraft:water_bucket, weight: 2, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:tnt, weight: 1, min-amount: 1, max-amount: 2 }
+    - { item: battleroyale:coin_1000, weight: 2, min-amount: 1, max-amount: 1 }
+
+  airdrop-2:
+    min-rolls: 6
+    max-rolls: 8
+    entries:
+    - { item: minecraft:iron_sword, weight: 3, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:iron_spear, weight: 1, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:iron_chestplate, weight: 3, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:iron_leggings, weight: 3, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:iron_boots, weight: 2, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:bow, weight: 2, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:crossbow, weight: 2, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:arrow, weight: 3, min-amount: 8, max-amount: 12 }
+    - { item: minecraft:spectral_arrow, weight: 1, min-amount: 4, max-amount: 6 }
+    - { item: minecraft:shield, weight: 2, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:golden_apple, weight: 2, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:ender_pearl, weight: 2, min-amount: 1, max-amount: 2 }
+    - { item: minecraft:diamond_helmet, weight: 1, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:diamond_sword, weight: 1, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:diamond, weight: 1, min-amount: 1, max-amount: 2 }
+    - { item: minecraft:iron_ingot, weight: 3, min-amount: 2, max-amount: 4 }
+    - { item: minecraft:bread, weight: 2, min-amount: 3, max-amount: 6 }
+    - { item: minecraft:water_bucket, weight: 2, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:tnt, weight: 2, min-amount: 1, max-amount: 2 }
+    - { item: battleroyale:coin_1000, weight: 2, min-amount: 1, max-amount: 1 }
+
+  airdrop-3:
+    min-rolls: 6
+    max-rolls: 8
+    entries:
+    - { item: minecraft:diamond_sword, weight: 2, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:diamond_spear, weight: 1, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:diamond_helmet, weight: 2, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:diamond_chestplate, weight: 1, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:iron_chestplate, weight: 2, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:iron_leggings, weight: 2, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:iron_boots, weight: 2, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:bow, weight: 2, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:crossbow, weight: 2, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:arrow, weight: 2, min-amount: 8, max-amount: 12 }
+    - { item: minecraft:spectral_arrow, weight: 1, min-amount: 4, max-amount: 6 }
+    - { item: minecraft:golden_apple, weight: 2, min-amount: 1, max-amount: 2 }
+    - { item: minecraft:ender_pearl, weight: 2, min-amount: 1, max-amount: 2 }
+    - { item: minecraft:netherite_ingot, weight: 1, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:wind_charge, weight: 2, min-amount: 2, max-amount: 4 }
+    - { item: minecraft:diamond, weight: 2, min-amount: 1, max-amount: 3 }
+    - { item: minecraft:tnt, weight: 2, min-amount: 1, max-amount: 2 }
+    - { item: minecraft:fire_charge, weight: 1, min-amount: 1, max-amount: 2 }
+    - { item: minecraft:water_bucket, weight: 2, min-amount: 1, max-amount: 1 }
+    - item: minecraft:netherite_upgrade_smithing_template
+      weight: 2
+      min-amount: 1
+      max-amount: 1
+    - item: battleroyale:knockback_stick
+      weight: 1
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:snowball
+      weight: 1
+      min-amount: 16
+      max-amount: 16
+    - item: battleroyale:slowness_arrow
+      weight: 1
+      min-amount: 1
+      max-amount: 1
+    - item: battleroyale:levitation_arrow
+      weight: 1
+      min-amount: 1
+      max-amount: 1
+    - item: battleroyale:throwing_torch
+      weight: 1
+      min-amount: 1
+      max-amount: 3
+    - item: battleroyale:sneakers
+      weight: 1
+      min-amount: 1
+      max-amount: 1
+    - item: battleroyale:mystery_food
+      weight: 1
+      min-amount: 1
+      max-amount: 1
+    - item: battleroyale:coin_1000
+      weight: 2
+      min-amount: 1
+      max-amount: 1
+
+  airdrop-4:
+    min-rolls: 6
+    max-rolls: 8
+    entries:
+    - { item: minecraft:diamond_sword, weight: 3, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:diamond_spear, weight: 1, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:diamond_helmet, weight: 2, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:diamond_chestplate, weight: 2, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:diamond_leggings, weight: 2, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:diamond_boots, weight: 2, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:golden_apple, weight: 3, min-amount: 1, max-amount: 2 }
+    - { item: minecraft:ender_pearl, weight: 3, min-amount: 1, max-amount: 2 }
+    - { item: minecraft:netherite_ingot, weight: 2, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:wind_charge, weight: 3, min-amount: 2, max-amount: 4 }
+    - { item: minecraft:mace, weight: 1, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:trident, weight: 1, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:bow, weight: 2, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:arrow, weight: 2, min-amount: 8, max-amount: 12 }
+    - { item: minecraft:spectral_arrow, weight: 1, min-amount: 4, max-amount: 6 }
+    - { item: minecraft:diamond, weight: 2, min-amount: 1, max-amount: 3 }
+    - { item: minecraft:shield, weight: 2, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:tnt, weight: 2, min-amount: 1, max-amount: 2 }
+    - { item: minecraft:fire_charge, weight: 2, min-amount: 2, max-amount: 3 }
+    - item: minecraft:netherite_upgrade_smithing_template
+      weight: 2
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:silence_armor_trim_smithing_template
+      weight: 1
+      min-amount: 1
+      max-amount: 1
+    - item: battleroyale:knockback_stick
+      weight: 2
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:chorus_fruit
+      weight: 2
+      min-amount: 2
+      max-amount: 4
+    - item: minecraft:snowball
+      weight: 1
+      min-amount: 16
+      max-amount: 16
+    - item: battleroyale:slowness_arrow
+      weight: 1
+      min-amount: 1
+      max-amount: 1
+    - item: battleroyale:levitation_arrow
+      weight: 1
+      min-amount: 1
+      max-amount: 1
+    - item: battleroyale:throwing_torch
+      weight: 1
+      min-amount: 1
+      max-amount: 3
+    - item: battleroyale:sneakers
+      weight: 1
+      min-amount: 1
+      max-amount: 1
+    - item: battleroyale:mystery_food
+      weight: 1
+      min-amount: 1
+      max-amount: 1
+    - item: battleroyale:coin_1000
+      weight: 2
+      min-amount: 1
+      max-amount: 1
+  region-natural:
+    min-rolls: 2
+    max-rolls: 5
+    entries:
+    - item: minecraft:bread
+      weight: 7
+      min-amount: 2
+      max-amount: 5 
+    - item: minecraft:arrow
+      weight: 3
+      min-amount: 4
+      max-amount: 8
+    - item: minecraft:leather_chestplate
+      weight: 3
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:chainmail_leggings
+      weight: 2
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:iron_boots
+      weight: 1
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:shield
+      weight: 2
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:water_bucket
+      weight: 2
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:iron_ingot
+      weight: 2
+      min-amount: 1
+      max-amount: 3
+    - item: minecraft:iron_axe
+      weight: 1
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:flint_and_steel
+      weight: 1
+      min-amount: 1
+      max-amount: 1
+    - item: battleroyale:combat_firework
+      weight: 1
+      min-amount: 1
+      max-amount: 2
+    - item: battleroyale:splash_healing_potion
+      weight: 1
+      min-amount: 1
+      max-amount: 1
+  region-built:
+    min-rolls: 2
+    max-rolls: 5
+    entries: 
+    - item: minecraft:arrow
+      weight: 3
+      min-amount: 6
+      max-amount: 10
+    - item: minecraft:iron_sword
+      weight: 5
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:iron_axe
+      weight: 3
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:crossbow
+      weight: 3
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:iron_helmet
+      weight: 3
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:iron_chestplate
+      weight: 4
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:iron_leggings
+      weight: 4
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:iron_boots
+      weight: 3
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:shield
+      weight: 4
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:spectral_arrow
+      weight: 1
+      min-amount: 4
+      max-amount: 6
+    - item: minecraft:golden_apple
+      weight: 1
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:ender_pearl
+      weight: 2
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:tnt
+      weight: 2
+      min-amount: 1
+      max-amount: 2
+    - item: minecraft:water_bucket
+      weight: 2
+      min-amount: 1
+      max-amount: 1
+    - item: battleroyale:splash_healing_potion
+      weight: 2
+      min-amount: 1
+      max-amount: 1
+    - item: battleroyale:splash_fire_resistance_potion
+      weight: 2
+      min-amount: 1
+      max-amount: 1
+    - item: battleroyale:combat_firework
+      weight: 2
+      min-amount: 1
+      max-amount: 2
+    - item: minecraft:iron_ingot
+      weight: 3
+      min-amount: 2
+      max-amount: 5
+    - item: minecraft:flint_and_steel
+      weight: 1
+      min-amount: 1
+      max-amount: 1
+    - item: battleroyale:invisibility_potion
+      weight: 1
+      min-amount: 1
+      max-amount: 1
+    - item: battleroyale:splash_poison_potion
+      weight: 1
+      min-amount: 1
+      max-amount: 1
+    - item: minecraft:diamond
+      weight: 1
+      min-amount: 1
+      max-amount: 1
+    - item: battleroyale:splash_harming_potion
+      weight: 1
+      min-amount: 1
+      max-amount: 1
+  # Sparse unenchanted survival supplies in map-native containers; region-quality never replaces this table.
+  native-basic:
+    min-rolls: 1
+    max-rolls: 2
+    entries:
+      - { item: minecraft:bread, weight: 8, min-amount: 1, max-amount: 3 }
+      - { item: minecraft:apple, weight: 5, min-amount: 1, max-amount: 3 }
+      - { item: minecraft:oak_log, weight: 5, min-amount: 2, max-amount: 4 }
+      - { item: minecraft:cobblestone, weight: 5, min-amount: 4, max-amount: 8 }
+      - { item: minecraft:string, weight: 3, min-amount: 1, max-amount: 3 }
+      - { item: minecraft:flint, weight: 2, min-amount: 1, max-amount: 2 }
+      - { item: minecraft:arrow, weight: 1, min-amount: 2, max-amount: 3 }
+      - { item: minecraft:stone_sword, weight: 2, min-amount: 1, max-amount: 1 }
+      - { item: minecraft:stone_pickaxe, weight: 2, min-amount: 1, max-amount: 1 }
+      - { item: minecraft:stone_axe, weight: 2, min-amount: 1, max-amount: 1 }
+      - { item: minecraft:leather_helmet, weight: 1, min-amount: 1, max-amount: 1 }
+      - { item: minecraft:leather_boots, weight: 1, min-amount: 1, max-amount: 1 }
+
+
+region-quality:
+  enabled: true
+  built-threshold: 0.25
+  natural-table: region-natural
+  built-table: region-built

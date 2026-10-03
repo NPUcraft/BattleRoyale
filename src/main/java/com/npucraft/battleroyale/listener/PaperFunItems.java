@@ -28,7 +28,8 @@ import org.bukkit.NamespacedKey;
  *  Speed I while worn). All three carry the fun-item PDC marker so loot copies stay recognisable. */
 public final class PaperFunItems implements Listener {
     private static final NamespacedKey FUN=new NamespacedKey("battleroyale","fun_item");
-    public static final String TORCH="throwing_torch",SNEAKERS="sneakers",SIGNAL_GUN="signal_gun",MYSTERY_FOOD="mystery_food";
+    public static final String TORCH="throwing_torch",SNEAKERS="sneakers",SIGNAL_GUN="signal_gun",MYSTERY_FOOD="mystery_food",
+            COIN_100="coin_100",COIN_1000="coin_1000";
     /** Marks a custom fun item stack; called by NativeLootItems while building loot. */
     public static void mark(ItemStack item,String id){
         var meta=item.getItemMeta();meta.getPersistentDataContainer().set(FUN,PersistentDataType.STRING,id);item.setItemMeta(meta);
@@ -154,6 +155,50 @@ public final class PaperFunItems implements Listener {
             if(equipment==null||!SNEAKERS.equals(funId(equipment.getBoots())))continue;
             player.addPotionEffect(new PotionEffect(PotionEffectType.SPEED,61,0,true,false,true));
         }
+    }
+
+    // ---------- currency coins ----------
+
+    /** Trial economy tokens: emerald vouchers that deposit their face value on either click. */
+    private static long coinValue(ItemStack item){
+        String id=funId(item);
+        if(COIN_100.equals(id))return 100;
+        if(COIN_1000.equals(id))return 1000;
+        return 0;
+    }
+    @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)
+    public void coinUse(PlayerInteractEvent event){
+        if(event.getHand()!=EquipmentSlot.HAND)return;
+        long amount=coinValue(event.getItem());
+        if(amount<=0)return;
+        var action=event.getAction();
+        if(action!=Action.RIGHT_CLICK_AIR&&action!=Action.RIGHT_CLICK_BLOCK&&action!=Action.LEFT_CLICK_AIR&&action!=Action.LEFT_CLICK_BLOCK)return;
+        event.setCancelled(true);
+        redeemCoin(event.getPlayer(),amount);
+    }
+    private void redeemCoin(Player player,long amount){
+        var progression=runtime.progression();
+        if(progression==null)return;
+        var economy=progression.economy();
+        if(!economy.available()){
+            player.sendActionBar(UiText.warning(player,"经济服务未就绪，稍后再试。","Economy is not ready; try again later."));
+            return;
+        }
+        boolean paid;
+        double balance=Double.NaN;
+        try{
+            paid=economy.provider().deposit(player.getUniqueId(),java.math.BigDecimal.valueOf(amount));
+            if(paid)balance=economy.provider().getBalance(player.getUniqueId()).doubleValue();
+        }catch(LinkageError|RuntimeException error){paid=false;}
+        if(!paid){
+            player.sendActionBar(UiText.warning(player,"入账失败，请稍后再试。","Deposit failed; try again later."));
+            return;
+        }
+        consumeOne(player);
+        player.sendActionBar(UiText.success(player,
+                "+"+amount+" 金币 · 余额 "+com.npucraft.battleroyale.paper.PaperEconomyRewards.format(balance),
+                "+"+amount+" coins · balance "+com.npucraft.battleroyale.paper.PaperEconomyRewards.format(balance)));
+        player.playSound(player.getLocation(),org.bukkit.Sound.ENTITY_EXPERIENCE_ORB_PICKUP,0.8f,1.5f);
     }
 
     // ---------- mystery food ----------

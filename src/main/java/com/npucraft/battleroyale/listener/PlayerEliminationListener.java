@@ -33,6 +33,8 @@ public final class PlayerEliminationListener implements Listener {
             UUID attacker=zone?null:runtime.provenance().attacker(event.getDamageSource(),entry);
             suppress(event);
             entry.combat.eliminate(new EliminationRequest(player.getUniqueId(),player.getName(),position,cause,attacker,contents,total,entry.combat.now(),Bukkit.getCurrentTick()));
+            if(attacker!=null && !attacker.equals(player.getUniqueId()) && runtime.progression()!=null)
+                com.npucraft.battleroyale.paper.PaperEconomyRewards.killReward(runtime.progression(),attacker);
         } catch(RuntimeException failure) {
             suppress(event); runtime.deferRestore(entry.session.sessionId(),player.getUniqueId()); entry.combat.fail(failure);
         }

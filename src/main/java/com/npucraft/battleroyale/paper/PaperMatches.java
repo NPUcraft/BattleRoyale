@@ -244,7 +244,11 @@ public final class PaperMatches implements MatchLifecycle {
         for(Entry entry:List.copyOf(entries.values())) if(entry.combat!=null && entry.session.state()==GameState.RUNNING) {
             try {entry.combat.endTick(tick).ifPresent(outcome->{
                 entry.session.outcome(outcome);entry.changed();
-                if(entry.progress!=null && progression!=null)entry.resultDurable=progression.submit(entry.progress.finish(entry.session,entry.combat.elapsedNanos(),progression.config().ranking(),entry.combat::name));
+                if(entry.progress!=null && progression!=null){
+                    var result=entry.progress.finish(entry.session,entry.combat.elapsedNanos(),progression.config().ranking(),entry.combat::name);
+                    entry.resultDurable=progression.submit(result);
+                    PaperEconomyRewards.settle(progression,result);
+                }
                 for(UUID winner:outcome.winnerIds())if(plugin.getServer().getPlayer(winner)==null)messages.offlineWinner(winner,outcome.tie());
                 entry.stopLoop();entry.combat.ending();entry.offline.ending();
                 entry.showcase=new WinnerShowcase(scheduler,clock,configuration.settings().combat().showcaseDuration(),

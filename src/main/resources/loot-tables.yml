@@ -148,6 +148,7 @@ loot-tables:
       - { item: battleroyale:splash_healing_potion, weight: 2, min-amount: 1, max-amount: 1 }
       - { item: battleroyale:splash_harming_potion, weight: 2, min-amount: 1, max-amount: 1 }
       - { item: battleroyale:combat_firework, weight: 2, min-amount: 1, max-amount: 2 }
+      - { item: battleroyale:coin_100, weight: 2, min-amount: 1, max-amount: 1 }
 
   # Third ring onward: full iron, golden apples and a sparse diamond tier.
   ground-late:
@@ -224,6 +225,7 @@ loot-tables:
       - { item: minecraft:iron_ingot, weight: 4, min-amount: 2, max-amount: 5 }
       - { item: minecraft:gold_ingot, weight: 3, min-amount: 2, max-amount: 4 }
       - { item: minecraft:diamond, weight: 1, min-amount: 1, max-amount: 1 }
+      - { item: battleroyale:coin_1000, weight: 2, min-amount: 1, max-amount: 1 }
 
   # Basic combat supplies remain available in wilderness; no airdrop guarantees are copied here.
   region-natural:
