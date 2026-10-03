@@ -1,0 +1,14 @@
+containers: []
+areas:
+  - id: survival-ground
+    min-x: -5000
+    max-x: 5000
+    min-y: -60
+    max-y: 319
+    min-z: -5000
+    max-z: 5000
+    loot-table: survival
+    activation-chance: 1.0
+    min-spawns: 160
+    max-spawns: 200
+    max-attempts: 10

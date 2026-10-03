@@ -90,11 +90,16 @@ public final class PaperLootRuntime {
         if(session.sessionId().toString().equals(world().getPersistentDataContainer().get(automaticSessionKey(),PersistentDataType.STRING)))activateAutomatic();
         state=State.COMPLETE;result.complete(null);
     }
+    /** Linear, non-compounding ground-loot scale for the initial ring: 1.0 up to 4 players,
+     *  +10% per extra player, capped at 2.0 from 14 players onward. */
+    static double initialSpawnScale(int players){return players<=4?1.0:Math.min(2.0,1.0+(players-4)*0.1);}
     public CompletableFuture<Void> generate() {
         if(state!=State.NOT_STARTED) return result;
         state=State.GENERATING;generationStarted=System.nanoTime();
         quality=new PaperLootRegionQuality(plugin,world(),session.sessionId(),content.regionQuality(),false);
         var map=session.selectedMap().orElseThrow();var metadata=map.metadata()==null?content.maps().get(map.id()):map.metadata().loot(); var initial=session.initialZone().orElseThrow();
+        double scale=initialSpawnScale(session.players().size());
+        if(scale>1.0)plugin.getLogger().info("Initial ground loot scaled x"+String.format(java.util.Locale.ROOT,"%.1f",scale)+" for "+session.players().size()+" players");
         for(var point:metadata.containers()) {
             if(initial.contains(point.x(),point.z())) { points.add(point); activePoints++; } else skippedPoints++;
         }
@@ -102,7 +107,8 @@ public final class PaperLootRuntime {
             var bounds=area.intersection(initial);
             if(bounds.isEmpty() || !area.activates(random)) { skippedAreas++; continue; }
             activeAreas++;
-            for(var cell:GroundLootDistribution.strata(bounds.orElseThrow(),area.count(random),random)) {
+            int count=(int)Math.round(area.count(random)*scale);
+            for(var cell:GroundLootDistribution.strata(bounds.orElseThrow(),count,random)) {
                 if(ground.size()>=MapLoot.MAX_GROUND_REQUESTS)throw new IllegalStateException("Ground candidate budget exceeded");
                 ground.add(new GroundRequest(area,cell));
             }

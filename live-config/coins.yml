@@ -1,0 +1,65 @@
+# Currency display name.
+# https://nightexpressdev.com/nightcore/configuration/text-formation/
+Name: 金币
+# Currency symbol.
+# https://nightexpressdev.com/nightcore/configuration/text-formation/
+Symbol: 金币
+# Currency prefix.
+# https://nightexpressdev.com/nightcore/configuration/text-formation/
+# https://nightexpressdev.com/coinsengine/features/prefix
+Prefix: 金币
+# Currency command aliases. Split with comma.
+# [*] Server reboot is required for the changes to apply.
+# https://nightexpressdev.com/coinsengine/commands
+Command_Aliases: coins
+# Currency display format.
+# Placeholders:
+# - %amount% - Amount value.
+# - Currency placeholders: https://nightexpressdev.com/coinsengine/placeholders/internal
+# - PlaceholderAPI placeholders that are NOT bound to a player (e.g. Oraxen or ItemsAdder %img% placeholders)
+# https://nightexpressdev.com/nightcore/configuration/text-formation/
+Format: '%amount% %currency_symbol%'
+# Currency short display format.
+# - %amount% - Amount value.
+# - Currency placeholders: https://nightexpressdev.com/coinsengine/placeholders/internal
+# - PlaceholderAPI placeholders that are NOT bound to a player (e.g. Oraxen or ItemsAdder %img% placeholders)
+# https://nightexpressdev.com/nightcore/configuration/text-formation/
+Format_Short: '%amount% %currency_symbol%'
+# Currency icon.
+# https://nightexpressdev.com/nightcore/configuration/item-formation/
+Icon:
+  Material: minecraft:sunflower
+  Lore: []
+# Database column name where this currency will be saved.
+# https://nightexpressdev.com/coinsengine/features/cross-server
+Column_Name: coins
+# Controls whether currency is included in data synchronization.
+# https://nightexpressdev.com/coinsengine/features/cross-server
+Synchronized: false
+# Controls whether permission is required for this currency.
+# https://nightexpressdev.com/coinsengine/permissions
+Permission_Required: false
+# Controls whether decimal values are allowed for this currency.
+Decimal: false
+# Start currency value for new players.
+Start_Value: 0.0
+# Max. possible value that players can have on their balance.
+# [*] Set to '-1' to disable.
+Max_Value: -1.0
+# Controls whether players can send this currency to other players.
+Transfer_Allowed: true
+# Min. amount to send this currency to other players.
+# [*] Set to '-1' for no limit.
+Transfer_Min_Amount: -1.0
+Exchange:
+  # Controls whether this currency can be exchanged for other ones.
+  # https://nightexpressdev.com/coinsengine/features/exchange
+  Allowed: false
+  Rates:
+    mystery_coins: 5
+    magic_coins: 10
+Leaderboard:
+  # Controls whether this currency can have a leaderboard.
+  # [*] Requires the Tops module to be enabled.
+  # https://nightexpressdev.com/coinsengine/features/leaderboards
+  Enabled: true
