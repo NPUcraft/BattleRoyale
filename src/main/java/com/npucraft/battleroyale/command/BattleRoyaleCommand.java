@@ -62,16 +62,7 @@ public final class BattleRoyaleCommand implements CommandExecutor, TabCompleter 
                     }
                     if(args.length>=2&&args[1].equalsIgnoreCase("list")){
                         if(!sender.hasPermission("battleroyale.admin")){messages.denied(sender);break;}
-                        var provider=selection.provider();
-                        messages.send(sender,"—— 全服经济（在线玩家，货币：%s）——","-- Server economy (online, currency: %s) --",selection.currency());
-                        int count=0;double total=0;
-                        for(var online:org.bukkit.Bukkit.getOnlinePlayers()){
-                            try{var balance=provider.getBalance(online.getUniqueId()).doubleValue();total+=balance;count++;
-                                messages.send(sender,"%s：%s","%s: %s",online.getName(),com.npucraft.battleroyale.paper.PaperEconomyRewards.format(balance));}
-                            catch(LinkageError|RuntimeException error){messages.send(sender,"%s：读取失败","%s: read failed",online.getName());}
-                        }
-                        messages.send(sender,"共 %d 名在线玩家，合计 %s","%d online players, total %s",count,com.npucraft.battleroyale.paper.PaperEconomyRewards.format(total));
-                        messages.send(sender,"离线玩家余额由经济插件自身管理。","Offline balances are managed by the economy plugin itself.");
+                        runtime.lobby().sendEconomyList(player);
                         break;
                     }
                     if(args.length!=1){messages.unknown(sender);break;}
