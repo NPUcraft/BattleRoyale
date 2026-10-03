@@ -122,7 +122,7 @@ public final class BattleRoyaleCommand implements CommandExecutor, TabCompleter 
                 }
                 case "debug" -> {
                     if(args.length==2 && Set.of("perf","tasks","worlds").contains(args[1])){if(args[1].equals("worlds"))runtime.diagnostics().debugWorlds(sender);else messages.send(sender,runtime.diagnostics().perf());break;}
-                    if(args.length>=2 && args[1].equalsIgnoreCase("economy")){messages.send(sender,runtime.progression().economy().diagnostics());break;}
+                    if(args.length>=2 && args[1].equalsIgnoreCase("economy")){messages.send(sender,runtime.progression().economy().diagnostics()+" | wealth: "+runtime.lobby().economyTopDiagnostics());break;}
                     if(args.length>=3 && args[1].equalsIgnoreCase("item")){
                         if(!(sender instanceof org.bukkit.entity.Player player))throw new IllegalArgumentException(I18n.text(sender, "该指令只能由玩家执行。", "This command can only be run by a player."));
                         String raw=args[2];String key=raw.contains(":")?raw:"battleroyale:"+raw;

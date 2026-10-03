@@ -19,12 +19,18 @@ public final class PaperEconomyTop {
     private volatile double total;
     private volatile boolean ready;
     private volatile long lastRefresh;
+    private volatile long startedAt;
     private volatile boolean running;
+    private volatile boolean announced;
     public PaperEconomyTop(JavaPlugin plugin,Supplier<String> currency){this.plugin=plugin;this.currency=currency;}
     /** Called from the regular lobby tick; triggers an async refresh at most every 30s. */
     public void tick(){
+        if(running && System.nanoTime()-startedAt>3*REFRESH_NANOS){
+            plugin.getLogger().warning("[EconomyTop] refresh appears stuck ("+((System.nanoTime()-startedAt)/1_000_000)+"ms); unblocking");
+            running=false;
+        }
         if(running || System.nanoTime()-lastRefresh<REFRESH_NANOS)return;
-        running=true;
+        running=true;startedAt=System.nanoTime();
         Bukkit.getScheduler().runTaskAsynchronously(plugin,()->{
             try{
                 if(!CoinsEngineAPI.isLoaded())return;
@@ -41,8 +47,13 @@ public final class PaperEconomyTop {
                 eligible.sort(Comparator.comparingDouble(Row::balance).reversed());
                 rows=List.copyOf(eligible.subList(0,Math.min(TOP_SIZE,eligible.size())));
                 total=sum;ready=true;lastRefresh=System.nanoTime();
+                if(!announced){
+                    announced=true;
+                    plugin.getLogger().info("[EconomyTop] first snapshot: currency="+name+" accounts="+users.size()
+                            +" top="+rows.size()+" total="+PaperEconomyRewards.format(total)+" took="+(System.nanoTime()-startedAt)/1_000_000+"ms");
+                }
             } catch(Throwable error) {
-                plugin.getLogger().warning("[EconomyTop] refresh failed: "+error.getClass().getSimpleName());
+                plugin.getLogger().warning("[EconomyTop] refresh failed: "+error.getClass().getSimpleName()+": "+error.getMessage());
             } finally {running=false;}
         });
     }
@@ -50,4 +61,5 @@ public final class PaperEconomyTop {
     public List<Row> rows(){return rows;}
     public double total(){return total;}
     public boolean ready(){return ready;}
+    public String diagnostics(){return "ready="+ready+" rows="+rows.size()+" total="+PaperEconomyRewards.format(total)+" running="+running+" lastRefreshAgoMs="+(lastRefresh==0?-1:(System.nanoTime()-lastRefresh)/1_000_000);}
 }

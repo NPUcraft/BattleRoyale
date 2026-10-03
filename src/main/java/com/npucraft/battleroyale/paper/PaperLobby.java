@@ -87,6 +87,7 @@ public final class PaperLobby implements Listener, AutoCloseable {
     public PaperLobby(JavaPlugin plugin,PluginRuntime runtime){this.plugin=plugin;this.runtime=runtime;regionVoting=new PaperRegionVoteMenu(plugin,runtime);actionKey=new NamespacedKey(plugin,"lobby_action");queueExitKey=new NamespacedKey(plugin,"queue_exit_original");
         economyTop=new PaperEconomyTop(plugin,()->{var data=data();return data==null?"coins":data.economy().currency();});}
     private PaperProgression data(){return runtime.progression();}
+    public String economyTopDiagnostics(){return economyTop.diagnostics();}
     public boolean eligible(Player player) {
         UUID id=player.getUniqueId();if(runtime.editing(id))return false;if(!runtime.recoveryReady() || player.isDead() || runtime.pendingRestore(id) || runtime.matches().frozen(id) || runtime.spectators().registry().find(id).isPresent())return false;
         var session=runtime.rooms().participant(id).orElse(null);
