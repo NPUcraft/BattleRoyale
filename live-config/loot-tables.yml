@@ -189,70 +189,33 @@ loot-tables:
     min-rolls: 2
     max-rolls: 3
     entries:
-    - item: minecraft:bread
-      weight: 15
-      min-amount: 2
-      max-amount: 4
-    - item: minecraft:apple
-      weight: 6
-      min-amount: 1
-      max-amount: 3
-    - item: minecraft:stone_sword
-      weight: 6
-      min-amount: 1
-      max-amount: 1
-    - item: minecraft:oak_log
-      weight: 5
-      min-amount: 4
-      max-amount: 8
-    - item: minecraft:cobblestone
-      weight: 5
-      min-amount: 8
-      max-amount: 16
-    - item: minecraft:stone_axe
-      weight: 6
-      min-amount: 1
-      max-amount: 1
-    - item: minecraft:leather_helmet
-      weight: 6
-      min-amount: 1
-      max-amount: 1
-    - item: minecraft:leather_chestplate
-      weight: 6
-      min-amount: 1
-      max-amount: 1
-    - item: minecraft:leather_leggings
-      weight: 6
-      min-amount: 1
-      max-amount: 1
-    - item: minecraft:leather_boots
-      weight: 6
-      min-amount: 1
-      max-amount: 1
-    - item: minecraft:arrow
-      weight: 2
-      min-amount: 4
-      max-amount: 8
-    - item: minecraft:stone_spear
-      weight: 4
-      min-amount: 1
-      max-amount: 1
-    - item: minecraft:copper_helmet
-      weight: 4
-      min-amount: 1
-      max-amount: 1
-    - item: minecraft:copper_chestplate
-      weight: 4
-      min-amount: 1
-      max-amount: 1
-    - item: minecraft:copper_leggings
-      weight: 4
-      min-amount: 1
-      max-amount: 1
-    - item: minecraft:copper_boots
-      weight: 4
-      min-amount: 1
-      max-amount: 1
+    - { item: minecraft:bread, weight: 30, min-amount: 2, max-amount: 4 }
+    - { item: minecraft:apple, weight: 20, min-amount: 1, max-amount: 3 }
+    - { item: minecraft:stone_sword, weight: 20, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:stone_axe, weight: 20, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:leather_helmet, weight: 15, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:leather_chestplate, weight: 15, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:leather_leggings, weight: 15, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:leather_boots, weight: 15, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:oak_log, weight: 15, min-amount: 4, max-amount: 8 }
+    - { item: minecraft:cobblestone, weight: 15, min-amount: 8, max-amount: 16 }
+    - { item: minecraft:stone_spear, weight: 15, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:copper_helmet, weight: 15, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:copper_chestplate, weight: 15, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:copper_leggings, weight: 15, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:copper_boots, weight: 15, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:arrow, weight: 6, min-amount: 4, max-amount: 8 }
+    - { item: minecraft:chainmail_helmet, weight: 6, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:chainmail_chestplate, weight: 6, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:chainmail_leggings, weight: 6, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:chainmail_boots, weight: 6, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:iron_sword, weight: 6, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:iron_axe, weight: 6, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:crossbow, weight: 5, min-amount: 1, max-amount: 1 }
+    - { item: battleroyale:coin_100, weight: 2, min-amount: 1, max-amount: 1 }
+    - { item: battleroyale:knockback_stick, weight: 2, min-amount: 1, max-amount: 1 }
+    - { item: battleroyale:throwing_torch, weight: 2, min-amount: 1, max-amount: 3 }
+    - { item: minecraft:tnt, weight: 2, min-amount: 1, max-amount: 2 }
   ground-mid:
     min-rolls: 3
     max-rolls: 4
