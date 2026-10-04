@@ -60,7 +60,7 @@ public final class NativeLootItems implements LootItemResolver<ItemStack> {
     @Override public void validate(String key) { Objects.requireNonNull(key,"loot key");if(key.equals("battleroyale:combat_firework")||key.equals("battleroyale:knockback_stick")
             ||key.equals("battleroyale:slowness_arrow")||key.equals("battleroyale:levitation_arrow")
             ||key.equals("battleroyale:throwing_torch")||key.equals("battleroyale:sneakers")||key.equals("battleroyale:signal_gun")
-            ||key.equals("battleroyale:mystery_food")||key.equals("battleroyale:coin_100")||key.equals("battleroyale:coin_1000"))return;if(potion(key)==null)material(key); }
+            ||key.equals("battleroyale:mystery_food")||key.equals("battleroyale:coin_100")||key.equals("battleroyale:coin_500")||key.equals("battleroyale:coin_1000"))return;if(potion(key)==null)material(key); }
     @Override public ItemStack resolve(String key) {
         Objects.requireNonNull(key,"loot key");if(key.equals("battleroyale:combat_firework"))return firework();
         if(key.equals("battleroyale:knockback_stick"))return knockbackStick();
@@ -71,7 +71,8 @@ public final class NativeLootItems implements LootItemResolver<ItemStack> {
         if(key.equals("battleroyale:signal_gun"))return signalGun();
         if(key.equals("battleroyale:mystery_food"))return mysteryFood();
         if(key.equals("battleroyale:coin_100"))return coin(100);
-        if(key.equals("battleroyale:coin_1000"))return coin(1000);
+        if(key.equals("battleroyale:coin_500"))return coin(500);
+        if(key.equals("battleroyale:coin_1000"))return coin(1000); // legacy id, no longer dropped
         var potion=potion(key);
         if(potion==null)return new ItemStack(material(key));
         var item=new ItemStack(potion.splash()?Material.SPLASH_POTION:Material.POTION);
@@ -144,14 +145,17 @@ public final class NativeLootItems implements LootItemResolver<ItemStack> {
     /** Trial economy voucher: an emerald token whose face value deposits on either click. */
     private ItemStack coin(long amount){
         var item=new ItemStack(Material.EMERALD);var meta=item.getItemMeta();
-        boolean vault=amount>=1000;
+        boolean vault=amount>=500;
         meta.displayName(Component.text(vault?"佣金币 · 空投储备":"佣金币 · 战场钱袋").color(UiText.VALUE)
                 .append(Component.text(" ×"+amount)).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC,false));
         var lore=new java.util.ArrayList<Component>();
         lore.add(Component.text("左键或右键使用：存入账户 +"+amount).color(UiText.VALUE).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC,false));
-        lore.add(Component.text(vault?"空投专属储备，价值连城。":"战场补给中拾获的钱袋。").color(net.kyori.adventure.text.format.NamedTextColor.GRAY).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC,false));
+        lore.add(Component.text(vault?"空投专属储备，价值不菲。":"战场补给中拾获的钱袋。").color(net.kyori.adventure.text.format.NamedTextColor.GRAY).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC,false));
         meta.lore(lore);meta.setEnchantmentGlintOverride(true);item.setItemMeta(meta);
-        com.npucraft.battleroyale.listener.PaperFunItems.mark(item,vault?com.npucraft.battleroyale.listener.PaperFunItems.COIN_1000:com.npucraft.battleroyale.listener.PaperFunItems.COIN_100);
+        var id=amount>=1000?com.npucraft.battleroyale.listener.PaperFunItems.COIN_1000
+             :amount>=500?com.npucraft.battleroyale.listener.PaperFunItems.COIN_500
+             :com.npucraft.battleroyale.listener.PaperFunItems.COIN_100;
+        com.npucraft.battleroyale.listener.PaperFunItems.mark(item,id);
         return item;
     }
     /** Ordinary equipment receives at most one applicable, non-curse level I/II enchantment. */

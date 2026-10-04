@@ -8,12 +8,12 @@ import org.bukkit.Bukkit;
 import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 
-/** Trial economy payouts: +200 per credited kill and top-3 settlement bonuses (1000/500/300).
+/** Trial economy payouts: +100 per credited kill and top-3 settlement bonuses (500/300/100).
  *  Every call site runs on the primary thread. Payouts never block match flow: an unavailable
  *  economy adapter or an offline recipient skips the payment instead of failing the match. */
 public final class PaperEconomyRewards {
-    public static final long KILL_REWARD=200;
-    public static final long[] SETTLEMENT={1000,500,300};
+    public static final long KILL_REWARD=100;
+    public static final long[] SETTLEMENT={500,300,100};
     private PaperEconomyRewards() {}
     /** Kill reward: credited when a victim is eliminated with a credited, distinct attacker. */
     public static void killReward(PaperProgression progression,UUID attacker) {

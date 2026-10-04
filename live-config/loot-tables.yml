@@ -635,7 +635,7 @@ loot-tables:
       weight: 2
       min-amount: 1
       max-amount: 1
-    - item: battleroyale:coin_1000
+    - item: battleroyale:coin_500
       weight: 2
       min-amount: 1
       max-amount: 1
@@ -658,7 +658,7 @@ loot-tables:
     - { item: minecraft:bread, weight: 3, min-amount: 3, max-amount: 6 }
     - { item: minecraft:water_bucket, weight: 2, min-amount: 1, max-amount: 1 }
     - { item: minecraft:tnt, weight: 1, min-amount: 1, max-amount: 2 }
-    - { item: battleroyale:coin_1000, weight: 2, min-amount: 1, max-amount: 1 }
+    - { item: battleroyale:coin_500, weight: 2, min-amount: 1, max-amount: 1 }
 
   airdrop-2:
     min-rolls: 6
@@ -683,7 +683,7 @@ loot-tables:
     - { item: minecraft:bread, weight: 2, min-amount: 3, max-amount: 6 }
     - { item: minecraft:water_bucket, weight: 2, min-amount: 1, max-amount: 1 }
     - { item: minecraft:tnt, weight: 2, min-amount: 1, max-amount: 2 }
-    - { item: battleroyale:coin_1000, weight: 2, min-amount: 1, max-amount: 1 }
+    - { item: battleroyale:coin_500, weight: 2, min-amount: 1, max-amount: 1 }
 
   airdrop-3:
     min-rolls: 6
@@ -740,7 +740,7 @@ loot-tables:
       weight: 1
       min-amount: 1
       max-amount: 1
-    - item: battleroyale:coin_1000
+    - item: battleroyale:coin_500
       weight: 2
       min-amount: 1
       max-amount: 1
@@ -808,7 +808,7 @@ loot-tables:
       weight: 1
       min-amount: 1
       max-amount: 1
-    - item: battleroyale:coin_1000
+    - item: battleroyale:coin_500
       weight: 2
       min-amount: 1
       max-amount: 1

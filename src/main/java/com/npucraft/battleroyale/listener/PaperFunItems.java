@@ -29,7 +29,7 @@ import org.bukkit.NamespacedKey;
 public final class PaperFunItems implements Listener {
     private static final NamespacedKey FUN=new NamespacedKey("battleroyale","fun_item");
     public static final String TORCH="throwing_torch",SNEAKERS="sneakers",SIGNAL_GUN="signal_gun",MYSTERY_FOOD="mystery_food",
-            COIN_100="coin_100",COIN_1000="coin_1000";
+            COIN_100="coin_100",COIN_500="coin_500",COIN_1000="coin_1000";
     /** Marks a custom fun item stack; called by NativeLootItems while building loot. */
     public static void mark(ItemStack item,String id){
         var meta=item.getItemMeta();meta.getPersistentDataContainer().set(FUN,PersistentDataType.STRING,id);item.setItemMeta(meta);
@@ -163,7 +163,8 @@ public final class PaperFunItems implements Listener {
     private static long coinValue(ItemStack item){
         String id=funId(item);
         if(COIN_100.equals(id))return 100;
-        if(COIN_1000.equals(id))return 1000;
+        if(COIN_500.equals(id))return 500;
+        if(COIN_1000.equals(id))return 1000; // legacy vouchers still redeem at face value
         return 0;
     }
     /** Runs even on cancelled events: lobby protection cancels block interactions, but a coin

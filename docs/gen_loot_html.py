@@ -2,7 +2,7 @@
 """Generate a Chinese HTML view of the ACTIVE loot tables only (legacy `airdrop` excluded)."""
 import io, yaml, html
 
-SRC = "D:/fwq/BattleRoyale/live-config/loot-tables-live.yml"
+SRC = "D:/fwq/BattleRoyale/live-config/loot-tables.yml"
 OUT = "D:/fwq/BattleRoyale/docs/loot-tables.html"
 
 CN = {
@@ -33,7 +33,7 @@ CN = {
     "battleroyale:poison_potion": "剧毒药水", "battleroyale:splash_invisibility_potion": "喷溅隐形药水",
     "battleroyale:splash_fire_resistance_potion": "喷溅防火药水", "battleroyale:splash_healing_potion": "喷溅治疗药水",
     "battleroyale:splash_harming_potion": "喷溅伤害药水", "battleroyale:splash_poison_potion": "喷溅剧毒药水",
-    "battleroyale:signal_gun": "信号枪", "battleroyale:coin_100": "金币 ×100", "battleroyale:coin_1000": "金币 ×1000",
+    "battleroyale:signal_gun": "信号枪", "battleroyale:coin_100": "金币 ×100", "battleroyale:coin_500": "金币 ×500", "battleroyale:coin_1000": "金币 ×1000（旧）",
     "battleroyale:knockback_stick": "击退棒", "battleroyale:throwing_torch": "投掷火把",
     "battleroyale:sneakers": "疾风鞋", "battleroyale:mystery_food": "神秘食物",
     "battleroyale:slowness_arrow": "迟缓箭", "battleroyale:levitation_arrow": "漂浮箭",
