@@ -18,7 +18,7 @@ class MatchContentLoaderTest {
         public void validate(String key) {
             // Catalog adapter only; native ItemType registries are verified by the real Paper probe.
             if(key.startsWith("minecraft:")&&org.bukkit.Material.matchMaterial(key)!=null&&!java.util.Set.of("minecraft:air","minecraft:cave_air","minecraft:void_air","minecraft:elytra").contains(key))return;
-            if(java.util.Set.of("battleroyale:invisibility_potion","battleroyale:fire_resistance_potion","battleroyale:healing_potion","battleroyale:harming_potion","battleroyale:poison_potion","battleroyale:splash_invisibility_potion","battleroyale:splash_fire_resistance_potion","battleroyale:splash_healing_potion","battleroyale:splash_harming_potion","battleroyale:splash_poison_potion","battleroyale:combat_firework","battleroyale:coin_100","battleroyale:coin_500","battleroyale:coin_1000").contains(key))return;
+            if(java.util.Set.of("battleroyale:invisibility_potion","battleroyale:fire_resistance_potion","battleroyale:healing_potion","battleroyale:harming_potion","battleroyale:poison_potion","battleroyale:splash_invisibility_potion","battleroyale:splash_fire_resistance_potion","battleroyale:splash_healing_potion","battleroyale:splash_harming_potion","battleroyale:splash_poison_potion","battleroyale:combat_firework","battleroyale:coin_100","battleroyale:coin_500","battleroyale:coin_1000","battleroyale:knockback_stick","battleroyale:throwing_torch","battleroyale:sneakers","battleroyale:signal_gun","battleroyale:mystery_food","battleroyale:slowness_arrow","battleroyale:levitation_arrow").contains(key))return;
             throw new IllegalArgumentException("Unknown test item: " + key);
         }
         public String resolve(String key) { validate(key); return key; }
@@ -62,7 +62,13 @@ class MatchContentLoaderTest {
         Path path=directory.resolve("loot-tables.yml");String original=Files.readString(path);String tables="config-version: 2\n"+original.substring(original.indexOf("loot-tables:"));
         Files.writeString(path,tables.substring(0,tables.indexOf("  native-basic:")).replace("  basic:","  survival:"));
         for(String map:new String[]{"city","desert"})replace("map-data/"+map+"/loot.yml","loot-table: basic","loot-table: survival");
-        var content=load();assertTrue(content.autoContainers().enabled());assertEquals("survival",content.autoContainers().table());assertEquals("survival",content.airdrops().table());assertEquals("survival",content.mobLoot().table());assertEquals(com.npucraft.battleroyale.loot.HorseSettings.DEFAULT,content.horses());assertFalse(content.regionQuality().enabled());
+        var content=load();assertTrue(content.autoContainers().enabled());
+        // With native-basic (and its section) absent, auto/airdrop/mob must all fall back to an existing table.
+        assertFalse(content.tables().containsKey("native-basic"));
+        assertTrue(content.tables().containsKey(content.autoContainers().table()),content.autoContainers().table());
+        assertTrue(content.tables().containsKey(content.airdrops().table()),content.airdrops().table());
+        assertTrue(content.tables().containsKey(content.mobLoot().table()),content.mobLoot().table());
+        assertEquals(com.npucraft.battleroyale.loot.HorseSettings.DEFAULT,content.horses());assertFalse(content.regionQuality().enabled());
     }
     @Test void mobLootRejectsUnknownTableAndUnboundedRate()throws Exception{
         replace("loot-tables.yml","per-player-cooldown-seconds: 10","per-player-cooldown-seconds: 0");assertThrows(IllegalArgumentException.class,this::load);

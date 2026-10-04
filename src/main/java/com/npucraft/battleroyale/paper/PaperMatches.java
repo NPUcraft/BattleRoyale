@@ -139,6 +139,7 @@ public final class PaperMatches implements MatchLifecycle {
         GameSession session=entry.session;
         if (entries.get(session.sessionId())!=entry || session.state()!=GameState.RUNNING) return;
         long now=clock.nanoTime(); var zone=session.zone().orElseThrow(); zone.update(now);
+        announceZonePhaseChange(entry,zone);
         if(entry.airdrops!=null)entry.airdrops.tick(zone,now);
         if(entry.horses!=null)entry.horses.tick(zone,now);
         // Supplies first, then the staged ground refill: it needs this tick's already-updated zone.
@@ -182,6 +183,33 @@ public final class PaperMatches implements MatchLifecycle {
             entry.ui.render(viewer,zone,entry.tick,session.activeCount(),0,session.activeTeamCount(),true);
         }
         entry.ui.retain(expected);
+    }
+    /** Global shrink-start cue: a phase/stage/target key flip fires a world-wide sound and title.
+     *  The key also covers the final continuation (phase stays SHRINKING while the next square
+     *  collapses to zero), so every shrink onset gets exactly one announcement. */
+    private void announceZonePhaseChange(Entry entry,ZoneRuntime zone) {
+        long nextHalf=zone.next()==null?-1:Math.round(zone.next().halfSize());
+        String key=zone.phase()+":"+zone.stageIndex()+":"+nextHalf;
+        String previous=entry.lastZoneKey;entry.lastZoneKey=key;
+        if(previous==null||key.equals(previous)||zone.phase()!=ZonePhase.SHRINKING)return;
+        boolean finale=nextHalf==0;
+        var audience=new HashSet<UUID>();
+        for(var gamePlayer:entry.session.players().values())audience.add(gamePlayer.playerId());
+        for(var presence:spectators.registry().session(entry.session.sessionId()))audience.add(presence.player());
+        for(UUID id:audience) {
+            Player player=plugin.getServer().getPlayer(id);
+            if(player==null||!player.isOnline()||!player.getWorld().getUID().equals(entry.worldId))continue;
+            var locale=I18n.locale(player);
+            player.showTitle(net.kyori.adventure.title.Title.title(
+                net.kyori.adventure.text.Component.text(
+                        I18n.text(locale,finale?"最终安全区开始收拢":"第 "+zone.stageNumber()+" 阶段：安全区开始缩小",
+                                finale?"Final safe zone collapsing":"Stage "+zone.stageNumber()+": the safe zone is shrinking"),UiText.WARNING)
+                    .decoration(net.kyori.adventure.text.format.TextDecoration.BOLD,true)
+                    .decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC,false),
+                net.kyori.adventure.text.Component.text(I18n.text(locale,"赶紧向安全区移动","Move to the safe zone"),UiText.VALUE)
+                    .decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC,false)));
+            player.playSound(player.getLocation(),org.bukkit.Sound.ENTITY_WITHER_SPAWN,0.7f,1f);
+        }
     }
     private void applyZoneDamage(Entry entry,Player player,ZoneDamage.Context context) {
         double max=Objects.requireNonNull(player.getAttribute(Attribute.MAX_HEALTH)).getValue();
@@ -409,6 +437,8 @@ public final class PaperMatches implements MatchLifecycle {
         SessionLoop task;
         DamagePulse damagePulse;
         long tick;
+        /** Phase/stage/target snapshot of the previous zone tick; null until the first tick. */
+        String lastZoneKey;
         long feedbackPulses;
         boolean protectionExpired;
         boolean recoveredLootComplete;

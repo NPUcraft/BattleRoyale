@@ -756,22 +756,6 @@ loot-tables:
       weight: 1
       min-amount: 1
       max-amount: 1
-    - item: minecraft:stone_sword
-      weight: 5
-      min-amount: 1
-      max-amount: 1
-    - item: minecraft:stone_axe
-      weight: 3
-      min-amount: 1
-      max-amount: 1
-    - item: minecraft:stone_spear
-      weight: 2
-      min-amount: 1
-      max-amount: 1
-    - item: minecraft:bow
-      weight: 4
-      min-amount: 1
-      max-amount: 1
     - item: minecraft:flint_and_steel
       weight: 1
       min-amount: 1
@@ -880,37 +864,6 @@ loot-tables:
       weight: 1
       min-amount: 1
       max-amount: 1
-  # Legacy shared table: still referenced by older map container fixtures.
-  basic:
-    min-rolls: 2
-    max-rolls: 5
-    entries:
-      - { item: minecraft:bread, weight: 5, min-amount: 1, max-amount: 4 }
-      - { item: minecraft:arrow, weight: 3, min-amount: 4, max-amount: 16 }
-      - { item: minecraft:stone_sword, weight: 3, min-amount: 1, max-amount: 1 }
-      - { item: minecraft:bow, weight: 2, min-amount: 1, max-amount: 1 }
-      - { item: minecraft:iron_ingot, weight: 3, min-amount: 2, max-amount: 5 }
-      - { item: minecraft:cooked_beef, weight: 5, min-amount: 2, max-amount: 5 }
-      - { item: minecraft:iron_helmet, weight: 2, min-amount: 1, max-amount: 1 }
-      - { item: minecraft:iron_boots, weight: 2, min-amount: 1, max-amount: 1 }
-      - { item: minecraft:iron_pickaxe, weight: 5, min-amount: 1, max-amount: 1 }
-      - { item: minecraft:iron_axe, weight: 4, min-amount: 1, max-amount: 1 }
-      - { item: minecraft:shield, weight: 3, min-amount: 1, max-amount: 1 }
-      - { item: minecraft:crossbow, weight: 2, min-amount: 1, max-amount: 1 }
-      - { item: minecraft:spectral_arrow, weight: 4, min-amount: 4, max-amount: 8 }
-      - { item: minecraft:tnt, weight: 2, min-amount: 1, max-amount: 2 }
-      - { item: minecraft:water_bucket, weight: 3, min-amount: 1, max-amount: 1 }
-      - { item: minecraft:sponge, weight: 2, min-amount: 1, max-amount: 2 }
-      - { item: minecraft:slime_block, weight: 3, min-amount: 2, max-amount: 4 }
-      - { item: minecraft:flint_and_steel, weight: 3, min-amount: 1, max-amount: 1 }
-      - { item: battleroyale:combat_firework, weight: 2, min-amount: 1, max-amount: 3 }
-      - { item: battleroyale:invisibility_potion, weight: 2, min-amount: 1, max-amount: 1 }
-      - { item: battleroyale:fire_resistance_potion, weight: 2, min-amount: 1, max-amount: 1 }
-      - { item: battleroyale:healing_potion, weight: 4, min-amount: 1, max-amount: 1 }
-      - { item: battleroyale:poison_potion, weight: 1, min-amount: 1, max-amount: 1 }
-      - { item: battleroyale:splash_invisibility_potion, weight: 2, min-amount: 1, max-amount: 1 }
-      - { item: battleroyale:splash_fire_resistance_potion, weight: 2, min-amount: 1, max-amount: 1 }
-      - { item: battleroyale:splash_healing_potion, weight: 3, min-amount: 1, max-amount: 1 }
   # Sparse unenchanted survival supplies in map-native containers; region-quality never replaces this table.
   native-basic:
     min-rolls: 1

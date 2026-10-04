@@ -44,7 +44,7 @@ class ConfigurationLoaderTest {
         var zone=result.zoneProfiles().getFirst();
         assertEquals(java.util.List.of(200.0,300.0,500.0,750.0),zone.initialSizes().stream().map(size->size.halfSize()).toList());
         assertEquals(750,zone.stageReferenceHalfSize());
-        assertEquals(430,zone.stages().stream().mapToLong(stage->stage.waitDuration().plus(stage.shrinkDuration()).toSeconds()).sum());
+        assertEquals(510,zone.stages().stream().mapToLong(stage->stage.waitDuration().plus(stage.shrinkDuration()).toSeconds()).sum());
         assertEquals(160,zone.resolved(200).stages().getFirst().targetHalfSize());
         assertEquals(directory.resolve("runtime"), result.settings().runtimeDirectory());
         assertEquals(4, result.rooms().get(1).teamSize());
