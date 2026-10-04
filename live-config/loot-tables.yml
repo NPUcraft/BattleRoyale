@@ -610,6 +610,7 @@ loot-tables:
     - { item: minecraft:diamond, weight: 2, min-amount: 1, max-amount: 3 }
     - { item: minecraft:tnt, weight: 2, min-amount: 1, max-amount: 2 }
     - { item: minecraft:fire_charge, weight: 1, min-amount: 1, max-amount: 2 }
+    - { item: minecraft:mace, weight: 2, min-amount: 1, max-amount: 1 }
     - { item: minecraft:water_bucket, weight: 2, min-amount: 1, max-amount: 1 }
     - item: minecraft:netherite_upgrade_smithing_template
       weight: 2
