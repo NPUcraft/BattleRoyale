@@ -556,6 +556,11 @@ loot-tables:
     - { item: minecraft:bread, weight: 3, min-amount: 3, max-amount: 6 }
     - { item: minecraft:water_bucket, weight: 2, min-amount: 1, max-amount: 1 }
     - { item: minecraft:tnt, weight: 1, min-amount: 1, max-amount: 2 }
+    - { item: battleroyale:mystery_food, weight: 1, min-amount: 1, max-amount: 1 }
+    - { item: battleroyale:sneakers, weight: 1, min-amount: 1, max-amount: 1 }
+    - { item: battleroyale:knockback_stick, weight: 1, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:ender_pearl, weight: 1, min-amount: 1, max-amount: 1 }
+    - { item: minecraft:fire_charge, weight: 1, min-amount: 1, max-amount: 2 }
     - { item: battleroyale:coin_500, weight: 2, min-amount: 1, max-amount: 1 }
 
   airdrop-2:
