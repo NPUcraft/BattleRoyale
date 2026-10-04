@@ -85,7 +85,7 @@ public final class PaperFunItems implements Listener {
         if(!TORCH.equals(snowball.getPersistentDataContainer().get(FUN,PersistentDataType.STRING)))return;
         var world=snowball.getWorld();
         var hitEntity=event.getHitEntity();
-        if(hitEntity!=null)hitEntity.setFireTicks(100);
+        if(hitEntity!=null)hitEntity.setFireTicks(140);
         int placed=0;
         var hitBlock=event.getHitBlock();
         if(hitBlock!=null&&event.getHitBlockFace()!=null){
@@ -93,8 +93,8 @@ public final class PaperFunItems implements Listener {
             if(target.getType().isAir()){target.setType(Material.FIRE);placed++;}
         }
         var at=snowball.getLocation().getBlock();
-        for(int attempt=0;attempt<24&&placed<5;attempt++){
-            int dx=ThreadLocalRandom.current().nextInt(-2,3),dz=ThreadLocalRandom.current().nextInt(-2,3),dy=ThreadLocalRandom.current().nextInt(0,3);
+        for(int attempt=0;attempt<64&&placed<14;attempt++){
+            int dx=ThreadLocalRandom.current().nextInt(-6,7),dz=ThreadLocalRandom.current().nextInt(-6,7),dy=ThreadLocalRandom.current().nextInt(0,4);
             var target=world.getBlockAt(at.getX()+dx,at.getY()+dy,at.getZ()+dz);
             if(!target.getType().isAir())continue;
             var below=target.getRelative(BlockFace.DOWN);

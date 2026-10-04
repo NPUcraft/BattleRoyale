@@ -110,6 +110,7 @@ public final class NativeLootItems implements LootItemResolver<ItemStack> {
     private ItemStack throwingTorch(){
         var item=new ItemStack(Material.TORCH);var meta=item.getItemMeta();
         meta.displayName(Component.text("投掷火把 · Throwing Torch").color(UiText.VALUE).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC,false));
+        meta.lore(List.of(Component.text("命中后大面积燃起火焰（约 13×13 范围）").color(net.kyori.adventure.text.format.NamedTextColor.GRAY).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC,false)));
         meta.setEnchantmentGlintOverride(true);item.setItemMeta(meta);
         com.npucraft.battleroyale.listener.PaperFunItems.mark(item,com.npucraft.battleroyale.listener.PaperFunItems.TORCH);return item;
     }
