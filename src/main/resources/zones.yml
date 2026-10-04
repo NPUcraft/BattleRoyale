@@ -32,20 +32,20 @@ profiles:
         base-damage-per-second: 1.0
         extra-damage-per-block: 0.01
         max-damage-per-second: 6.0
-      - wait-seconds: 60
-        shrink-seconds: 45
+      - wait-seconds: 80
+        shrink-seconds: 60
         target-half-size: 300
         base-damage-per-second: 2.0
         extra-damage-per-block: 0.015
         max-damage-per-second: 10.0
-      - wait-seconds: 60
-        shrink-seconds: 30
+      - wait-seconds: 70
+        shrink-seconds: 50
         target-half-size: 100
         base-damage-per-second: 3.0
         extra-damage-per-block: 0.02
         max-damage-per-second: 14.0
       - wait-seconds: 60
-        shrink-seconds: 25
+        shrink-seconds: 40
         target-half-size: 0
         base-damage-per-second: 4.0
         extra-damage-per-block: 0.03
